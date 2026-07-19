@@ -7,7 +7,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | 1.1 | Intake and source reconciliation | ✅ Complete |
 | 1.2 | Personas and end-to-end journeys | ✅ Complete |
 | 1.3 | User stories and acceptance criteria | ✅ Complete |
-| 1.4 | The money model in plain language | Not started |
+| 1.4 | The money model in plain language | ✅ Complete |
 | 1.5 | Non-functional requirements with measurable targets | Not started |
 | 1.6 | Scope boundaries and the version 1 cut line | Not started |
 | 1.7 | Open questions and ambiguity register | Not started |
@@ -214,3 +214,57 @@ it pass as an unexamined assumption. Running ambiguity count: **13** (F-01…F-1
 No criterion references an internal component, stored structure or code concept — checked by
 reading every criterion against the 1.3.2 rule. Product language kept to whole percentages
 throughout, anticipating 1.4's must_not.
+
+---
+
+## 1.4 — The money model in plain language (S01.04)
+
+**Output:** `docs/PRD.md` section 4 (§4.1–§4.9).
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.4.1 | Balance: what it means and does not mean; always derived, never typed | §4.1 |
+| 1.4.2 | Each category type: full condition, overflow, spending-reopens-headroom | §4.2 |
+| 1.4.3 | Ceiling as a finish line, explicitly not a spending limit | §4.3 |
+| 1.4.4 | Categories vs accounts: both OQ-02 readings with consequences, A recommended | §4.9 |
+| 1.4.5 | Conservation rule in user terms | §4.4 |
+| 1.4.6 | Worked redirect chain, ≥3 categories, seeded names, hand-checkable | §4.5 |
+| 1.4.7 | The catch-all (sink) in user language, non-deletable, per OQ-07 | §4.6 |
+| 1.4.8 | Reversal per OQ-09: ink not pencil, opposing entry stays visible | §4.8 |
+
+*(§4.7 — per-payment override rules — added beyond the listed steps so the section states the I-1
+policy from §5.6 in user language; without it the money model would be silent on the one case where
+a balance can legitimately exceed a ceiling, which §4.3 references.)*
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| A non-developer can predict where money goes in a ceiling-overflow scenario | §4.5 walks the chain step by step; the "check yourself" question at its end has exactly one answer derivable from the text (the catch-all, §4.6) | ✅ |
+| At least one worked numeric example, arithmetic conserves exactly | §4.5: split 12,000+10,500+7,500 = 30,000; landings 8,000+10,000+12,000 = 30,000; every intermediate value shown; re-verified by hand at write time | ✅ |
+| Nothing contradicts INV-01 through INV-12 | Walked: §4.1↔INV-04, §4.4↔INV-01/02, §4.5/§4.6↔INV-07, §4.7↔INV-11 (per-event override, standing rules untouched), §4.8↔INV-03. The §4.5 hop order matches the FIFO worklist fixed in PR-01 | ✅ |
+| Each type states full condition, overflow behaviour, and whether spending reopens headroom | §4.2: reserve (full at ceiling / redirects / reopens), bill (funded at period amount / passes by / does **not** reopen within period), envelope (never full / n.a. / n.a.) | ✅ |
+
+### must_not compliance
+
+- No schema or column names anywhere in §4 — checked by reading.
+- No decimal percentages: 40% / 35% / 25% and 50 / 30 / 20 throughout; the design-level unit is not
+  mentioned in the section.
+
+### Positions taken (all labelled as recommendations pending the gate)
+
+- OQ-03: the third type (open envelope) presented as the recommendation the seed set assumes.
+- OQ-05: bill surplus carries forward; next period collects only the difference.
+- F-09: spending from a reserve reopens headroom; bills do not reopen within a period.
+- OQ-02: Reading A (accounts as labels) recommended, Reading B stated with its cost.
+- OQ-07: catch-all non-deletable, renameable; separate business catch-all.
+- OQ-09: undo unlimited in time, always a visible pair.
+- I-1 restated in user language: override may exceed a ceiling, warned, never redirected away.
+
+### Notes
+
+Amounts in §4 are written as plain figures with no currency, since the model is currency-neutral;
+the example uses the same category shape as the design reference chain so Stage 2's §2.6.9 and the
+PRD tell one story.

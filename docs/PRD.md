@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 1 |
 | **Source** | `prompts/00_project_manifest.json` (schema 4.0.0) |
-| **Sections assembled** | 2 (substage 1.2), 5 (substage 1.3), Appendix A (substage 1.1) |
-| **Sections pending** | 1, 3, 4, 6–9, assembled across substages 1.4–1.8 |
+| **Sections assembled** | 2 (substage 1.2), 4 (substage 1.4), 5 (substage 1.3), Appendix A (substage 1.1) |
+| **Sections pending** | 1, 3, 6–9, assembled across substages 1.5–1.8 |
 
 > Sections are written across substages 1.2 to 1.8 and assembled in order in 1.8.
 > Appendix A was written first, in 1.1, so the finished document carries its own provenance.
@@ -314,7 +314,182 @@ wrong produces two divergent configurations that then have to be merged.
 
 ---
 
-## 5. Functional requirements as user stories
+## 4. The money model
+
+Written in substage 1.4, in words a non-developer can act on. Stage 2 derives the data design from
+this section, so every sentence here is a commitment. Percentages appear as whole percentages;
+amounts appear as plain figures with no currency named, because the model is the same in every
+currency.
+
+### 4.1 What a balance is — and is not
+
+A category's balance is **money you have set aside and not yet spent, as recorded in this app**.
+
+It is the running total of everything that ever happened to that category: each income share that
+landed in it, each spend recorded against it, each correction. The app always arrives at the number
+by adding up that history — a balance is never a number anyone typed in, and there is no way to
+"set" a balance directly. If you doubt a figure, you can open the category and add its entries
+yourself; the total will match, or the app is wrong.
+
+A balance is **not** what any bank shows. The app never connects to a bank. If you spend cash and
+don't record it, the app doesn't know. The app's promise is exact bookkeeping of what you told it —
+not mind-reading of what you didn't.
+
+### 4.2 The three kinds of category
+
+Every category is one of three kinds. The kind decides what "full" means and what happens to money
+the category doesn't need. *(The third kind exists as this document's recommendation under open
+question OQ-03; the suggested categories assume it.)*
+
+**A reserve you are building — like Emergency fund, Trip savings, Medical reserve.**
+It grows toward a target amount you set (its *ceiling* — §4.3). It is **full** when its balance
+reaches that target. Money arriving beyond that point is not lost and not crammed in — it moves on
+to the category you named as next in line (§4.5). **Spending from it makes room again**: pay a
+medical bill from Medical reserve and the reserve is below its target, so future income tops it
+back up — using a reserve for its purpose is never punished.
+
+**A bill you pay every period — like Mobile/Internet, Subscriptions.**
+You tell the app the bill amount and the day of the month it's due. Each period, the category
+collects **only up to the bill amount** — it is "funded" for the period once this period's
+allocations reach that amount, and further income passes it by until the next period starts. It
+does not hoard three months of internet money. **Spending from it does not reopen collection in
+the same period**: the cap is on how much goes *in* per period, so paying the bill doesn't make the
+category collect twice. If a period ends with money unspent, the recommendation (open question
+OQ-05) is that the surplus stays and the next period collects only the difference — the category
+never holds more than one bill's worth.
+
+**An open envelope — like Groceries, Transport, Eating out.**
+No target and no cap. It is never "full"; whatever share you assign flows in, every time, and
+overflow from other categories can always land here. The only question an envelope answers is "how
+much is left this month?" — and that is spending discipline, not a rule the app enforces.
+
+### 4.3 A ceiling is a finish line, not a fence
+
+A **ceiling** is the amount at which a reserve counts as complete. It answers "when am I done
+saving for this?"
+
+It is **not a spending limit**. The app never stops you spending from any category, and a ceiling
+says nothing about spending at all. Other budgeting apps use "limit" to mean "stop me spending" —
+this app's ceiling means "stop *filling* this and send the money onward". If a category is at its
+ceiling, that is a success state, not a warning state.
+
+Two consequences worth stating plainly:
+
+- A balance can sit **above** its ceiling. That happens only when you put it there yourself — by a
+  manual override on one payment (§4.7), or by raising and then lowering the ceiling. The app never
+  moves money out of a category to "fix" this; it simply stops adding more until you've spent back
+  under the line.
+- Lowering a ceiling below the current balance is allowed and moves no money; it just means the
+  category is now over-complete and will receive nothing further.
+
+### 4.4 Where each unit of income goes
+
+When you record income, the app splits it in two visible steps:
+
+1. **Across the groups** — Spending, Savings, and Business if enabled — by the whole-number
+   percentages you chose. A 50 / 30 / 20 split of 30,000 is 15,000 / 9,000 / 6,000.
+2. **Within each group** — each category takes its percentage of its group's share.
+
+Then the ceilings have their say: any category that can't take its full share passes the excess on
+(§4.5).
+
+**The conservation rule — the app's core promise:** every single unit of an income amount lands in
+exactly one category, always. Record 30,000 and the amounts landing across all categories total
+exactly 30,000 — not 29,999, not 30,001, no matter how awkward the percentages divide. Nothing is
+ever rounded away, absorbed, or held in limbo. The app can always show you where every unit went,
+and the preview shows the running total equalling your entry before you confirm anything.
+
+### 4.5 Overflow and the chain — a worked example
+
+When a category is full, its excess goes to the category **you** named as its next-in-line. That
+category may itself be full — then the excess follows *that* category's next-in-line, and so on,
+hop by hop, until it lands somewhere with room. Every hop is shown to you; money never silently
+skips from one place to another.
+
+**Worked example** — three savings categories, real suggested names, arithmetic you can check by
+hand. Setup:
+
+| Category | Share of Savings | Target (ceiling) | Balance before | Next in line |
+|---|---|---|---|---|
+| Medical reserve | 40% | 50,000 | 42,000 | Emergency fund |
+| Emergency fund | 35% | 100,000 | 90,000 | Trip savings |
+| Trip savings | 25% | none — open | 12,500 | — |
+
+Salary arrives and the Savings group's share is **30,000**. Step by step:
+
+1. The percentage split assigns: Medical 40% = **12,000**, Emergency 35% = **10,500**, Trip 25% = **7,500**. (Check: 12,000 + 10,500 + 7,500 = 30,000.)
+2. **Medical reserve** has room for only 50,000 − 42,000 = **8,000**. It accepts 8,000 and is now full. The remaining **4,000** heads to its next-in-line, Emergency fund.
+3. **Emergency fund** deals with its own share first: room is 100,000 − 90,000 = **10,000**, so of its 10,500 it accepts **10,000** and is now full; the leftover **500** heads to its next-in-line, Trip savings.
+4. The **4,000** from Medical now arrives at Emergency fund — which is already full, so all 4,000 continues down the line to Trip savings.
+5. **Trip savings** has no ceiling. It accepts its own 7,500, the 500, and the 4,000: **12,000** in total.
+
+Where the money ended up: Medical **8,000** + Emergency **10,000** + Trip **12,000** = **30,000**.
+Every unit accounted for; both full categories stopped exactly at their targets; the app shows each
+of these hops in the preview before you confirm.
+
+*Check yourself:* if Trip savings had also had a ceiling with only 9,000 of room, where would the
+last 3,000 go? — To the catch-all category described next. That is the answer the app would show
+you, by name.
+
+### 4.6 The catch-all at the end of every chain
+
+One category is the **always-open catch-all** (suggested name: *Unallocated buffer*). It has no
+ceiling, so it can always accept money, and every chain of next-in-lines ends there if everything
+else is full. It is the reason overflow can never be homeless.
+
+You can rename it and spend from it like any category. The one thing you cannot do is delete it —
+the app's promise that every unit lands somewhere depends on it existing. If you run a business, a
+separate business catch-all keeps overflowing business money inside the business (recommendation
+under OQ-07).
+
+### 4.7 Bending the rules for one payment
+
+Before confirming any income event you can adjust its split by hand. The rules that make this safe:
+
+- The adjusted amounts must still total the payment **exactly** — the app will not confirm
+  otherwise.
+- Your adjustment applies to **that payment only**. Your standing percentages are untouched, and
+  the next payment previews by the standing rules.
+- You may deliberately push a category past its ceiling this way. The app warns you and then obeys
+  you — your explicit instruction outranks the standing rule for that one event. The overfilled
+  category then receives nothing further from later income until spending brings it back under its
+  ceiling.
+
+### 4.8 Mistakes: undone, never erased
+
+The app's history is written in ink. Nothing recorded is ever edited or deleted — a mistake is
+corrected by an **equal and opposite entry** that cancels it, with both entries staying visible as
+a pair.
+
+Undo a mis-entered salary and every category returns to exactly the balance it had before — and
+your history shows the salary *and* its reversal, so the record honestly reflects both the mistake
+and the correction. A corrected spend works the same way: the original, its cancellation, and the
+corrected entry all remain readable. This is why a balance can always be re-derived from history:
+the history is never rewritten to flatter the present. *(Recommendation under OQ-09: undo is
+available for any event, however old, and always leaves this visible pair.)*
+
+### 4.9 Categories and bank accounts — two readings, one recommendation
+
+Open question OQ-02 admits two readings of what a "bank account" is in this app. They differ in
+scope so materially that the choice is put here rather than made silently:
+
+**Reading A — accounts are labels (recommended).** An account is a name you attach to categories:
+"Emergency fund and Trip savings live in my HBL savings account." The app shows each account's
+expected total — the sum of its categories' balances — so you can eyeball it against what the bank
+app shows. Nothing more. If they differ, the app changes nothing by itself; the difference is
+information ("you have unrecorded activity"), not an error the app tries to fix.
+
+**Reading B — accounts hold real balances.** Accounts become a second, parallel set of books:
+recording money in an account, transfers between accounts, and reconciling each against bank
+statements. This roughly doubles the bookkeeping surface of the app and makes every income event
+ask "which account did this arrive in?" before it can be recorded.
+
+The recommendation is Reading A for version 1: it answers persona P1's actual question ("which
+account holds what?") with a fraction of the machinery, and Reading B can be layered on later
+without undoing anything. The consequence to accept: the app's per-account totals are expectations,
+not statements of record.
+
+
 
 Written in substage 1.3. Every story: stable id, persona, MoSCoW priority, the inventory ids it
 satisfies, and Given/When/Then criteria **observable by a person holding a phone** — no criterion
