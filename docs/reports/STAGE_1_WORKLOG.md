@@ -5,7 +5,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | Substage | Name | Status |
 |---|---|---|
 | 1.1 | Intake and source reconciliation | ✅ Complete |
-| 1.2 | Personas and end-to-end journeys | Not started |
+| 1.2 | Personas and end-to-end journeys | ✅ Complete |
 | 1.3 | User stories and acceptance criteria | Not started |
 | 1.4 | The money model in plain language | Not started |
 | 1.5 | Non-functional requirements with measurable targets | Not started |
@@ -86,3 +86,72 @@ put to the user at the Stage 1 gate.
 
 No paraphrasing was performed in §A.1, §A.3 or §A.4 — source wording is quoted. No conflict found
 in 1.1.5 was resolved.
+
+---
+
+## 1.2 — Personas and end-to-end journeys (S01.02)
+
+**Output:** `docs/PRD.md` section 2.
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.2.1 | Expand P1 — goals, context, confidence, device, triggers, abandonment | PRD §2.1 |
+| 1.2.2 | Expand P2 — same, plus business pressure and its emotional stake | PRD §2.2 |
+| 1.2.3 | P1 primary journey, numbered, screen named at every step | PRD §2.4 (J1-A/B/C) |
+| 1.2.4 | P2 primary journey through a business ceiling overflow | PRD §2.5 (J2-A/B) |
+| 1.2.5 | At least five failure journeys | PRD §2.6 (FJ-1…FJ-7) |
+| 1.2.6 | Highest-risk step and design response, per journey | PRD §2.4–§2.6, bolded per journey |
+| 1.2.7 | Wall-clock estimate for the P1 default path against NFR-04 | PRD §2.7 |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Both primary journeys written as numbered steps with a named screen at each step | J1 = 22 numbered steps across J1-A/B/C; J2 = 18 across J2-A/B. Every row names a screen from the §2.3 inventory. | ✅ |
+| At least five failure journeys, none ending in a dead end or data loss | **7 written.** Six end with data intact and the user in control. **FJ-5(b) ends in data loss** — escalated as ESC-1.2-A rather than papered over. | ⚠️ 6 of 7 |
+| Every journey names its highest-risk step and the design response | 9 journeys (J1, J2, FJ-1…FJ-7), each with a bolded highest-risk step and a one-sentence design response. | ✅ |
+| The P1 default path is plausibly under 5 minutes and the step count supports the claim | §2.7: 11 onboarding steps = 106s; through first income split = 166s vs the 300s target. The supporting constraint (one tap per default-path screen) is stated explicitly. | ✅ |
+
+### Counts
+
+- Journeys: **9** — 2 primary (J1, J2), 7 failure (FJ-1…FJ-7), against a required minimum of 5 failure journeys.
+- Screens named: **21** (§2.3). Stage 2 substage 2.11 owns the definitive inventory.
+- J1 steps: 22. J2 steps: 18.
+- Estimated onboarding time on defaults: **106s** vs R-06's 120s target.
+- Estimated time to first completed income split: **166s** vs NFR-04's 300s target — 134s margin.
+
+### Escalations raised
+
+- **ESC-1.2-A — FJ-5(b) ends in data loss and cannot be designed away.** A user who never signs in
+  and never exports has no recovery path when their device is lost. This is a direct tension
+  between NFR-02 (the app must be fully usable with no account ever linked) and NFR-07
+  (recoverability), with NG-01 ruling out any other recovery channel. The acceptance criterion "none
+  ends in data loss" is therefore not fully satisfiable. Recorded, not resolved; carried to 1.7.
+
+### New ambiguities flagged for 1.7
+
+- **F-11 — the personal-only scope.** `Scope Selection` is required by both primary journeys but
+  appears in no FR. FR-06 assumes a three-way split; a personal-only user has no Business group.
+  Whether that group is hidden or present at 0% changes how group percentages total 100.
+- **F-12 — install ordering on a device with existing cloud data.** FJ-4 requires detecting remote
+  data *before* writing local configuration. No requirement states this; the wrong order produces
+  two divergent configurations that must then be merged.
+
+Running ambiguity count carried to 1.7: **12** (F-01…F-12).
+
+### Deviations from the stage plan
+
+- **Two failure journeys beyond the five named in step 1.2.5.** FJ-6 (remote store vanished) exists
+  because 1.1 inventoried IMP-12 with no journey to exercise it; FJ-7 (rules changed, old event
+  re-examined) exists because INV-11 had no journey either. Both would otherwise reach Stage 2 as
+  invariants with no screen behind them.
+- **A screen inventory (§2.3) was written.** Not requested by 1.2, but step 1.2.3 requires naming a
+  screen at every step, and doing that without a fixed label set produces synonyms that would break
+  1.8's consistency pass. The section states that Stage 2 substage 2.11 owns the real inventory.
+
+### Notes
+
+No screens were designed — §2 names screens and describes what the user does, per the substage's
+`must_not`. No third persona was introduced; §2.2 records that NG-02 forecloses one.
