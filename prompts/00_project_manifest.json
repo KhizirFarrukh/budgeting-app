@@ -1,0 +1,821 @@
+{
+  "schema_version": "4.0.0",
+  "file_role": "Shared context for every stage. Load this file first, then exactly one stage file. All stage files reference the ID registries defined here: FR-xx requirements, NFR-xx quality attributes, INV-xx invariants, OQ-xx open questions, R-xx risks.",
+  "generated_from": "budget_app_agent_prompts.json",
+  "read_order": [
+    "00_project_manifest.json",
+    "stage_01_requirements_and_prd.json",
+    "stage_02_system_design_and_architecture.json",
+    "stage_03_project_scaffolding.json",
+    "stage_04_core_data_layer.json",
+    "stage_05_distribution_engine.json",
+    "stage_06_ui_core_flows.json",
+    "stage_07_cloud_sync.json",
+    "stage_08_reports_and_insights.json",
+    "stage_09_testing_and_qa.json",
+    "stage_10_polish_and_release.json"
+  ],
+  "project": {
+    "name": "PookieBudget",
+    "one_liner": "Android app that automatically splits every incoming payment across user-defined personal and business money buckets, with per-bucket ceilings and overflow redirection, syncing only to the user's own Google account.",
+    "description": "A Flutter Android app for personal and business budget management with category-based savings, ceiling/redirect logic, and Google account cloud sync.",
+    "platform": {
+      "primary": "Android (phone, portrait-first)",
+      "framework": "Flutter",
+      "language": "Dart",
+      "ios_support": "Out of scope for v1, but do not introduce Android-only abstractions in the domain layer that would block a later iOS port.",
+      "web_support": "Out of scope."
+    },
+    "personas": [
+      {
+        "id": "P1",
+        "name": "Personal saver",
+        "description": "Salaried individual with irregular side income. Wants money split automatically the moment it arrives so they stop overspending before saving. Low tolerance for setup friction; has never used a budgeting app.",
+        "primary_jobs": [
+          "Split incoming salary without thinking",
+          "See how close each savings goal is",
+          "Not lose track of which bank account holds what"
+        ]
+      },
+      {
+        "id": "P2",
+        "name": "Owner-operator",
+        "description": "Same person as P1 plus a small business (retail/reselling). Needs business money kept mentally and visually separate from household money so business float is never spent on groceries.",
+        "primary_jobs": [
+          "Ring-fence inventory restock money",
+          "Track ad spend separately",
+          "Never mix business and personal reporting"
+        ]
+      }
+    ],
+    "explicit_non_goals_v1": [
+      "No bank API / open-banking integration. Income and spending are entered manually.",
+      "No multi-user or shared household accounts.",
+      "No investment tracking, loans, debt payoff planning, or net-worth calculation.",
+      "No third-party analytics, crash reporting containing financial data, or ad SDKs.",
+      "No currency conversion or multi-currency portfolios (single currency per install)."
+    ]
+  },
+  "instructions_to_agent": {
+    "working_agreement": "Work through the stages strictly in order. One stage per working session. At the end of each stage, produce the deliverables listed in that stage file plus the stage report, then STOP and wait for explicit user approval before opening the next stage file.",
+    "sdlc_discipline": "Requirements before design, design before implementation, implementation before testing, testing before release prep. If you discover mid-stage that an earlier stage was wrong, do not silently patch forward: raise it, amend the earlier document, and note the amendment in the decision log.",
+    "when_to_stop_and_ask": [
+      "Any requirement that admits two reasonable interpretations affecting the data model or money math.",
+      "Any decision that would store user financial data anywhere other than the device or the user's own Google account.",
+      "Any change to the stage plan itself.",
+      "Any time an open question (OQ-xx) blocks the task in front of you."
+    ],
+    "assumption_policy": "Where a non-blocking gap exists, proceed with the most conservative reasonable assumption, and record it in docs/ASSUMPTIONS.md with an ID (A-xx), the assumption, the reason, and what would need to change if it is wrong.",
+    "decision_log": {
+      "format": "Architecture Decision Record",
+      "path": "docs/decisions/ADR-<NNN>-<kebab-title>.md",
+      "required_sections": [
+        "Status",
+        "Context",
+        "Decision",
+        "Alternatives considered",
+        "Consequences",
+        "Date"
+      ],
+      "rule": "Every irreversible or expensive-to-reverse technical choice gets an ADR. Reference the ADR number from the code that implements it."
+    },
+    "output_conventions": {
+      "docs_location": "docs/",
+      "code_location": "lib/",
+      "test_location": "test/ and integration_test/",
+      "stage_reports": "docs/reports/STAGE_<N>_REPORT.md",
+      "diagrams": "Mermaid fenced blocks inside markdown; no binary image files."
+    },
+    "verification_policy": "Do not report a task complete on the basis of code being written. A task is complete when its acceptance criteria are demonstrably met - tests run and pass, or the app builds and the behaviour is observed. Paste the actual command output into the stage report.",
+    "knowledge_freshness": "Package versions, Android API level requirements, Google OAuth scope classifications and Play Store policy requirements change frequently. Do not rely on memorised version numbers. Check pub.dev and the current official documentation at the time of implementation, and record the versions actually used."
+  },
+  "stage_index": [
+    {
+      "stage": 1,
+      "id": "S01",
+      "name": "Requirements Gathering & Documentation",
+      "file": "stage_01_requirements_and_prd.json",
+      "substages": 8,
+      "depends_on": [],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 2,
+      "id": "S02",
+      "name": "System Design & Architecture",
+      "file": "stage_02_system_design_and_architecture.json",
+      "substages": 13,
+      "depends_on": [
+        "S01"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 3,
+      "id": "S03",
+      "name": "Project Scaffolding",
+      "file": "stage_03_project_scaffolding.json",
+      "substages": 9,
+      "depends_on": [
+        "S02"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 4,
+      "id": "S04",
+      "name": "Core Data Layer Implementation",
+      "file": "stage_04_core_data_layer.json",
+      "substages": 11,
+      "depends_on": [
+        "S03"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 5,
+      "id": "S05",
+      "name": "Core Business Logic - Auto-Distribution Engine",
+      "file": "stage_05_distribution_engine.json",
+      "substages": 10,
+      "depends_on": [
+        "S04"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 6,
+      "id": "S06",
+      "name": "UI Implementation - Core Flows",
+      "file": "stage_06_ui_core_flows.json",
+      "substages": 12,
+      "depends_on": [
+        "S05"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 7,
+      "id": "S07",
+      "name": "Cloud Sync Implementation",
+      "file": "stage_07_cloud_sync.json",
+      "substages": 11,
+      "depends_on": [
+        "S06"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 8,
+      "id": "S08",
+      "name": "Reports & Insights",
+      "file": "stage_08_reports_and_insights.json",
+      "substages": 8,
+      "depends_on": [
+        "S07"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 9,
+      "id": "S09",
+      "name": "Testing & QA Pass",
+      "file": "stage_09_testing_and_qa.json",
+      "substages": 8,
+      "depends_on": [
+        "S08"
+      ],
+      "gate": "User approval required at end of stage."
+    },
+    {
+      "stage": 10,
+      "id": "S10",
+      "name": "Polish & Release Prep",
+      "file": "stage_10_polish_and_release.json",
+      "substages": 8,
+      "depends_on": [
+        "S09"
+      ],
+      "gate": "User approval required at end of stage."
+    }
+  ],
+  "feature_requirements": [
+    {
+      "id": "FR-01",
+      "statement": "Add multiple savings categories, each user-definable.",
+      "priority": "MUST",
+      "stages": [
+        "S01",
+        "S02",
+        "S04",
+        "S06"
+      ],
+      "verified_by": "Create, rename and archive a category; it persists across app restart."
+    },
+    {
+      "id": "FR-02",
+      "statement": "Set a fixed percentage of income allocated to each category.",
+      "priority": "MUST",
+      "stages": [
+        "S02",
+        "S04",
+        "S05",
+        "S06"
+      ],
+      "verified_by": "Percentages stored in basis points; group totals validated to exactly 10000."
+    },
+    {
+      "id": "FR-03",
+      "statement": "Assign which bank account stores which category's funds.",
+      "priority": "MUST",
+      "stages": [
+        "S02",
+        "S04",
+        "S06"
+      ],
+      "verified_by": "Category shows its linked account; per-account totals reconcile against category balances."
+    },
+    {
+      "id": "FR-04",
+      "statement": "Log an income event and auto-split it into spending, savings and business-purpose buckets based on user-defined rules.",
+      "priority": "MUST",
+      "stages": [
+        "S05",
+        "S06"
+      ],
+      "verified_by": "Allocation preview matches engine output; confirmed event writes ledger entries summing exactly to the income amount."
+    },
+    {
+      "id": "FR-05",
+      "statement": "Track spending categories separately from savings categories.",
+      "priority": "MUST",
+      "stages": [
+        "S02",
+        "S04",
+        "S06"
+      ],
+      "verified_by": "Group separation enforced in model and visible in UI."
+    },
+    {
+      "id": "FR-06",
+      "statement": "User selects top-level split ratios: Spending / Savings / Business Purposes.",
+      "priority": "MUST",
+      "stages": [
+        "S05",
+        "S06"
+      ],
+      "verified_by": "Editing group ratios changes the next allocation preview and is version-stamped."
+    },
+    {
+      "id": "FR-07",
+      "statement": "Business Purposes group includes sub-categories such as inventory/stock and advertising/marketing, kept distinct from personal categories.",
+      "priority": "MUST",
+      "stages": [
+        "S04",
+        "S06"
+      ],
+      "verified_by": "Business categories cannot be selected in personal spending flows and vice versa."
+    },
+    {
+      "id": "FR-08",
+      "statement": "Each category group ships with predefined suggested categories; the user can accept, edit, remove or add fully custom categories.",
+      "priority": "MUST",
+      "stages": [
+        "S04",
+        "S06"
+      ],
+      "verified_by": "Onboarding shows seeded suggestions, all of which are editable and removable."
+    },
+    {
+      "id": "FR-09",
+      "statement": "Cloud sync to the user's own Google account, not a third-party server, so data is not locked to one device.",
+      "priority": "MUST",
+      "stages": [
+        "S07"
+      ],
+      "verified_by": "Install on second device, sign in, data converges; no application backend exists."
+    },
+    {
+      "id": "FR-10",
+      "statement": "Category ceiling system: accumulating categories have a target ceiling; once reached, further contributions redirect to a user-specified fallback category.",
+      "priority": "MUST",
+      "stages": [
+        "S02",
+        "S05"
+      ],
+      "verified_by": "Ceiling test vectors in the engine test suite pass, including chained redirects."
+    },
+    {
+      "id": "FR-11",
+      "statement": "Fixed-recurring categories are distinguished from accumulating reserve categories, since they do not need to grow past their bill amount.",
+      "priority": "MUST",
+      "stages": [
+        "S02",
+        "S04",
+        "S05"
+      ],
+      "verified_by": "Per-period cap enforced; surplus redirected rather than accumulated."
+    },
+    {
+      "id": "FR-12",
+      "statement": "Manual override: the user can adjust the auto-suggested split for any individual income event before confirming.",
+      "priority": "MUST",
+      "stages": [
+        "S05",
+        "S06"
+      ],
+      "verified_by": "Override screen refuses to confirm unless overridden amounts total the income amount exactly."
+    },
+    {
+      "id": "FR-13",
+      "statement": "Dashboard showing real-time balance per category against its ceiling/target.",
+      "priority": "MUST",
+      "stages": [
+        "S06"
+      ],
+      "verified_by": "Dashboard figures equal ledger-derived balances."
+    },
+    {
+      "id": "FR-14",
+      "statement": "Reports: monthly/yearly summaries, category trends, CSV export.",
+      "priority": "SHOULD",
+      "stages": [
+        "S08"
+      ],
+      "verified_by": "Exported CSV totals reconcile with in-app report totals."
+    },
+    {
+      "id": "FR-15",
+      "statement": "Offline-first: app fully usable without internet, syncs when connectivity returns.",
+      "priority": "MUST",
+      "stages": [
+        "S04",
+        "S06",
+        "S07"
+      ],
+      "verified_by": "Airplane-mode run of the full core flow, then sync on reconnect."
+    }
+  ],
+  "non_functional_requirements": [
+    {
+      "id": "NFR-01",
+      "statement": "No user financial data leaves the user's own Google account infrastructure.",
+      "measurable_target": "Zero outbound requests to any host not owned by Google as the user's storage provider; verified by network capture during QA.",
+      "verified_in": "S07, S09"
+    },
+    {
+      "id": "NFR-02",
+      "statement": "The app must function fully offline; sync is an enhancement, not a dependency.",
+      "measurable_target": "100% of core flows completable with no network and with no Google account linked.",
+      "verified_in": "S06, S09"
+    },
+    {
+      "id": "NFR-03",
+      "statement": "Clear separation in UI/UX between personal and business financial data.",
+      "measurable_target": "Business data never appears in personal totals; distinct visual treatment; separate report scopes.",
+      "verified_in": "S06, S08"
+    },
+    {
+      "id": "NFR-04",
+      "statement": "Accessible to users with no prior budgeting-app experience.",
+      "measurable_target": "A first-time user completes onboarding and their first income split unaided in under 5 minutes.",
+      "verified_in": "S06, S09"
+    },
+    {
+      "id": "NFR-05",
+      "statement": "Financial correctness over convenience.",
+      "measurable_target": "No rounding drift: for every income event, the sum of allocations equals the input amount exactly, proven by property-based tests over randomised inputs.",
+      "verified_in": "S05, S09"
+    },
+    {
+      "id": "NFR-06",
+      "statement": "Responsive on mid-tier Android hardware.",
+      "measurable_target": "Cold start under 2.5s and dashboard scroll without dropped frames on a device roughly equivalent to a 4GB-RAM mid-range phone; allocation of one income event across 100 categories under 50ms.",
+      "verified_in": "S09"
+    },
+    {
+      "id": "NFR-07",
+      "statement": "Data durability and recoverability.",
+      "measurable_target": "User can export a full JSON/CSV backup at any time; database migrations are tested against fixtures from every prior schema version.",
+      "verified_in": "S04, S08"
+    },
+    {
+      "id": "NFR-08",
+      "statement": "Accessibility compliance.",
+      "measurable_target": "TalkBack labels on all interactive elements, minimum 48dp touch targets, 4.5:1 text contrast, layout intact at 200% font scale.",
+      "verified_in": "S09"
+    }
+  ],
+  "global_invariants": [
+    {
+      "id": "INV-01",
+      "rule": "All monetary values are stored and computed as 64-bit integers in the currency's minor unit. Floating point types are forbidden anywhere in the money path, including intermediate calculations, database columns, JSON payloads and test fixtures."
+    },
+    {
+      "id": "INV-02",
+      "rule": "Conservation of money: for any income event, the sum of its allocation line items equals the income amount exactly. No allocation path may create or destroy a single minor unit."
+    },
+    {
+      "id": "INV-03",
+      "rule": "The ledger is append-only and immutable. Corrections are made by writing compensating (reversal) entries, never by editing or deleting historical entries."
+    },
+    {
+      "id": "INV-04",
+      "rule": "A category balance is always a derived value equal to the sum of its ledger entries. Any stored balance is a cache that must be reproducible by full recomputation, and a recompute-and-compare check must exist."
+    },
+    {
+      "id": "INV-05",
+      "rule": "No financial data is transmitted to, stored on, or processed by infrastructure controlled by the developer or any third party. The only permitted remote store is the user's own Google account."
+    },
+    {
+      "id": "INV-06",
+      "rule": "Every user-initiated action must succeed with no network connection. Network operations are background reconciliation only and may never block the UI."
+    },
+    {
+      "id": "INV-07",
+      "rule": "Redirect chains always terminate. Cycles are prevented at configuration time by validation and defended against at runtime by a visited-set and a hop limit, with a guaranteed uncapped terminal sink category."
+    },
+    {
+      "id": "INV-08",
+      "rule": "Allocation is deterministic and pure: the same inputs, balances and rule version always produce byte-identical output. The engine performs no I/O and never reads the system clock - the evaluation timestamp is passed in."
+    },
+    {
+      "id": "INV-09",
+      "rule": "All timestamps are stored as UTC epoch milliseconds. Local timezone and calendar rules are applied only at the presentation layer."
+    },
+    {
+      "id": "INV-10",
+      "rule": "Deletion is soft. Records carry a tombstone flag and a deletion timestamp so that sync across devices converges and a delete on one device is never resurrected by a stale peer."
+    },
+    {
+      "id": "INV-11",
+      "rule": "Rules are versioned and effective-dated. A historical income event is always explainable against the rule version that was active when it was applied, even after the user changes their percentages."
+    },
+    {
+      "id": "INV-12",
+      "rule": "All record identifiers are client-generated UUIDs, so records created offline on separate devices never collide and every write is idempotent."
+    }
+  ],
+  "domain_glossary": [
+    {
+      "term": "Category group",
+      "definition": "One of the three top-level buckets: SPENDING, SAVINGS, BUSINESS. Income is split across groups first, then within each group."
+    },
+    {
+      "term": "Category",
+      "definition": "A user-defined destination for money inside a group, e.g. Groceries, Emergency fund, Inventory purchases."
+    },
+    {
+      "term": "Category type",
+      "definition": "FIXED_RECURRING (a known bill amount per period; does not accumulate beyond it), ACCUMULATING_RESERVE (grows toward a ceiling), or UNCAPPED_FLOW (a spending envelope with no cap - proposed, see OQ-03)."
+    },
+    {
+      "term": "Ceiling",
+      "definition": "The target amount at which an accumulating category is considered full. Contributions beyond the ceiling are redirected."
+    },
+    {
+      "term": "Headroom",
+      "definition": "The amount a category can still accept: for ACCUMULATING_RESERVE, ceiling minus current balance; for FIXED_RECURRING, the period bill amount minus what has already been allocated in the current period; for UNCAPPED_FLOW, unbounded."
+    },
+    {
+      "term": "Overflow",
+      "definition": "The portion of an allocation that exceeds a category's headroom and must be redirected."
+    },
+    {
+      "term": "Redirect target",
+      "definition": "The category that receives a given category's overflow."
+    },
+    {
+      "term": "Sink category",
+      "definition": "A mandatory, non-deletable, uncapped category that terminates every redirect chain. Overflow that cannot be placed anywhere else lands here."
+    },
+    {
+      "term": "Distribution rule",
+      "definition": "The effective-dated set of percentages: group-level ratios plus within-group category ratios."
+    },
+    {
+      "term": "Basis point (bp)",
+      "definition": "One hundredth of one percent. Percentages are stored as integers in basis points so that a group's shares sum to exactly 10000, avoiding floating-point representation entirely."
+    },
+    {
+      "term": "Income event",
+      "definition": "A single inbound sum of money (salary, sale proceeds, gift) that triggers a distribution."
+    },
+    {
+      "term": "Allocation",
+      "definition": "One line item of an income event: an amount assigned to one category, with a reason (BASE, REDIRECT, MANUAL_OVERRIDE) and, where applicable, the category it was redirected from."
+    },
+    {
+      "term": "Ledger entry",
+      "definition": "An immutable record of money moving into or out of a category. Allocations and spending transactions are both ledger entries."
+    },
+    {
+      "term": "Tombstone",
+      "definition": "A soft-delete marker retained so peer devices converge on the deletion rather than resurrecting the record."
+    },
+    {
+      "term": "Outbox",
+      "definition": "A local queue of changes waiting to be pushed to the user's cloud store, drained by a background worker with retry and backoff."
+    },
+    {
+      "term": "HLC (hybrid logical clock)",
+      "definition": "A timestamp combining wall-clock milliseconds, a logical counter and a device id, used to order concurrent edits deterministically despite clock skew."
+    },
+    {
+      "term": "Largest remainder method",
+      "definition": "The rounding technique used to split an integer amount by percentages without losing or inventing minor units: take the integer floor of each share, then distribute the leftover units to the shares with the largest fractional remainders."
+    }
+  ],
+  "predefined_categories": {
+    "note": "These ship as suggestions only. The onboarding UI must present them as pre-ticked-but-editable proposals, never as fixed structure. The user can rename, retype, re-ceiling, remove, or ignore all of them (FR-08).",
+    "spending": [
+      {
+        "name": "Groceries",
+        "suggested_type": "UNCAPPED_FLOW",
+        "note": "Recurring but variable; envelope-style."
+      },
+      {
+        "name": "Eating out",
+        "suggested_type": "UNCAPPED_FLOW",
+        "note": "Discretionary; good candidate for a monthly envelope cap."
+      },
+      {
+        "name": "Mobile/Internet",
+        "suggested_type": "FIXED_RECURRING",
+        "note": "Known monthly bill."
+      },
+      {
+        "name": "Transport/Fuel",
+        "suggested_type": "UNCAPPED_FLOW",
+        "note": "Variable."
+      },
+      {
+        "name": "Entertainment/Subscriptions",
+        "suggested_type": "FIXED_RECURRING",
+        "note": "Sum of known subscription charges."
+      }
+    ],
+    "savings": [
+      {
+        "name": "Medical reserve",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Ceiling suggested; refills after a claim is spent."
+      },
+      {
+        "name": "Emergency fund",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Ceiling commonly expressed as N months of spending-group outflow."
+      },
+      {
+        "name": "Trip savings",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Often date-anchored - see OQ-04."
+      },
+      {
+        "name": "Clothes reserve",
+        "suggested_type": "ACCUMULATING_RESERVE"
+      },
+      {
+        "name": "Eid/Qurbani savings",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Date-anchored to a lunar-calendar event; the target date moves ~11 days earlier each Gregorian year - see OQ-04."
+      },
+      {
+        "name": "Wedding fund",
+        "suggested_type": "ACCUMULATING_RESERVE"
+      },
+      {
+        "name": "Hajj fund",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Long-horizon, large ceiling."
+      },
+      {
+        "name": "Vehicle/PC upgrade reserve",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Drains to near zero on purchase, then refills."
+      },
+      {
+        "name": "Annual taxes/registration reserve",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Date-anchored annual obligation."
+      }
+    ],
+    "business": [
+      {
+        "name": "Inventory/stock purchases",
+        "suggested_type": "ACCUMULATING_RESERVE",
+        "note": "Highest-churn business bucket."
+      },
+      {
+        "name": "Advertising/marketing",
+        "suggested_type": "UNCAPPED_FLOW"
+      },
+      {
+        "name": "Business subscriptions/tools",
+        "suggested_type": "FIXED_RECURRING"
+      },
+      {
+        "name": "Shipping/packaging supplies",
+        "suggested_type": "UNCAPPED_FLOW"
+      },
+      {
+        "name": "Business miscellaneous",
+        "suggested_type": "UNCAPPED_FLOW",
+        "note": "Suitable default sink for the business group."
+      }
+    ]
+  },
+  "cloud_sync_requirements": {
+    "storage_target": "The user's own Google account. Google Drive appDataFolder is the recommended target; see ADR requirement in S07 and the analysis note below.",
+    "no_third_party_server": true,
+    "offline_first": true,
+    "multi_device_conflict_handling_required": true,
+    "analysis_note": "Firestore was offered as an alternative in the original brief, but Firestore documents live inside a Firebase project owned by the developer, which makes the developer the data controller and holder of user financial records. That conflicts with FR-09 and INV-05 as written. Drive appDataFolder stores a hidden per-user folder inside the user's own Drive that the developer can never read. S07 must justify the final choice in an ADR.",
+    "known_tradeoffs_of_appdatafolder": [
+      "Files count against the user's own Drive storage quota.",
+      "No server-side query, indexing, merge, or realtime push - the client does all merging.",
+      "The user can wipe the app's hidden data from Drive settings, so the app must handle 'remote store vanished' gracefully.",
+      "The OAuth scope for app data is treated as sensitive by Google and typically requires app verification before public release - budget calendar time for this in S10."
+    ]
+  },
+  "engineering_conventions": {
+    "money": "Store ISO-4217 currency code plus its minor-unit exponent once, at install/onboarding. Amounts are int64 minor units. Never use double, float or Dart num for money. Formatting for display happens only in presentation widgets. Handle exponent 0 (e.g. JPY) and exponent 3 (e.g. KWD) correctly - do not hardcode 2 decimal places.",
+    "percentages": "Basis points as int. Group shares must sum to exactly 10000; within-group category shares must sum to exactly 10000. Validation rejects anything else.",
+    "identifiers": "Client-generated UUID v4 (or v7 for time-sortable keys) as TEXT primary keys. No auto-increment integers - they collide across offline devices.",
+    "time": "int64 UTC epoch milliseconds in storage. Use a injectable Clock abstraction so tests control time.",
+    "errors": "Domain layer returns typed results (sealed classes / Result types) for expected failures; exceptions are reserved for programmer error. Every user-visible failure has a plain-language message and a recovery action.",
+    "layering": "domain (pure Dart, zero Flutter imports, zero I/O) < data (repositories, database, sync) < application (state management) < presentation (widgets). Dependencies point inward only. The allocation engine lives in domain and must remain testable with no database and no Flutter binding.",
+    "testing": "Unit tests for domain, repository tests against an in-memory database, widget tests for screens, integration tests for flows. Property-based tests specifically for the allocation engine. Golden test vectors stored as JSON fixtures so engine behaviour is locked against regression.",
+    "naming": "Files snake_case, types UpperCamelCase, members lowerCamelCase. Database tables snake_case plural.",
+    "git": "Conventional Commits. One branch per stage: stage/<n>-<slug>. Tag at each approved gate: v0.<stage>.0.",
+    "lint": "flutter_lints as a baseline plus custom rules banning double/float in the money path and banning direct DateTime.now() outside the clock abstraction."
+  },
+  "open_questions_register": [
+    {
+      "id": "OQ-01",
+      "question": "What currency and locale should the app default to, and can the user change it after setup?",
+      "why_it_matters": "Determines the minor-unit exponent baked into every stored amount; changing it later is a migration, not a setting.",
+      "blocking_stage": "S01",
+      "default_if_unanswered": "Read from device locale at onboarding, allow change only while the ledger is empty."
+    },
+    {
+      "id": "OQ-02",
+      "question": "Are bank accounts purely informational labels, or must per-account balances reconcile against real bank statements?",
+      "why_it_matters": "The second interpretation implies account-level ledgers, transfers between accounts, and reconciliation UI - materially more scope.",
+      "blocking_stage": "S01",
+      "default_if_unanswered": "Informational label plus a derived per-account total; no statement reconciliation in v1."
+    },
+    {
+      "id": "OQ-03",
+      "question": "Should a third category type UNCAPPED_FLOW exist for spending envelopes such as Groceries, alongside FIXED_RECURRING and ACCUMULATING_RESERVE?",
+      "why_it_matters": "The original brief names only two types, but most spending categories are neither a fixed bill nor a reserve with a ceiling.",
+      "blocking_stage": "S02",
+      "default_if_unanswered": "Yes - add UNCAPPED_FLOW with an optional soft monthly budget that warns but does not redirect."
+    },
+    {
+      "id": "OQ-04",
+      "question": "Do accumulating categories need a target date in addition to a ceiling (e.g. Eid savings needed by a specific date), with a suggested required contribution per month?",
+      "why_it_matters": "Several seeded categories are inherently deadline-driven; without dates the app cannot tell the user whether they are on track.",
+      "blocking_stage": "S01",
+      "default_if_unanswered": "Defer to a post-v1 enhancement; record the target_date column in the schema now but leave it unused."
+    },
+    {
+      "id": "OQ-05",
+      "question": "When a FIXED_RECURRING category's period ends with money unspent, does the surplus carry forward, or redirect out?",
+      "why_it_matters": "Directly changes the ledger and the meaning of 'balance' for those categories.",
+      "blocking_stage": "S02",
+      "default_if_unanswered": "Carry forward, and cap the next period's allocation by the carried amount so total never exceeds one bill."
+    },
+    {
+      "id": "OQ-06",
+      "question": "What happens when the user spends from a category and its balance goes negative - block, warn, or allow?",
+      "why_it_matters": "Affects the spending flow, the dashboard and reporting.",
+      "blocking_stage": "S02",
+      "default_if_unanswered": "Allow with a prominent warning; never block a user from recording reality."
+    },
+    {
+      "id": "OQ-07",
+      "question": "Should the sink category be auto-created and non-deletable, and which group does it belong to?",
+      "why_it_matters": "INV-07 requires a guaranteed terminal destination for overflow.",
+      "blocking_stage": "S02",
+      "default_if_unanswered": "Auto-create an uncapped 'Unallocated buffer' in SAVINGS; make it non-deletable; allow rename; allow a separate business sink."
+    },
+    {
+      "id": "OQ-08",
+      "question": "Is optional passphrase encryption of the cloud payload wanted, given the trade-off that a forgotten passphrase means unrecoverable data?",
+      "why_it_matters": "Adds meaningful protection if the Google account is compromised, at the cost of an unrecoverable failure mode.",
+      "blocking_stage": "S07",
+      "default_if_unanswered": "No in v1; rely on Google account security. Revisit post-launch."
+    },
+    {
+      "id": "OQ-09",
+      "question": "Should income events be reversible (delete/undo) after confirmation, and if so how far back?",
+      "why_it_matters": "INV-03 forbids editing history, so undo must be implemented as compensating entries with UI to match.",
+      "blocking_stage": "S02",
+      "default_if_unanswered": "Yes - reversal via compensating entries, unlimited in time, always visible in history as a reversal rather than a disappearance."
+    },
+    {
+      "id": "OQ-10",
+      "question": "Does business data need to be exportable separately for tax or accounting purposes, and in what format?",
+      "why_it_matters": "Shapes the CSV export schema in S08.",
+      "blocking_stage": "S08",
+      "default_if_unanswered": "Provide a business-scoped CSV export with date, category, amount, note and running balance."
+    }
+  ],
+  "risk_register": [
+    {
+      "id": "R-01",
+      "risk": "Rounding drift in percentage splits silently loses or invents money.",
+      "likelihood": "High if unguarded",
+      "impact": "Critical - destroys user trust irrecoverably",
+      "mitigation": "Integer-only math, largest remainder rounding, conservation assertion inside the engine, property-based tests over randomised inputs (INV-02, NFR-05)."
+    },
+    {
+      "id": "R-02",
+      "risk": "Redirect configuration forms a cycle and the allocation loops forever or drops money.",
+      "likelihood": "Medium",
+      "impact": "Critical",
+      "mitigation": "Cycle detection at save time, plus runtime visited-set, hop limit and mandatory uncapped sink (INV-07)."
+    },
+    {
+      "id": "R-03",
+      "risk": "Sync conflict resolution loses a device's offline edits.",
+      "likelihood": "Medium",
+      "impact": "High",
+      "mitigation": "Immutable ledger entries merge by union on UUID and can never conflict; only mutable configuration uses last-write-wins with HLC ordering. Two-device convergence tests in S07."
+    },
+    {
+      "id": "R-04",
+      "risk": "Google OAuth verification for the app-data scope delays release.",
+      "likelihood": "Medium",
+      "impact": "Medium - schedule only",
+      "mitigation": "Start the verification and privacy policy work early in S10; keep the app fully functional without sign-in so an unverified build is still shippable to testers."
+    },
+    {
+      "id": "R-05",
+      "risk": "Scope creep from the business feature set turning the app into accounting software.",
+      "likelihood": "Medium",
+      "impact": "Medium",
+      "mitigation": "Explicit non-goals list; any new business feature must be raised as an open question, not implemented inline."
+    },
+    {
+      "id": "R-06",
+      "risk": "Onboarding is too heavy for a first-time budgeter and the user abandons setup.",
+      "likelihood": "High",
+      "impact": "High",
+      "mitigation": "Seeded categories with sane default percentages, ability to finish setup in under 2 minutes by accepting defaults, and full editability afterwards (NFR-04)."
+    },
+    {
+      "id": "R-07",
+      "risk": "Database schema changes after release corrupt existing user data.",
+      "likelihood": "Medium",
+      "impact": "Critical",
+      "mitigation": "Versioned migrations with fixture-based tests from every prior version, plus an automatic pre-migration backup export (NFR-07)."
+    },
+    {
+      "id": "R-08",
+      "risk": "Local device clock skew misorders sync events.",
+      "likelihood": "Medium",
+      "impact": "Medium",
+      "mitigation": "Hybrid logical clocks rather than raw wall-clock comparison; never trust device time for ordering."
+    }
+  ],
+  "approval_protocol": {
+    "gate_rule": "A stage is not complete until the user says so. Producing the deliverables is necessary but not sufficient.",
+    "stage_report_required_sections": [
+      "What was produced (file list with one-line descriptions)",
+      "How each acceptance criterion was verified (with command output where applicable)",
+      "Decisions made and their ADR numbers",
+      "Assumptions recorded (A-xx)",
+      "Open questions still blocking (OQ-xx)",
+      "Deviations from the stage plan and why",
+      "What the next stage will consume from this one"
+    ],
+    "closing_question_template": "Stage <N> (<name>) is complete. Deliverables: <list>. Open questions needing your input: <list>. Do you approve moving to Stage <N+1>?",
+    "rollback_rule": "If the user rejects a stage, do not proceed. Capture the objection, revise, and re-present the same gate."
+  },
+  "plan_shape": {
+    "layout": "One JSON file per stage. Each stage file contains its substages nested under the 'substages' key.",
+    "stages": 10,
+    "substages": 98,
+    "session_rule": "Load the manifest plus one stage file. Work one substage per session, in order. Every stage ends at a user approval gate; substages within a stage do not."
+  },
+  "substage_schema": {
+    "description": "Every entry in a stage file's 'substages' array uses these keys.",
+    "keys": {
+      "id": "Stable identifier, e.g. S05.04",
+      "substage / position / name / goal / why_it_matters": "What this session is for and why it exists",
+      "estimated_session": "Rough size of the session",
+      "entry_criteria": "What must be true before starting",
+      "inputs": "Artefacts consumed",
+      "work": "Numbered steps, each with an action and its sub-details",
+      "acceptance_criteria": "Observable checks that the work is correct",
+      "outputs": "Artefacts produced",
+      "must_not": "Prohibitions specific to this substage",
+      "common_pitfalls": "Known failure modes in this kind of work",
+      "traceability": "Which FR / NFR / INV / risk ids this advances",
+      "definition_of_done": "The bar for ticking it off",
+      "checkpoint": "What to do on completion, and when to escalate instead"
+    }
+  }
+}

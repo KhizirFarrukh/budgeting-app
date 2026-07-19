@@ -1,0 +1,1133 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 5,
+  "stage_id": "S05",
+  "name": "Core Business Logic - Auto-Distribution Engine",
+  "one_line_goal": "Implement the income-splitting, ceiling and redirect engine as a pure function that provably never loses or invents a single minor unit.",
+  "objective": "Transcribe docs/ALLOCATION_ALGORITHM.md into a UI-independent, I/O-free, deterministic engine with exhaustive unit tests, golden vectors and property-based tests.",
+  "rationale": "This is the product's reason to exist and its single largest correctness risk. A user forgives an ugly screen; they do not forgive money that vanishes. The engine is therefore built with no UI, no database and no clock, so it can be tested to exhaustion.",
+  "depends_on": [
+    "S04"
+  ],
+  "blocks": [
+    "S06"
+  ],
+  "entry_criteria": [
+    "docs/ALLOCATION_ALGORITHM.md approved, with worked examples verified arithmetically.",
+    "Domain entities, the Money type and repository interfaces exist from Stage 4.",
+    "Data layer tests are green."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-02",
+      "FR-04",
+      "FR-06",
+      "FR-10",
+      "FR-11",
+      "FR-12"
+    ],
+    "non_functional_requirements": [
+      "NFR-05",
+      "NFR-06"
+    ],
+    "invariants": [
+      "INV-01",
+      "INV-02",
+      "INV-07",
+      "INV-08",
+      "INV-11"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 10,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_5_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "5.1 Engine contracts and the purity harness",
+      "5.2 Phase A: base split and largest-remainder rounding",
+      "5.3 Headroom computation by category type",
+      "5.4 Phase B: worklist, redirects and termination",
+      "5.5 Fixed-recurring period logic",
+      "5.6 Manual override handling",
+      "5.7 Reversal generation",
+      "5.8 Golden test vectors",
+      "5.9 Property-based tests",
+      "5.10 Benchmarks, engine notes and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S05.01",
+      "substage": "5.1",
+      "position": "1 of 10",
+      "name": "Engine contracts and the purity harness",
+      "goal": "Implement the request and result types, the failure taxonomy, and a static check proving the engine is pure.",
+      "why_it_matters": "A pure function needs its whole world passed in. Anything it reaches out for destroys determinism and testability.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "docs/ALLOCATION_ALGORITHM.md approved, with worked examples verified arithmetically.",
+        "Domain entities, the Money type and repository interfaces exist from Stage 4.",
+        "Data layer tests are green."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md sections 1 and 2.",
+        "Stage 4 domain entities."
+      ],
+      "work": [
+        {
+          "step": "5.1.1",
+          "action": "Implement AllocationRequest as an immutable type containing everything the engine needs.",
+          "details": [
+            "income_amount_minor, evaluated_at_ms, rule version snapshot with group and category basis points.",
+            "A snapshot per active category: id, group, type, sort_order, ceiling or bill amount, current balance, allocated in current period, redirect target id, is_sink.",
+            "sink_category_id, optional overrides map, and the period definition for fixed-recurring categories.",
+            "Every field the algorithm document names must be present; a missing field means the engine will be tempted to fetch it."
+          ]
+        },
+        {
+          "step": "5.1.2",
+          "action": "Implement AllocationResult as an immutable type.",
+          "details": [
+            "Ordered line items: category_id, amount_minor, reason, redirected_from_category_id, hop_count.",
+            "A diagnostics trace: ordered, human-readable events describing every acceptance and redirect.",
+            "The rule version id used, and a summary of total allocated, total redirected and categories filled."
+          ]
+        },
+        {
+          "step": "5.1.3",
+          "action": "Implement the sealed failure type covering every case in the algorithm document's error taxonomy.",
+          "details": [
+            "IncomeNotPositive, IncomeExceedsMaximum, GroupBasisPointsInvalid, CategoryBasisPointsInvalid, EmptyGroupWithNonZeroShare, SinkMissing, SinkIsCapped, OverridesExceedIncome, OverrideNegative, NoCategoriesAvailableForRemainder.",
+            "Each failure carries enough context for the UI to write a specific message - the offending group or category, and the offending value."
+          ]
+        },
+        {
+          "step": "5.1.4",
+          "action": "Define the public entry point as a synchronous pure function returning a result-or-failure type.",
+          "details": [
+            "No async, no Future, no callback, no stream."
+          ]
+        },
+        {
+          "step": "5.1.5",
+          "action": "Add the static purity check to CI.",
+          "details": [
+            "The engine module imports nothing from Flutter, dart:io, the data layer, or any package that performs I/O.",
+            "Demonstrate the check failing on a deliberate import, then revert."
+          ]
+        },
+        {
+          "step": "5.1.6",
+          "action": "Implement input validation at the entry point, returning the appropriate typed failure before any computation begins.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The entry point is synchronous and pure, with no async in its signature or body.",
+        "The static purity check passes and has been demonstrated failing on a deliberate violation.",
+        "Every error case in the algorithm document has a corresponding failure variant carrying diagnostic context.",
+        "No AllocationRequest field is missing relative to the algorithm document."
+      ],
+      "outputs": [
+        "lib/domain/allocation/contracts.dart",
+        "lib/domain/allocation/failures.dart",
+        "CI purity check."
+      ],
+      "must_not": [
+        "Do not give the engine a repository, a clock or a logger.",
+        "Do not return a bare boolean or null for failure."
+      ],
+      "common_pitfalls": [
+        "A convenience overload that fetches balances for the caller, which reintroduces I/O.",
+        "Failures without context, so the UI can only say something went wrong."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.02",
+      "substage": "5.2",
+      "position": "2 of 10",
+      "name": "Phase A: base split and largest-remainder rounding",
+      "goal": "Implement the integer-only percentage split with deterministic largest-remainder rounding.",
+      "why_it_matters": "This is where rounding drift is born in almost every budgeting app.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.1 (Engine contracts and the purity harness) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md section 5.",
+        "Substage 5.1 contracts."
+      ],
+      "work": [
+        {
+          "step": "5.2.1",
+          "action": "Implement the integer split primitive: given an amount and a list of basis-point weights, return integer shares that sum exactly to the amount.",
+          "details": [
+            "floor_share = (amount * bp) integer-divided by 10000.",
+            "remainder_numerator = (amount * bp) modulo 10000.",
+            "leftover = amount minus the sum of floors.",
+            "Distribute leftover one unit at a time to the largest remainder numerators."
+          ]
+        },
+        {
+          "step": "5.2.2",
+          "action": "Implement the deterministic tie-break: lower sort_order first, then lower id by string comparison.",
+          "details": [
+            "Do not rely on the sort being stable; specify both keys explicitly."
+          ]
+        },
+        {
+          "step": "5.2.3",
+          "action": "Apply the primitive twice: across groups, then within each group across its categories.",
+          "details": [
+            "Write it once and call it twice; two copies will diverge."
+          ]
+        },
+        {
+          "step": "5.2.4",
+          "action": "Implement the overflow guard on the amount times basis points intermediate.",
+          "details": [
+            "Use the documented maximum income from the algorithm document.",
+            "Return IncomeExceedsMaximum rather than wrapping."
+          ]
+        },
+        {
+          "step": "5.2.5",
+          "action": "Add the phase A conservation assertions inside the engine.",
+          "details": [
+            "Group amounts sum to the income.",
+            "Each group's category amounts sum to that group's amount.",
+            "These assertions fail loudly; they never adjust a value to make the sum work."
+          ]
+        },
+        {
+          "step": "5.2.6",
+          "action": "Write unit tests for the primitive in isolation before testing it through the engine.",
+          "details": [
+            "Equal weights, unequal weights, a single weight of 10000, an amount smaller than the number of weights, an amount of 1, and the tie-break case.",
+            "Test with hand-computed expectations, including the V-02 and V-03 cases from the algorithm document."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "No floating point operation appears in phase A.",
+        "The split primitive returns shares summing exactly to the input for every tested case.",
+        "The tie-break is deterministic across repeated runs and across shuffled input order.",
+        "An income above the documented maximum returns IncomeExceedsMaximum rather than wrapping.",
+        "Conservation assertions fail loudly on a deliberately broken split, demonstrated and reverted."
+      ],
+      "outputs": [
+        "lib/domain/allocation/split.dart and its tests."
+      ],
+      "must_not": [
+        "Do not distribute leftover units to the first item in iteration order.",
+        "Do not write the split logic twice."
+      ],
+      "common_pitfalls": [
+        "Relying on map iteration order for determinism.",
+        "Computing the remainder as a double to compare fractions."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-02",
+          "FR-06",
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-01",
+          "INV-02",
+          "INV-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.03",
+      "substage": "5.3",
+      "position": "3 of 10",
+      "name": "Headroom computation by category type",
+      "goal": "Implement how much each category can accept, including the within-run accepted tracker.",
+      "why_it_matters": "Omitting the within-run tracker is the single most common defect in this algorithm, and it lets a category exceed its ceiling.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.2 (Phase A: base split and largest-remainder rounding) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md section 3 headroom definitions.",
+        "Stage 4 CategoryType semantics."
+      ],
+      "work": [
+        {
+          "step": "5.3.1",
+          "action": "Implement headroom for ACCUMULATING_RESERVE: max(0, ceiling minus current balance minus accepted so far this run).",
+          "details": []
+        },
+        {
+          "step": "5.3.2",
+          "action": "Implement headroom for FIXED_RECURRING: max(0, bill amount minus allocated in current period minus accepted so far this run).",
+          "details": []
+        },
+        {
+          "step": "5.3.3",
+          "action": "Implement headroom for UNCAPPED_FLOW and for the sink: unbounded.",
+          "details": [
+            "Represent unbounded explicitly rather than as a very large number, so no arithmetic can overflow it."
+          ]
+        },
+        {
+          "step": "5.3.4",
+          "action": "Implement the accepted-so-far tracker, scoped to a single allocation run.",
+          "details": [
+            "Two parcels arriving at the same category within one event must not both consume the same headroom.",
+            "Write the test for this case before writing the tracker."
+          ]
+        },
+        {
+          "step": "5.3.5",
+          "action": "Handle the already-over-ceiling case: a category whose balance already exceeds its ceiling, which can happen after a manual override or a sync merge.",
+          "details": [
+            "Headroom is zero, never negative, and the category redirects everything."
+          ]
+        },
+        {
+          "step": "5.3.6",
+          "action": "Write unit tests for headroom in isolation for every type, including zero headroom, full headroom, partially consumed headroom, and the already-over case.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Headroom is never negative for any input.",
+        "Two parcels to the same category in one run cannot exceed the combined headroom, proven by a test.",
+        "An already-over-ceiling category returns zero headroom and redirects everything.",
+        "Unbounded is represented explicitly, not as a magic large number."
+      ],
+      "outputs": [
+        "lib/domain/allocation/headroom.dart and its tests."
+      ],
+      "must_not": [
+        "Do not represent unbounded as int64 max, which then overflows when added to.",
+        "Do not allow negative headroom to propagate as a negative allocation."
+      ],
+      "common_pitfalls": [
+        "Computing headroom once at the start of the run and reusing the stale value for the second parcel.",
+        "Forgetting the already-over case, which produces a negative allocation and breaks conservation."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-10",
+          "FR-11"
+        ],
+        "risks": [
+          "R-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.04",
+      "substage": "5.4",
+      "position": "4 of 10",
+      "name": "Phase B: worklist, redirects and termination",
+      "goal": "Implement capacity resolution with chained redirects, cycle defence, hop limit and the terminal sink.",
+      "why_it_matters": "FR-10 is the app's differentiator, and this is where money either lands somewhere traceable or quietly disappears.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.3 (Headroom computation by category type) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md section 3.",
+        "Substage 5.3 headroom."
+      ],
+      "work": [
+        {
+          "step": "5.4.1",
+          "action": "Implement the worklist as an explicit queue rather than recursion.",
+          "details": [
+            "Seed it with the phase A allocations in deterministic order: sort_order then id.",
+            "Recursion invites stack overflow on a pathological chain and hides the hop count."
+          ]
+        },
+        {
+          "step": "5.4.2",
+          "action": "Implement the parcel: destination category id, pending amount, hop count, visited set, and the category it was redirected from.",
+          "details": []
+        },
+        {
+          "step": "5.4.3",
+          "action": "Implement the pop-accept-overflow cycle.",
+          "details": [
+            "Compute the destination's current headroom including accepted so far.",
+            "accepted = min(pending, headroom); record a line item with its reason.",
+            "overflow = pending minus accepted; if greater than zero, push a parcel to the redirect target with hop count incremented and the visited set extended.",
+            "Record a diagnostics entry for every acceptance and every redirect."
+          ]
+        },
+        {
+          "step": "5.4.4",
+          "action": "Implement cycle defence: if the redirect target is already in the parcel's visited set, route the remainder to the sink with reason SINK_TERMINAL and record a cycle warning.",
+          "details": []
+        },
+        {
+          "step": "5.4.5",
+          "action": "Implement the hop limit at MAX_HOPS, recommended 32, with the same sink routing and a hop-limit warning.",
+          "details": []
+        },
+        {
+          "step": "5.4.6",
+          "action": "Implement degraded-target handling: a missing, archived, soft-deleted or self-referencing redirect target routes to the sink with a warning rather than throwing.",
+          "details": []
+        },
+        {
+          "step": "5.4.7",
+          "action": "Implement the sink-missing case as a typed failure, since it indicates a configuration bug that validation should have caught.",
+          "details": []
+        },
+        {
+          "step": "5.4.8",
+          "action": "Add the final conservation assertion before returning: the sum of all line items equals the income exactly.",
+          "details": [
+            "On failure, fail loudly with the full diagnostics trace attached. Never adjust a line item to balance the sum."
+          ]
+        },
+        {
+          "step": "5.4.9",
+          "action": "Reproduce the reference chained example from the algorithm document as a unit test and confirm every intermediate value matches.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The chained example reproduces exactly: 80,000, 100,000 and 120,000 summing to 300,000.",
+        "A configuration containing a redirect cycle terminates and routes the remainder to the sink.",
+        "A chain exceeding MAX_HOPS terminates at the sink with a warning.",
+        "A degraded redirect target routes to the sink without throwing.",
+        "The final conservation assertion fails loudly on a deliberately broken run, demonstrated and reverted.",
+        "The diagnostics trace explains every hop in language that could be shown to a user."
+      ],
+      "outputs": [
+        "lib/domain/allocation/worklist.dart and its tests."
+      ],
+      "must_not": [
+        "Do not implement chaining with recursion.",
+        "Do not clamp and discard overflow.",
+        "Do not adjust a line item to satisfy the conservation assertion."
+      ],
+      "common_pitfalls": [
+        "A visited set shared across parcels rather than per parcel, which wrongly blocks legitimate multiple arrivals.",
+        "Diagnostics written for developers, which then cannot be shown in the Stage 6 preview."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-10"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-07"
+        ],
+        "risks": [
+          "R-01",
+          "R-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.05",
+      "substage": "5.5",
+      "position": "5 of 10",
+      "name": "Fixed-recurring period logic",
+      "goal": "Implement period boundaries and per-period capping for fixed-recurring categories.",
+      "why_it_matters": "FR-11 - these categories must not accumulate past their bill, and the surplus must go somewhere visible.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.4 (Phase B: worklist, redirects and termination) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md fixed-recurring rules.",
+        "OQ-05 resolution."
+      ],
+      "work": [
+        {
+          "step": "5.5.1",
+          "action": "Implement the period boundary calculation from the anchor day, taking the evaluation timestamp from the request rather than a clock.",
+          "details": [
+            "Handle anchor days that do not exist in short months explicitly - an anchor of 31 in February.",
+            "Define and implement the rule: clamp to the last day of the month is the conventional choice; state whichever is chosen."
+          ]
+        },
+        {
+          "step": "5.5.2",
+          "action": "Take allocated_in_current_period from the request, computed by the data layer, rather than deriving it inside the engine.",
+          "details": []
+        },
+        {
+          "step": "5.5.3",
+          "action": "Apply the carry-forward or redirect-surplus policy from OQ-05 as an explicit input rather than a hardcoded constant.",
+          "details": [
+            "The policy must be visible in the request so a future change does not require an engine change."
+          ]
+        },
+        {
+          "step": "5.5.4",
+          "action": "Handle a bill amount changed mid-period deterministically, and document the behaviour.",
+          "details": []
+        },
+        {
+          "step": "5.5.5",
+          "action": "Write tests for the period edge cases.",
+          "details": [
+            "Anchor 31 rolling through February in a common year and a leap year.",
+            "Anchor 1, the simple case.",
+            "A category already fully funded for the period, which accepts nothing and redirects everything.",
+            "A category partially funded, which accepts exactly its remaining headroom.",
+            "A period boundary crossed between two income events."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "An anchor day of 31 rolls through a 28-day February without skipping or duplicating a period, proven by a test.",
+        "A fully funded fixed-recurring category accepts zero and redirects the whole allocation.",
+        "The period policy is an input, not a constant.",
+        "The engine reads no clock to determine the period."
+      ],
+      "outputs": [
+        "lib/domain/allocation/period.dart and its tests."
+      ],
+      "must_not": [
+        "Do not read the system clock to determine the current period.",
+        "Do not hardcode the carry-forward policy."
+      ],
+      "common_pitfalls": [
+        "Month arithmetic that produces 31 February and silently rolls into March.",
+        "Deriving allocated-in-period inside the engine, which requires a database and breaks purity."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-08",
+          "INV-09"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.06",
+      "substage": "5.6",
+      "position": "6 of 10",
+      "name": "Manual override handling",
+      "goal": "Implement per-event overrides with proportional redistribution and exact-total enforcement.",
+      "why_it_matters": "FR-12 lets the user bend the rules for one payment without corrupting the rules or breaking conservation.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.5 (Fixed-recurring period logic) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md section 4.",
+        "Substage 5.2 split primitive."
+      ],
+      "work": [
+        {
+          "step": "5.6.1",
+          "action": "Implement override application: overridden categories take their stated amounts, replacing their phase A share.",
+          "details": []
+        },
+        {
+          "step": "5.6.2",
+          "action": "Implement redistribution of the remainder across non-overridden categories by their relative basis points.",
+          "details": [
+            "Reuse the split primitive from substage 5.2 rather than writing a second rounding path.",
+            "Verify against the worked example: income 500,000, Medical overridden to 200,000, Emergency 3500bp and Trip 2500bp receive 175,000 and 125,000."
+          ]
+        },
+        {
+          "step": "5.6.3",
+          "action": "Implement the override validation rules, each returning its typed failure.",
+          "details": [
+            "Overrides summing to more than the income.",
+            "A negative override amount.",
+            "Overrides summing to less than the income with no non-overridden category available.",
+            "An override naming a category absent from the request."
+          ]
+        },
+        {
+          "step": "5.6.4",
+          "action": "Implement the ceiling policy decided in Stage 2.",
+          "details": [
+            "If overrides may exceed a ceiling, mark the line item MANUAL_OVERRIDE, add a diagnostics warning, and do not redirect it away.",
+            "The resulting balance may exceed the ceiling; substage 5.3 already handles the subsequent already-over case."
+          ]
+        },
+        {
+          "step": "5.6.5",
+          "action": "Confirm by test that applying an override never mutates the rule version in the request.",
+          "details": []
+        },
+        {
+          "step": "5.6.6",
+          "action": "Confirm by test that conservation still holds exactly after any override combination.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The worked override example reproduces exactly: 200,000, 175,000 and 125,000 totalling 500,000.",
+        "Every override validation rule returns its specific typed failure, each proven by a test.",
+        "Overrides summing exactly to the income are accepted with no redistribution.",
+        "Conservation holds after every tested override combination.",
+        "The rule version snapshot is unmodified after an override, proven by a test."
+      ],
+      "outputs": [
+        "lib/domain/allocation/override.dart and its tests."
+      ],
+      "must_not": [
+        "Do not write a second rounding implementation for redistribution.",
+        "Do not let an override write to the rule version."
+      ],
+      "common_pitfalls": [
+        "Redistributing the remainder evenly instead of by relative weight.",
+        "Allowing a zero override to be treated as absent rather than as an explicit zero."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-12"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-11"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.07",
+      "substage": "5.7",
+      "position": "7 of 10",
+      "name": "Reversal generation",
+      "goal": "Implement compensating entries that exactly undo a previous income event without touching history.",
+      "why_it_matters": "OQ-09 and INV-03 - a mis-entered salary must be undoable, and history must remain honest about what happened.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.6 (Manual override handling) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md reversal section.",
+        "Stage 4 ledger repository."
+      ],
+      "work": [
+        {
+          "step": "5.7.1",
+          "action": "Implement reversal as a mirror of the recorded allocations, with opposing direction, not as a recomputation.",
+          "details": [
+            "State and test why: a rule change between the event and the reversal would otherwise produce a mismatch."
+          ]
+        },
+        {
+          "step": "5.7.2",
+          "action": "Ensure each reversal entry references the entry it reverses.",
+          "details": []
+        },
+        {
+          "step": "5.7.3",
+          "action": "Ensure the reversal is itself conserving: the sum of compensating entries equals the negative of the original event total.",
+          "details": []
+        },
+        {
+          "step": "5.7.4",
+          "action": "Implement guards: an event cannot be reversed twice, and a reversal cannot itself be reversed.",
+          "details": []
+        },
+        {
+          "step": "5.7.5",
+          "action": "Write the critical test: change the distribution rules between the event and its reversal, then assert every affected balance returns exactly to its pre-event value.",
+          "details": []
+        },
+        {
+          "step": "5.7.6",
+          "action": "Write a test asserting no original ledger entry was modified or removed by the reversal.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Reversing an event returns every affected category balance to its pre-event value exactly.",
+        "The rule-changed-in-between test passes.",
+        "Double reversal is rejected.",
+        "No original entry is modified or removed, proven by comparing row contents before and after."
+      ],
+      "outputs": [
+        "lib/domain/allocation/reversal.dart and its tests."
+      ],
+      "must_not": [
+        "Do not recompute the allocation on reversal.",
+        "Do not delete or edit the original entries."
+      ],
+      "common_pitfalls": [
+        "Reversal implemented as re-running the engine with a negative amount, which fails whenever ceilings were involved.",
+        "Missing the double-reversal guard, which silently doubles the correction."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-12"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.08",
+      "substage": "5.8",
+      "position": "8 of 10",
+      "name": "Golden test vectors",
+      "goal": "Implement all fifteen vectors from the design as JSON fixtures with an automatic loader.",
+      "why_it_matters": "Golden vectors are the regression net that keeps every future refactor honest.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.7 (Reversal generation) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md section 10 vector table.",
+        "The fixture loader from substage 3.8."
+      ],
+      "work": [
+        {
+          "step": "5.8.1",
+          "action": "Store each vector as a JSON fixture under test/fixtures/allocation/, using the format defined in Stage 2.",
+          "details": [
+            "Fields: id, description, request, expected_allocations, expected_failure, notes."
+          ]
+        },
+        {
+          "step": "5.8.2",
+          "action": "Confirm the loader picks up a new fixture with no code change.",
+          "details": []
+        },
+        {
+          "step": "5.8.3",
+          "action": "Implement every vector V-01 to V-15 from the design table.",
+          "details": [
+            "V-01 plain three-group split. V-02 largest-remainder rounding. V-03 rounding tie-break.",
+            "V-04 single ceiling redirect. V-05 chained multi-hop redirect. V-06 everything full to sink.",
+            "V-07 redirect cycle defended. V-08 fixed-recurring overflow. V-09 override with redistribution.",
+            "V-10 override exceeding income rejected. V-11 zero and negative income rejected.",
+            "V-12 group with share but no categories. V-13 income of one minor unit.",
+            "V-14 simultaneous ceiling hits to one target. V-15 very large income across 40 categories."
+          ]
+        },
+        {
+          "step": "5.8.4",
+          "action": "For each vector assert both the per-category amounts and the conservation total.",
+          "details": []
+        },
+        {
+          "step": "5.8.5",
+          "action": "Confirm every expected value came from the design document or an independent hand calculation, never from the implementation's output.",
+          "details": [
+            "If a vector fails, first determine whether the implementation or the expectation is wrong - do not default to trusting the code."
+          ]
+        },
+        {
+          "step": "5.8.6",
+          "action": "Add each worked example from the algorithm document as a vector if it is not already covered.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All fifteen vectors pass.",
+        "Adding a new JSON fixture is picked up automatically with no code change.",
+        "Every expected value is traceable to the design document or a recorded hand calculation.",
+        "Each vector asserts conservation in addition to per-category amounts."
+      ],
+      "outputs": [
+        "test/fixtures/allocation/*.json",
+        "The vector runner test."
+      ],
+      "must_not": [
+        "Do not generate expected values from the implementation.",
+        "Do not skip a vector because it is inconvenient."
+      ],
+      "common_pitfalls": [
+        "Fixing a failing vector by editing the expectation, which enshrines the bug.",
+        "A fixture format that cannot express an expected failure, so the rejection cases get omitted."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "A vector fails and the design document appears to be wrong - stop and raise it rather than editing either side."
+        ]
+      }
+    },
+    {
+      "id": "S05.09",
+      "substage": "5.9",
+      "position": "9 of 10",
+      "name": "Property-based tests",
+      "goal": "Verify the seven required properties over thousands of randomly generated configurations.",
+      "why_it_matters": "Hand-picked examples find the bugs you imagined. Properties find the ones you did not.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.8 (Golden test vectors) is complete and ticked off."
+      ],
+      "inputs": [
+        "ALLOCATION_ALGORITHM.md property list.",
+        "The property-testing library from Stage 3."
+      ],
+      "work": [
+        {
+          "step": "5.9.1",
+          "action": "Build the generator for randomised configurations.",
+          "details": [
+            "1 to 60 categories across three groups.",
+            "Random valid basis-point splits that total exactly 10000 at each level.",
+            "Random ceilings and balances, including already-over-ceiling states.",
+            "Random redirect graphs, including adversarial ones with long chains and deliberate cycles.",
+            "Random category types, including fixed-recurring with random period states.",
+            "Always a valid uncapped sink."
+          ]
+        },
+        {
+          "step": "5.9.2",
+          "action": "Build the income generator from 1 up to the documented maximum, weighted to include small awkward values.",
+          "details": []
+        },
+        {
+          "step": "5.9.3",
+          "action": "Implement the seven properties.",
+          "details": [
+            "P1 conservation: the sum of allocations equals the income exactly.",
+            "P2 non-negativity: no allocation is negative.",
+            "P3 ceiling respect: no accumulating category ends above its ceiling unless a manual override caused it and the line item is marked accordingly.",
+            "P4 determinism: running the same case twice produces identical output including ordering.",
+            "P5 termination: every case completes within the hop limit, with no stack overflow.",
+            "P6 input-order independence: shuffling the category order in the request does not change the result.",
+            "P7 scaling: with no ceilings in play, doubling the income changes each allocation by its doubled share within at most one minor unit."
+          ]
+        },
+        {
+          "step": "5.9.4",
+          "action": "Run at least a few thousand cases in CI and record the seed so any failure is reproducible.",
+          "details": []
+        },
+        {
+          "step": "5.9.5",
+          "action": "Shrink every failing case to a minimal reproduction and add it permanently to the golden vectors.",
+          "details": [
+            "A property failure that is fixed without a permanent vector will come back."
+          ]
+        },
+        {
+          "step": "5.9.6",
+          "action": "Record the case count and the seed in the stage report.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All seven properties hold over at least several thousand generated cases.",
+        "The seed is recorded and a failing run is reproducible from it.",
+        "Every discovered failure has been added to test/fixtures/allocation/ as a permanent vector.",
+        "The generator produces adversarial redirect graphs including cycles, verified by inspecting a sample."
+      ],
+      "outputs": [
+        "test/domain/allocation/properties_test.dart",
+        "New golden vectors from shrunk failures."
+      ],
+      "must_not": [
+        "Do not weaken a property to make it pass.",
+        "Do not fix a property failure without adding a permanent vector."
+      ],
+      "common_pitfalls": [
+        "A generator that never produces the interesting cases, so the properties always pass vacuously.",
+        "Property tests excluded from CI because they are slow, which is where they stop finding anything."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-07",
+          "INV-08"
+        ],
+        "risks": [
+          "R-01",
+          "R-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_5_WORKLOG.md, then continue to substage 5.10. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S05.10",
+      "substage": "5.10",
+      "position": "10 of 10",
+      "name": "Benchmarks, engine notes and gate preparation",
+      "goal": "Measure engine performance, document the implementation, and prepare the stage gate.",
+      "why_it_matters": "NFR-06 - the allocation preview recomputes as the user types, so it must be fast on a modest phone.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 5.9 (Property-based tests) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 5.1 to 5.9."
+      ],
+      "work": [
+        {
+          "step": "5.10.1",
+          "action": "Benchmark allocation across 10, 40 and 100 categories, with and without redirect chains.",
+          "details": [
+            "Record median and worst case, and name the device or machine used.",
+            "Include a pathological case: 100 categories all at their ceilings, chaining to the sink."
+          ]
+        },
+        {
+          "step": "5.10.2",
+          "action": "If a target is missed, profile before optimising, and never trade correctness for speed.",
+          "details": [
+            "Any optimisation must leave every vector and property passing unchanged."
+          ]
+        },
+        {
+          "step": "5.10.3",
+          "action": "Audit engine coverage to at least 95 percent line and branch, naming and justifying every uncovered branch.",
+          "details": []
+        },
+        {
+          "step": "5.10.4",
+          "action": "Write docs/ENGINE_NOTES.md.",
+          "details": [
+            "Implementation notes and the public API.",
+            "Every deviation from ALLOCATION_ALGORITHM.md, with the algorithm document amended to match reality.",
+            "Benchmark results with the device named.",
+            "The documented maximum income and other known limitations.",
+            "The guarantees Stage 6 may rely on."
+          ]
+        },
+        {
+          "step": "5.10.5",
+          "action": "Re-run the full suite from a clean checkout and capture the output.",
+          "details": []
+        },
+        {
+          "step": "5.10.6",
+          "action": "Update docs/TRACEABILITY.md for the requirements this stage completes.",
+          "details": []
+        },
+        {
+          "step": "5.10.7",
+          "action": "Write docs/reports/STAGE_5_REPORT.md and prepare the gate question with concrete figures.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Allocation across 100 categories completes within the NFR-06 budget of 50ms, with the figure recorded.",
+        "The pathological all-ceilings case is benchmarked and recorded.",
+        "Engine coverage is at least 95 percent line and branch.",
+        "ENGINE_NOTES.md records every deviation and the algorithm document has been amended to match.",
+        "The full suite passes from a clean checkout."
+      ],
+      "outputs": [
+        "Benchmark results.",
+        "docs/ENGINE_NOTES.md",
+        "docs/reports/STAGE_5_REPORT.md"
+      ],
+      "must_not": [
+        "Do not optimise before profiling.",
+        "Do not leave a deviation undocumented."
+      ],
+      "common_pitfalls": [
+        "Benchmarking on a development machine and reporting it as phone performance.",
+        "Coverage reached by tests that exercise lines without asserting behaviour."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "lib/domain/allocation/**",
+      "format": "code"
+    },
+    {
+      "path": "test/domain/allocation/**",
+      "format": "code"
+    },
+    {
+      "path": "test/fixtures/allocation/*.json",
+      "format": "json"
+    },
+    {
+      "path": "docs/ENGINE_NOTES.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_5_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "Every golden vector V-01 to V-15 passes.",
+    "All seven properties P1 to P7 hold over thousands of generated cases.",
+    "Engine line and branch coverage is at least 95 percent, with every uncovered branch named and justified.",
+    "The engine has no dependency on Flutter, the database, the network or the system clock, proven by a static check.",
+    "Benchmarks meet NFR-06.",
+    "Any deviation from ALLOCATION_ALGORITHM.md is documented and the algorithm document is amended to match reality."
+  ],
+  "stage_must_not": [
+    "Do not wire the engine into any UI until every test passes.",
+    "Do not use floating point anywhere, including in tests, fixtures and benchmarks.",
+    "Do not silently correct a conservation failure by adjusting the last allocation - assert and fail.",
+    "Do not let the engine read the clock, the database or any global state.",
+    "Do not implement ceiling logic that clamps and discards excess.",
+    "Do not change the algorithm design here without amending docs/ALLOCATION_ALGORITHM.md and raising it."
+  ],
+  "anti_patterns": [
+    "Computing shares with doubles and rounding at the end, producing off-by-one drift for certain amounts.",
+    "Recursion for redirect chains without a depth guard.",
+    "Copying the implementation's output into a test's expected values.",
+    "Treating a failed conservation assertion as a rounding nuisance to be smoothed over."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-05",
+    "OQ-09"
+  ],
+  "risks_in_focus": [
+    "R-01",
+    "R-02"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "The pure entry point is what the Add Income preview calls on every keystroke in Stage 6.",
+      "The diagnostics trace is what the preview renders to explain redirects.",
+      "Typed failures map directly to Stage 6 error messages.",
+      "Reversal generation backs the undo feature in Stage 6."
+    ],
+    "summary_to_write": "State the engine's public API, its documented maximum income, and the guarantees the UI may rely on."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_5_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 5 (Distribution engine) is complete. All <N> golden vectors and <M> property-based cases pass; coverage is <X> percent; worst-case allocation across 100 categories is <T>ms. Do you approve moving to Stage 6, the UI?"
+  }
+}

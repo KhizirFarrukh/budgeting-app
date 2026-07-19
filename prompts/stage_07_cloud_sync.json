@@ -1,0 +1,1247 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 7,
+  "stage_id": "S07",
+  "name": "Cloud Sync Implementation",
+  "one_line_goal": "Make the data portable across the user's devices using only their own Google account, without ever making the app depend on the network.",
+  "objective": "Implement Google Sign-In, the chosen cloud store, the merge strategy, the offline outbox and the sync state machine, with integration tests against a mocked network layer.",
+  "rationale": "Sync comes after the app is correct locally, because a sync layer built on shaky local semantics multiplies the bugs. The hard constraint is FR-09 and INV-05: the developer must never be able to read a user's financial data.",
+  "depends_on": [
+    "S06"
+  ],
+  "blocks": [
+    "S08"
+  ],
+  "entry_criteria": [
+    "All core flows work offline and their tests are green.",
+    "ADR-002 records the chosen cloud target and its justification.",
+    "The local schema already carries sync columns, tombstones and HLC fields from Stage 4."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-09",
+      "FR-15"
+    ],
+    "non_functional_requirements": [
+      "NFR-01",
+      "NFR-02",
+      "NFR-07"
+    ],
+    "invariants": [
+      "INV-03",
+      "INV-05",
+      "INV-06",
+      "INV-09",
+      "INV-10",
+      "INV-12"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 11,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_7_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "7.1 Google Sign-In and account lifecycle",
+      "7.2 RemoteStore interface and the in-memory fake",
+      "7.3 Cloud adapter and remote file layout",
+      "7.4 Hybrid logical clock",
+      "7.5 Merge engine: union, last-write-wins and tombstones",
+      "7.6 Post-merge validation and deterministic repair",
+      "7.7 Outbox and the sync worker",
+      "7.8 Compaction and new-device bootstrap",
+      "7.9 Sync state machine and its user-visible surface",
+      "7.10 Privacy verification",
+      "7.11 Sync test suite, documentation and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S07.01",
+      "substage": "7.1",
+      "position": "1 of 11",
+      "name": "Google Sign-In and account lifecycle",
+      "goal": "Implement optional authentication, including account switching and consent revocation, without making it a prerequisite for anything.",
+      "why_it_matters": "Authentication is the gate to the user's own storage. It must never become the gate to the app.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "All core flows work offline and their tests are green.",
+        "ADR-002 records the chosen cloud target and its justification.",
+        "The local schema already carries sync columns, tombstones and HLC fields from Stage 4."
+      ],
+      "inputs": [
+        "ADR-002 chosen target and required scope.",
+        "docs/ENVIRONMENT.md signing configuration."
+      ],
+      "work": [
+        {
+          "step": "7.1.1",
+          "action": "Configure the OAuth client for Android.",
+          "details": [
+            "Register the SHA-1 fingerprints for both debug and release signing configurations.",
+            "A release build with an unregistered fingerprint fails at sign-in and is a classic late-stage surprise, so register both now."
+          ]
+        },
+        {
+          "step": "7.1.2",
+          "action": "Request the narrowest possible scope for the chosen storage target, plus basic profile only if genuinely required.",
+          "details": [
+            "Justify every requested scope in writing, in docs/PRIVACY_SOURCE.md.",
+            "Check the current classification and verification requirements for the scope in official documentation, and record what release-time verification Stage 10 will need."
+          ]
+        },
+        {
+          "step": "7.1.3",
+          "action": "Implement sign-in, sign-out, silent re-authentication on launch, and token refresh failure handling.",
+          "details": [
+            "Silent re-auth must never block startup; if it fails, the app starts in local-only mode."
+          ]
+        },
+        {
+          "step": "7.1.4",
+          "action": "Implement account switching safely.",
+          "details": [
+            "Signing in with a different Google account must never merge two users' data.",
+            "Detect it, explain it, and require an explicit choice: keep local data, or replace local with the new account's data.",
+            "State the consequence of each option before the user chooses."
+          ]
+        },
+        {
+          "step": "7.1.5",
+          "action": "Implement consent revocation handling: degrade to local-only with a clear, non-alarming message, and never enter a retry loop.",
+          "details": []
+        },
+        {
+          "step": "7.1.6",
+          "action": "Verify that every core flow still completes signed out, by running the Stage 6 flow tests with no account linked.",
+          "details": []
+        },
+        {
+          "step": "7.1.7",
+          "action": "Ensure no financial data is included in any authentication log or error report.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The app is fully functional signed out, proven by running the Stage 6 flow tests with no account linked.",
+        "Signing in with a second account never merges data; the choice is explicit and its consequence stated first.",
+        "Revoking access from the Google account page produces a graceful local-only degradation, not a crash or retry storm.",
+        "Both debug and release SHA-1 fingerprints are registered, recorded in the stage report.",
+        "Every requested scope is listed with its justification in PRIVACY_SOURCE.md."
+      ],
+      "outputs": [
+        "lib/data/auth/**",
+        "docs/PRIVACY_SOURCE.md scope section."
+      ],
+      "must_not": [
+        "Do not gate any core flow behind sign-in.",
+        "Do not merge data across accounts."
+      ],
+      "common_pitfalls": [
+        "Registering only the debug fingerprint, so sign-in fails on the first release build.",
+        "Silent re-auth awaited during startup, which makes launch depend on the network."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "NFR-02"
+        ],
+        "risks": [
+          "R-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.02",
+      "substage": "7.2",
+      "position": "2 of 11",
+      "name": "RemoteStore interface and the in-memory fake",
+      "goal": "Define the storage abstraction and build the fake that every merge test runs against.",
+      "why_it_matters": "Isolating the provider keeps merge logic testable with no network, and keeps the provider replaceable.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.1 (Google Sign-In and account lifecycle) is complete and ticked off."
+      ],
+      "inputs": [
+        "ADR-002 remote layout design."
+      ],
+      "work": [
+        {
+          "step": "7.2.1",
+          "action": "Define the RemoteStore interface with exactly the operations the design needs: list, read, write, delete, and conditional write using the provider's version or ETag mechanism.",
+          "details": [
+            "Nothing provider-specific may appear in the interface's types."
+          ]
+        },
+        {
+          "step": "7.2.2",
+          "action": "Define the error type the interface returns, covering: unauthenticated, permission denied, quota exceeded, rate limited, not found, version conflict, network unavailable, and payload corrupt.",
+          "details": []
+        },
+        {
+          "step": "7.2.3",
+          "action": "Implement the in-memory fake.",
+          "details": [
+            "Simulates latency, transient failures, permanent failures, version conflicts, partial writes and payload corruption.",
+            "Deterministic under a seed so a failing test is reproducible.",
+            "Can simulate two independent devices against one shared store."
+          ]
+        },
+        {
+          "step": "7.2.4",
+          "action": "Write tests for the fake itself, since every later test depends on it behaving as specified.",
+          "details": []
+        },
+        {
+          "step": "7.2.5",
+          "action": "Add a check that no code outside the adapter package imports the provider SDK.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No provider SDK type appears in the RemoteStore interface.",
+        "The fake can simulate every error in the error type, proven by a test per error.",
+        "The fake is deterministic under a seed.",
+        "The import check passes and has been demonstrated failing on a deliberate violation."
+      ],
+      "outputs": [
+        "lib/data/sync/remote_store.dart",
+        "test fake implementation."
+      ],
+      "must_not": [
+        "Do not leak provider types past the adapter boundary."
+      ],
+      "common_pitfalls": [
+        "A fake that only simulates success, so no failure path is ever tested.",
+        "An interface shaped so closely to one provider that it cannot be reimplemented."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.03",
+      "substage": "7.3",
+      "position": "3 of 11",
+      "name": "Cloud adapter and remote file layout",
+      "goal": "Implement the real adapter for the chosen provider and the remote file structure from the design.",
+      "why_it_matters": "This is the only code that touches the user's Google account, so it is the only code that can break the privacy promise.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.2 (RemoteStore interface and the in-memory fake) is complete and ticked off."
+      ],
+      "inputs": [
+        "ADR-002.",
+        "Substage 7.2 interface."
+      ],
+      "work": [
+        {
+          "step": "7.3.1",
+          "action": "Implement the adapter against the chosen target, for Drive using the hidden per-user application data folder.",
+          "details": []
+        },
+        {
+          "step": "7.3.2",
+          "action": "Implement the remote layout: manifest file, compacted snapshots, per-device append-only change chunks.",
+          "details": [
+            "Per-device chunk paths mean two devices never write the same file, which removes most conflict cases by construction."
+          ]
+        },
+        {
+          "step": "7.3.3",
+          "action": "Implement compression and record the format in the manifest.",
+          "details": []
+        },
+        {
+          "step": "7.3.4",
+          "action": "Implement conditional writes using the provider's version or ETag mechanism.",
+          "details": [
+            "On version conflict: re-read, re-merge, retry with bounded exponential backoff and jitter.",
+            "Never blind-overwrite."
+          ]
+        },
+        {
+          "step": "7.3.5",
+          "action": "Implement handling for every provider failure mode named in substage 7.2, each with a defined user-visible behaviour.",
+          "details": [
+            "Quota exceeded is a realistic case, because app data counts against the user's own Drive storage."
+          ]
+        },
+        {
+          "step": "7.3.6",
+          "action": "Implement detection of a missing remote store, since the user can wipe the app's hidden data from Drive settings.",
+          "details": [
+            "Treat it as a fresh remote, not as data loss, and never delete local data in response."
+          ]
+        },
+        {
+          "step": "7.3.7",
+          "action": "Write adapter tests using recorded or stubbed responses so they run without network access.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No code outside the adapter references the provider SDK.",
+        "A version conflict triggers re-read, re-merge and retry rather than an overwrite, proven by a test.",
+        "Every named provider failure has a test and a defined user-visible behaviour.",
+        "A missing remote store is treated as fresh, and local data is never deleted in response.",
+        "Adapter tests run with no network access."
+      ],
+      "outputs": [
+        "lib/data/sync/adapters/**"
+      ],
+      "must_not": [
+        "Do not blind-overwrite a remote file.",
+        "Do not delete local data because remote data is missing."
+      ],
+      "common_pitfalls": [
+        "Ignoring quota exceeded, which surfaces as a silent sync stall for users with full Drive accounts.",
+        "Writing all devices to one shared file, which manufactures conflicts that the per-device layout avoids."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "NFR-01"
+        ],
+        "invariants": [
+          "INV-05"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.04",
+      "substage": "7.4",
+      "position": "4 of 11",
+      "name": "Hybrid logical clock",
+      "goal": "Implement causal ordering that survives device clock skew.",
+      "why_it_matters": "R-08 - raw wall-clock comparison misorders edits whenever a device's clock is wrong, which is common.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.3 (Cloud adapter and remote file layout) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md HLC design from substage 2.9."
+      ],
+      "work": [
+        {
+          "step": "7.4.1",
+          "action": "Implement the HLC value type: physical milliseconds, logical counter, device id.",
+          "details": [
+            "Comparable, serialisable to a sortable string, and persisted with every mutable record."
+          ]
+        },
+        {
+          "step": "7.4.2",
+          "action": "Implement the local-write advance rule.",
+          "details": [
+            "physical = max(stored physical, wall clock); if physical is unchanged, increment the counter, otherwise reset it to zero."
+          ]
+        },
+        {
+          "step": "7.4.3",
+          "action": "Implement the remote-receive advance rule.",
+          "details": [
+            "physical = max(local physical, remote physical); counter = max of the two counters plus one when the physical values are equal."
+          ]
+        },
+        {
+          "step": "7.4.4",
+          "action": "Implement the device id: generated once per install, persisted, and never derived from hardware identifiers.",
+          "details": [
+            "Hardware identifiers are a privacy problem and are unnecessary here."
+          ]
+        },
+        {
+          "step": "7.4.5",
+          "action": "Persist the HLC state so it survives app restart without going backwards.",
+          "details": []
+        },
+        {
+          "step": "7.4.6",
+          "action": "Write tests for skew scenarios.",
+          "details": [
+            "A device whose clock is an hour behind still orders its own writes correctly.",
+            "A device whose clock jumps backwards does not produce a decreasing HLC.",
+            "Two devices writing at the same physical millisecond order deterministically by device id.",
+            "Ordering is total: no two distinct HLC values compare as equal."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The HLC never decreases, even when the wall clock jumps backwards, proven by a test.",
+        "Two devices at the same millisecond order deterministically and identically on both devices.",
+        "The device id is generated locally and is not a hardware identifier.",
+        "HLC state survives app restart."
+      ],
+      "outputs": [
+        "lib/data/sync/hlc.dart and its tests."
+      ],
+      "must_not": [
+        "Do not use a hardware identifier as the device id.",
+        "Do not compare raw wall-clock timestamps anywhere in merge logic."
+      ],
+      "common_pitfalls": [
+        "An HLC that resets on app restart, which silently reorders history.",
+        "Serialisation that is not lexicographically sortable, so ordering differs between comparison paths."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-09"
+        ],
+        "risks": [
+          "R-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.05",
+      "substage": "7.5",
+      "position": "5 of 11",
+      "name": "Merge engine: union, last-write-wins and tombstones",
+      "goal": "Implement per-record-class merge semantics so no device's offline work is ever discarded.",
+      "why_it_matters": "R-03. This is where a user's offline week of transactions is either preserved or quietly lost.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.4 (Hybrid logical clock) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md merge rules from substage 2.9.",
+        "Substage 7.4 HLC."
+      ],
+      "work": [
+        {
+          "step": "7.5.1",
+          "action": "Implement union merge on UUID for immutable records: ledger entries, income events, allocations.",
+          "details": [
+            "These can never conflict, because they are never edited. Duplicates by UUID are ignored, not overwritten.",
+            "This is why the ledger is append-only; the sync design depends on it."
+          ]
+        },
+        {
+          "step": "7.5.2",
+          "action": "Implement last-write-wins for mutable configuration records, ordered by HLC with device id as the final tie-break.",
+          "details": [
+            "Applies to categories, accounts, rule versions and settings.",
+            "State clearly whether the resolution is per record or per field, and implement exactly that."
+          ]
+        },
+        {
+          "step": "7.5.3",
+          "action": "Implement tombstone handling: a delete beats an older edit, and a peer offline since before the delete must not resurrect the record.",
+          "details": [
+            "Test this explicitly with a peer that has been offline for a simulated month."
+          ]
+        },
+        {
+          "step": "7.5.4",
+          "action": "Implement the tombstone retention window and the safe-purge condition from the design.",
+          "details": [
+            "A tombstone may only be purged once every known device has acknowledged a snapshot beyond it.",
+            "Purging on a timer alone resurrects records on a device that was offline longer than the timer."
+          ]
+        },
+        {
+          "step": "7.5.5",
+          "action": "Implement merge idempotency: applying the same remote change set twice has no additional effect.",
+          "details": []
+        },
+        {
+          "step": "7.5.6",
+          "action": "Implement merge commutativity: applying changes in either order reaches the same state.",
+          "details": []
+        },
+        {
+          "step": "7.5.7",
+          "action": "Implement the currency guard: refuse to merge across differing currency configurations, with a clear message and no conversion.",
+          "details": []
+        },
+        {
+          "step": "7.5.8",
+          "action": "Write unit tests for each record class and each conflict shape before wiring the merge into the sync worker.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Two devices each adding different transactions offline converge to the union, with nothing lost and nothing duplicated.",
+        "Two devices editing the same category name converge to the same winner on both devices, regardless of merge order.",
+        "A delete on device A is not resurrected by device B that was offline for a month.",
+        "Applying the same change set twice produces no additional effect.",
+        "A currency mismatch is refused with a clear message, never converted."
+      ],
+      "outputs": [
+        "lib/data/sync/merge.dart and its tests."
+      ],
+      "must_not": [
+        "Do not apply last-write-wins to any immutable record.",
+        "Do not purge tombstones on a timer alone."
+      ],
+      "common_pitfalls": [
+        "Merging ledger entries by timestamp, which drops a device's whole offline week.",
+        "Per-record last-write-wins on a category, which discards an unrelated field edited on the other device - decide per-field or per-record deliberately."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "FR-15"
+        ],
+        "invariants": [
+          "INV-03",
+          "INV-10"
+        ],
+        "risks": [
+          "R-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.06",
+      "substage": "7.6",
+      "position": "6 of 11",
+      "name": "Post-merge validation and deterministic repair",
+      "goal": "Guarantee that a merged state is always valid, and that any repair is deterministic and visible.",
+      "why_it_matters": "Two independently valid states can merge into an invalid one - for example a category whose redirect target was deleted on the other device.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.5 (Merge engine: union, last-write-wins and tombstones) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 validators and the post-merge entry point.",
+        "Substage 7.5 merge engine."
+      ],
+      "work": [
+        {
+          "step": "7.6.1",
+          "action": "Run the full configuration validator suite after every merge, before committing the merged state.",
+          "details": []
+        },
+        {
+          "step": "7.6.2",
+          "action": "Enumerate the invalid states a merge can produce and specify the repair for each.",
+          "details": [
+            "Redirect target deleted on another device: reassign to the sink and record it.",
+            "Category percentages no longer totalling 10000 because a category was deleted elsewhere: redistribute proportionally among the survivors and record it.",
+            "The sink deleted or archived on another device: restore it, since INV-07 depends on it.",
+            "A redirect cycle formed by two independently valid edits: break it at the newest edge by HLC and record it.",
+            "An account deleted while categories still link to it: unlink and record it."
+          ]
+        },
+        {
+          "step": "7.6.3",
+          "action": "Make every repair deterministic: two devices performing the same merge must produce the same repair.",
+          "details": [
+            "Ties broken by HLC then device id, exactly as in merge.",
+            "A non-deterministic repair makes devices diverge permanently, which is worse than the original invalidity."
+          ]
+        },
+        {
+          "step": "7.6.4",
+          "action": "Record every repair in a durable log and surface it to the user in plain language.",
+          "details": [
+            "Never repair silently; the user's configuration changed and they need to know why."
+          ]
+        },
+        {
+          "step": "7.6.5",
+          "action": "Run the balance recompute-and-compare after every merge and report discrepancies.",
+          "details": []
+        },
+        {
+          "step": "7.6.6",
+          "action": "Write tests for each enumerated invalid state, asserting both the repair and its determinism across two devices.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "A merged state that violates any validator is repaired before being committed, never persisted invalid.",
+        "The same merge performed on two devices produces identical repairs, proven by a test.",
+        "Every repair is recorded and surfaced to the user.",
+        "The sink is restored if it was deleted elsewhere.",
+        "Balance recompute-and-compare runs after every merge."
+      ],
+      "outputs": [
+        "lib/data/sync/repair.dart and its tests.",
+        "Repair log and its user-facing surface."
+      ],
+      "must_not": [
+        "Do not repair silently.",
+        "Do not implement a repair whose outcome depends on which device merges first."
+      ],
+      "common_pitfalls": [
+        "A repair that picks the first surviving category, which differs by iteration order across devices.",
+        "Validating after commit rather than before, which persists the invalid state briefly and lets it sync outward."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-04",
+          "INV-07"
+        ],
+        "risks": [
+          "R-02",
+          "R-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.07",
+      "substage": "7.7",
+      "position": "7 of 11",
+      "name": "Outbox and the sync worker",
+      "goal": "Queue every local change durably and drain it in the background, never blocking the user.",
+      "why_it_matters": "INV-06 - the user must never wait on the network, and no change may be lost because the app was killed.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.6 (Post-merge validation and deterministic repair) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 transactional writes.",
+        "Substage 7.5 merge engine."
+      ],
+      "work": [
+        {
+          "step": "7.7.1",
+          "action": "Write every local mutation to a durable outbox in the same database transaction as the mutation itself.",
+          "details": [
+            "Writing them separately leaves a window where a crash loses the outbox entry and the change never syncs."
+          ]
+        },
+        {
+          "step": "7.7.2",
+          "action": "Implement the sync worker that drains the outbox with exponential backoff and jitter.",
+          "details": [
+            "Safe to run concurrently with user edits; the user must never be blocked or see a frozen screen."
+          ]
+        },
+        {
+          "step": "7.7.3",
+          "action": "Make every push idempotent, keyed by record UUID, so a retry after an ambiguous failure cannot duplicate data.",
+          "details": [
+            "Ambiguous failures - a timeout after the server accepted the write - are the specific case this protects against."
+          ]
+        },
+        {
+          "step": "7.7.4",
+          "action": "Implement scheduling triggers: connectivity regained, app foregrounded, a periodic interval, and explicit user pull-to-refresh.",
+          "details": [
+            "Respect the platform's background execution limits rather than fighting them."
+          ]
+        },
+        {
+          "step": "7.7.5",
+          "action": "Respect battery and data constraints: no aggressive polling, and honour any metered-connection preference.",
+          "details": []
+        },
+        {
+          "step": "7.7.6",
+          "action": "Implement crash safety: killing the app mid-sync must lose nothing and produce no duplicates on the next run.",
+          "details": [
+            "Test by killing the process at several points in the sync sequence."
+          ]
+        },
+        {
+          "step": "7.7.7",
+          "action": "Implement outbox pruning once a change is confirmed remotely, and cap outbox growth for a long-offline device.",
+          "details": []
+        },
+        {
+          "step": "7.7.8",
+          "action": "Verify no UI action awaits a network call, by running every core flow with the network stalled indefinitely.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The outbox entry and its mutation commit in one transaction, proven by a crash-injection test.",
+        "No UI action awaits a network call, verified with the network stalled indefinitely.",
+        "Killing the app mid-sync loses nothing and duplicates nothing, proven at several kill points.",
+        "A retry after an ambiguous failure produces no duplicate, proven by a test.",
+        "A device offline for a simulated month syncs to convergence without manual intervention."
+      ],
+      "outputs": [
+        "lib/data/sync/outbox.dart",
+        "lib/data/sync/worker.dart",
+        "and their tests."
+      ],
+      "must_not": [
+        "Do not write the outbox entry outside the mutation's transaction.",
+        "Do not block any UI action on the network."
+      ],
+      "common_pitfalls": [
+        "A worker that holds a database lock while awaiting the network, freezing the UI.",
+        "Unbounded outbox growth on a long-offline device, eventually exhausting storage."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-15",
+          "NFR-02"
+        ],
+        "invariants": [
+          "INV-06",
+          "INV-12"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.08",
+      "substage": "7.8",
+      "position": "8 of 11",
+      "name": "Compaction and new-device bootstrap",
+      "goal": "Keep the remote store bounded, and get a fresh device to converged state safely.",
+      "why_it_matters": "Without compaction the chunk list grows without limit; without a correct bootstrap a new device either loses local data or duplicates history.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.7 (Outbox and the sync worker) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md compaction and bootstrap design.",
+        "Substage 7.3 remote layout."
+      ],
+      "work": [
+        {
+          "step": "7.8.1",
+          "action": "Implement compaction: after a configured number of chunks, write a new snapshot and retire superseded chunks.",
+          "details": [
+            "The operation must be safe to interrupt at any point; a half-finished compaction must leave the store readable.",
+            "Write the new snapshot first, update the manifest second, retire chunks last."
+          ]
+        },
+        {
+          "step": "7.8.2",
+          "action": "Implement snapshot format versioning and the refusal path for a newer-than-expected version.",
+          "details": [
+            "Refuse cleanly and prompt to update the app; never partially parse an unknown format."
+          ]
+        },
+        {
+          "step": "7.8.3",
+          "action": "Implement first-sync bootstrap for a new device: fetch the latest snapshot, apply subsequent chunks, then merge with local state.",
+          "details": []
+        },
+        {
+          "step": "7.8.4",
+          "action": "Handle the important case where the new device already has local data created before sign-in.",
+          "details": [
+            "This is the common path: the user tried the app, then signed in.",
+            "Local data must be merged in, never discarded, and never duplicated."
+          ]
+        },
+        {
+          "step": "7.8.5",
+          "action": "Handle the reinstall case: same account, empty local database, full remote history.",
+          "details": []
+        },
+        {
+          "step": "7.8.6",
+          "action": "Handle the empty-remote case: signed-in device with local data and nothing remote yet, which must push a first snapshot.",
+          "details": []
+        },
+        {
+          "step": "7.8.7",
+          "action": "Test interruption at every step boundary of both compaction and bootstrap.",
+          "details": []
+        },
+        {
+          "step": "7.8.8",
+          "action": "Measure bootstrap duration against a five-year remote dataset and record it.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Compaction interrupted at any step leaves the remote store readable and consistent, proven by tests at each boundary.",
+        "A new device with pre-existing local data merges rather than discarding or duplicating, proven by a test.",
+        "A reinstall restores full history from the remote store.",
+        "An empty remote receives a first snapshot from a device with local data.",
+        "A newer snapshot version is refused cleanly with a prompt to update.",
+        "Bootstrap duration at five-year volume is recorded."
+      ],
+      "outputs": [
+        "lib/data/sync/compaction.dart",
+        "lib/data/sync/bootstrap.dart",
+        "and their tests."
+      ],
+      "must_not": [
+        "Do not discard local data during bootstrap.",
+        "Do not update the manifest before the snapshot it references is fully written."
+      ],
+      "common_pitfalls": [
+        "Retiring chunks before confirming the snapshot was written, which loses data on interruption.",
+        "Bootstrap that assumes an empty local database, duplicating everything the user entered before signing in."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "NFR-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.09",
+      "substage": "7.9",
+      "position": "9 of 11",
+      "name": "Sync state machine and its user-visible surface",
+      "goal": "Implement the sync states and show them honestly, without ever blocking the app.",
+      "why_it_matters": "Silent sync is untrustworthy sync. The user needs to know whether their data is safe, without being interrupted by it.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.8 (Compaction and new-device bootstrap) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md sync state machine.",
+        "The Stage 6 sync status stub."
+      ],
+      "work": [
+        {
+          "step": "7.9.1",
+          "action": "Implement the states from the design: LOCAL_ONLY, IDLE, PENDING, SYNCING, ERROR_RETRYING, ERROR_NEEDS_USER.",
+          "details": []
+        },
+        {
+          "step": "7.9.2",
+          "action": "Surface state unobtrusively: last synced time, pending change count, and a clear action only when the user must intervene.",
+          "details": [
+            "Never a modal spinner. Never a blocking dialog on launch."
+          ]
+        },
+        {
+          "step": "7.9.3",
+          "action": "Write plain-language messages for every error condition.",
+          "details": [
+            "Signed out, permission revoked, Drive storage full, no connectivity, remote data from a newer app version, currency mismatch.",
+            "No stack trace, no bare error code, no provider jargon."
+          ]
+        },
+        {
+          "step": "7.9.4",
+          "action": "Give the user explicit controls: sync now, sign out, and disconnect cloud sync while keeping local data.",
+          "details": [
+            "Disconnecting must leave local data completely intact and the app fully functional."
+          ]
+        },
+        {
+          "step": "7.9.5",
+          "action": "Surface the repair log from substage 7.6 so the user learns when their configuration was adjusted by a merge.",
+          "details": []
+        },
+        {
+          "step": "7.9.6",
+          "action": "Implement the first-run explanation: what sync does, where the data goes, and that it is optional.",
+          "details": []
+        },
+        {
+          "step": "7.9.7",
+          "action": "Write widget tests asserting the visual treatment of every state.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every state has a defined visual treatment and a test asserting it.",
+        "No sync error message contains a stack trace, a bare error code or provider jargon.",
+        "Disconnecting sync leaves local data intact and the app fully functional, proven by a test.",
+        "No sync state blocks the UI at any point.",
+        "Merge repairs are visible to the user."
+      ],
+      "outputs": [
+        "Sync status surface.",
+        "Sync settings controls."
+      ],
+      "must_not": [
+        "Do not block the UI on any sync state.",
+        "Do not show a raw provider error to the user."
+      ],
+      "common_pitfalls": [
+        "A sync indicator so prominent it becomes anxiety-inducing, or so subtle nobody notices a persistent failure.",
+        "Disconnect implemented as a wipe, destroying local data."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-02"
+        ],
+        "invariants": [
+          "INV-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.10. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S07.10",
+      "substage": "7.10",
+      "position": "10 of 11",
+      "name": "Privacy verification",
+      "goal": "Prove, with evidence, that no financial data reaches anywhere except the user's own Google account.",
+      "why_it_matters": "NFR-01 and INV-05 are the promise the whole product rests on, and a promise without evidence is a hope.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.9 (Sync state machine and its user-visible surface) is complete and ticked off."
+      ],
+      "inputs": [
+        "All sync code from 7.1 to 7.9.",
+        "docs/DEPENDENCIES.md."
+      ],
+      "work": [
+        {
+          "step": "7.10.1",
+          "action": "Enumerate every outbound network call the app can make, including transitive calls from dependencies.",
+          "details": [
+            "Read the resolved dependency tree, not just the direct dependencies."
+          ]
+        },
+        {
+          "step": "7.10.2",
+          "action": "Capture traffic during a full session covering onboarding, income, spending, sync and sign-out.",
+          "details": [
+            "Confirm the only destinations are the expected Google storage and authentication endpoints.",
+            "Save the capture as evidence for Stage 9 and Stage 10."
+          ]
+        },
+        {
+          "step": "7.10.3",
+          "action": "Confirm no analytics, crash reporting, advertising or telemetry SDK is present, and confirm the Stage 3 CI guard still fires on a deliberate addition.",
+          "details": []
+        },
+        {
+          "step": "7.10.4",
+          "action": "Confirm no financial value appears in logs at any level.",
+          "details": [
+            "Run a full session with verbose logging and scan the output for amounts, category names and account labels.",
+            "Add an automated check for this so it does not regress."
+          ]
+        },
+        {
+          "step": "7.10.5",
+          "action": "Document exactly what is stored remotely, in what form, and who can read it.",
+          "details": []
+        },
+        {
+          "step": "7.10.6",
+          "action": "Write docs/PRIVACY_SOURCE.md in full.",
+          "details": [
+            "Data collected, data stored remotely and where, scopes requested and why, who can read the data, retention and deletion, third parties - expected to be none.",
+            "Write it so Stage 10 can draft the published policy directly from it without further research."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The traffic capture shows no host other than the expected Google endpoints, and the capture is saved as evidence.",
+        "The telemetry guard fails on a deliberate addition, demonstrated and reverted.",
+        "A verbose-logging session scan finds no monetary amount, category name or account label.",
+        "PRIVACY_SOURCE.md is complete enough to draft the policy from directly."
+      ],
+      "outputs": [
+        "docs/PRIVACY_SOURCE.md",
+        "Traffic capture evidence.",
+        "Log-content check."
+      ],
+      "must_not": [
+        "Do not accept the absence of telemetry on inspection alone - prove the guard still works."
+      ],
+      "common_pitfalls": [
+        "A dependency that phones home on first launch, which only appears in a full-session capture.",
+        "Debug logging that prints an entire entity, including amounts."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01"
+        ],
+        "invariants": [
+          "INV-05"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_7_WORKLOG.md, then continue to substage 7.11. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "Any outbound call to a host that is not the user's Google storage or authentication endpoint."
+        ]
+      }
+    },
+    {
+      "id": "S07.11",
+      "substage": "7.11",
+      "position": "11 of 11",
+      "name": "Sync test suite, documentation and gate preparation",
+      "goal": "Prove convergence across adversarial scenarios, document the design as built, and prepare the gate.",
+      "why_it_matters": "Sync bugs are the hardest to reproduce after release, so they must be caught by construction rather than by users.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 7.10 (Privacy verification) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 7.1 to 7.10."
+      ],
+      "work": [
+        {
+          "step": "7.11.1",
+          "action": "Build the two-device simulation harness running two app instances against one fake remote store.",
+          "details": []
+        },
+        {
+          "step": "7.11.2",
+          "action": "Test the convergence scenarios.",
+          "details": [
+            "Concurrent independent edits. Concurrent conflicting edits. Delete versus edit.",
+            "Long-offline device catch-up. First-sync bootstrap with pre-existing local data.",
+            "Interrupted sync at every step boundary. Reinstall and restore."
+          ]
+        },
+        {
+          "step": "7.11.3",
+          "action": "Test provider failure injection.",
+          "details": [
+            "Network drop mid-write, quota exceeded, permission revoked mid-sync, rate limiting, corrupted remote payload, missing remote store."
+          ]
+        },
+        {
+          "step": "7.11.4",
+          "action": "Test clock skew: run one device with a deliberately wrong clock and prove ordering still converges.",
+          "details": []
+        },
+        {
+          "step": "7.11.5",
+          "action": "Implement the property-based convergence test.",
+          "details": [
+            "Apply randomised operation sequences to two devices in random interleavings and assert both reach identical state.",
+            "Run thousands of cases in CI and record the seed."
+          ]
+        },
+        {
+          "step": "7.11.6",
+          "action": "After every sync test, assert balances still reconcile with the ledger and all validators pass.",
+          "details": []
+        },
+        {
+          "step": "7.11.7",
+          "action": "Write docs/SYNC.md.",
+          "details": [
+            "Chosen target and why, remote layout and schema version, merge rules per record class, HLC design, conflict scenarios and outcomes, failure modes and user-visible behaviour, compaction and retention, bootstrap and account-switch behaviour, repair catalogue."
+          ]
+        },
+        {
+          "step": "7.11.8",
+          "action": "Write docs/reports/STAGE_7_REPORT.md with convergence results, traffic capture evidence and the scope verification status, and prepare the gate.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The property-based convergence test passes over thousands of randomised interleavings, with the seed recorded.",
+        "Every injected failure mode leaves the local database consistent and the app usable.",
+        "No sync test requires real network access.",
+        "Balances reconcile after every sync test.",
+        "SYNC.md documents the implementation as built, including the repair catalogue."
+      ],
+      "outputs": [
+        "test/sync/** complete.",
+        "docs/SYNC.md",
+        "docs/reports/STAGE_7_REPORT.md"
+      ],
+      "must_not": [
+        "Do not report convergence without the randomised interleaving test.",
+        "Do not document a design that differs from what was built."
+      ],
+      "common_pitfalls": [
+        "A two-device harness that shares one database instance, which tests nothing.",
+        "Convergence tested only for the scenarios that were easy to construct."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "FR-15"
+        ],
+        "risks": [
+          "R-03",
+          "R-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "lib/data/sync/**",
+      "format": "code"
+    },
+    {
+      "path": "lib/data/auth/**",
+      "format": "code"
+    },
+    {
+      "path": "test/sync/**",
+      "format": "code"
+    },
+    {
+      "path": "docs/SYNC.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/PRIVACY_SOURCE.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_7_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "Two devices converge on identical state across every tested scenario, including long-offline catch-up.",
+    "The app remains fully usable signed out and offline; no UI path awaits the network.",
+    "Traffic capture proves no data reaches any non-Google host, and no developer-controlled backend exists.",
+    "Conflict resolution is documented in SYNC.md and matches the implementation.",
+    "All sync tests pass in CI with no real network.",
+    "The privacy source document is ready for Stage 10."
+  ],
+  "stage_must_not": [
+    "Do not store any user financial data on any server or infrastructure other than the user's own Google account.",
+    "Do not create a developer-owned backend, proxy, relay or metrics endpoint of any kind.",
+    "Do not add analytics, crash reporting or telemetry, even anonymised.",
+    "Do not make any core flow require sign-in or connectivity.",
+    "Do not resolve conflicts by last-write-wins on ledger entries.",
+    "Do not hard-delete records during merge.",
+    "Do not log monetary amounts, category names or account details at any log level."
+  ],
+  "anti_patterns": [
+    "Describing a developer-owned Firebase project as the user's Google account.",
+    "A single blanket last-write-wins over the whole database.",
+    "Comparing raw device wall-clock timestamps to order concurrent edits.",
+    "A blocking sync-on-launch spinner, which converts an offline-first app into an online-only one.",
+    "Retrying failed pushes without idempotency keys, producing duplicate ledger entries."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-08"
+  ],
+  "risks_in_focus": [
+    "R-03",
+    "R-04",
+    "R-08"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "A converged dataset that Stage 8 reports over.",
+      "Sync state surfacing that Stage 8 reports must respect.",
+      "PRIVACY_SOURCE.md, which Stage 10 turns into the published privacy policy.",
+      "The scope verification finding, which Stage 10 must schedule around."
+    ],
+    "summary_to_write": "State the exact remote layout and schema version, and the verification work Stage 10 will need before public release."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_7_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 7 (Cloud sync) is complete. Two devices converge across all tested scenarios, the app still works fully offline and signed out, and traffic capture confirms data reaches only your own Google account. Open item for release: <scope verification status>. Do you approve moving to Stage 8, reports?"
+  }
+}

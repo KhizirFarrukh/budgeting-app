@@ -1,0 +1,1244 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 4,
+  "stage_id": "S04",
+  "name": "Core Data Layer Implementation",
+  "one_line_goal": "Implement the approved schema as a tested, reactive, migration-safe local database that is already sync-ready.",
+  "objective": "Build the local persistence layer - entities, repositories, seed data, validators, migrations and their tests - exactly as designed in SCHEMA.md, with no UI and no business logic.",
+  "rationale": "Every later stage reads and writes through this layer. Defects here surface as irreproducible money bugs three stages later, so this stage is deliberately test-heavy and deliberately boring.",
+  "depends_on": [
+    "S03"
+  ],
+  "blocks": [
+    "S05",
+    "S06",
+    "S07"
+  ],
+  "entry_criteria": [
+    "SCHEMA.md approved and unchanged since Stage 2, or amended with an ADR.",
+    "The scaffold builds, the code generator runs, and the test harness passes."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-01",
+      "FR-02",
+      "FR-03",
+      "FR-05",
+      "FR-07",
+      "FR-08",
+      "FR-11",
+      "FR-15"
+    ],
+    "non_functional_requirements": [
+      "NFR-02",
+      "NFR-06",
+      "NFR-07"
+    ],
+    "invariants": [
+      "INV-01",
+      "INV-03",
+      "INV-04",
+      "INV-09",
+      "INV-10",
+      "INV-11",
+      "INV-12"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 11,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_4_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "4.1 The Money type and core value types",
+      "4.2 Domain entities, enums and invalid-state prevention",
+      "4.3 Database schema definition and code generation",
+      "4.4 Repository interfaces and CRUD implementation",
+      "4.5 Append-only ledger and transactional writes",
+      "4.6 Balance derivation and cache verification",
+      "4.7 Seed data, suggested categories and the sink",
+      "4.8 Configuration validators and cycle detection",
+      "4.9 Migrations, export and backup",
+      "4.10 Data layer test suite and performance smoke test",
+      "4.11 Data layer documentation and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S04.01",
+      "substage": "4.1",
+      "position": "1 of 11",
+      "name": "The Money type and core value types",
+      "goal": "Implement a money value type that makes floating point arithmetic impossible by construction.",
+      "why_it_matters": "INV-01 is the invariant every other correctness property rests on. Enforcing it in a type is stronger than enforcing it in review.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "SCHEMA.md approved and unchanged since Stage 2, or amended with an ADR.",
+        "The scaffold builds, the code generator runs, and the test harness passes."
+      ],
+      "inputs": [
+        "SCHEMA.md money conventions.",
+        "The currency formatter from substage 3.6."
+      ],
+      "work": [
+        {
+          "step": "4.1.1",
+          "action": "Implement Money as an immutable value type wrapping an int64 minor-unit amount plus a currency reference.",
+          "details": [
+            "Provide no constructor, factory or setter that accepts a double or a num.",
+            "Provide a factory from a decimal string for parsing user input, which validates the decimal places against the currency exponent and returns a typed failure rather than truncating."
+          ]
+        },
+        {
+          "step": "4.1.2",
+          "action": "Implement arithmetic that cannot silently go wrong.",
+          "details": [
+            "Addition, subtraction, negation, comparison.",
+            "Multiplication by an integer basis-point value with explicit floor and remainder outputs, because the allocation engine needs both.",
+            "Overflow detection on every operation, returning a typed failure at the documented maximum rather than wrapping."
+          ]
+        },
+        {
+          "step": "4.1.3",
+          "action": "Implement a Currency type holding the ISO 4217 code and minor unit exponent, with the exponent driving parsing and formatting.",
+          "details": [
+            "Verify exponent 0, 2 and 3 behave correctly, since the seeded category names suggest a market where the exponent is not necessarily 2."
+          ]
+        },
+        {
+          "step": "4.1.4",
+          "action": "Implement BasisPoints as a value type constrained to 0 through 10000, rejecting out-of-range values at construction.",
+          "details": []
+        },
+        {
+          "step": "4.1.5",
+          "action": "Implement a Clock interface and its real implementation, plus an IdGenerator interface and its UUID implementation.",
+          "details": [
+            "Wire these to the fakes created in substage 3.8."
+          ]
+        },
+        {
+          "step": "4.1.6",
+          "action": "Write unit tests for every operation, including the boundary and failure cases.",
+          "details": [
+            "Zero, one minor unit, the documented maximum, one beyond the maximum, negative values, mismatched currencies in an operation, and parsing input with too many decimal places."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "No public API on Money accepts or returns a double or num.",
+        "Every arithmetic operation has an overflow test that produces a typed failure rather than a wrapped value.",
+        "Parsing rejects more decimal places than the currency exponent allows, with a typed failure.",
+        "Operations across mismatched currencies are rejected.",
+        "Tests cover exponent 0, 2 and 3."
+      ],
+      "outputs": [
+        "lib/domain/money/** with Money, Currency, BasisPoints, Clock, IdGenerator."
+      ],
+      "must_not": [
+        "Do not add a convenience toDouble method - it will be used.",
+        "Do not allow arithmetic between different currencies."
+      ],
+      "common_pitfalls": [
+        "A fromDouble factory added for test convenience, which then appears in production code.",
+        "Silent wrapping on overflow, which turns a large income into a negative balance."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.02",
+      "substage": "4.2",
+      "position": "2 of 11",
+      "name": "Domain entities, enums and invalid-state prevention",
+      "goal": "Implement every entity as an immutable type that cannot be constructed in an invalid state.",
+      "why_it_matters": "The engine operates on these types; if an invalid entity can exist, the engine has to defend against it everywhere.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.1 (The Money type and core value types) is complete and ticked off."
+      ],
+      "inputs": [
+        "SCHEMA.md entity definitions.",
+        "Substage 4.1 value types."
+      ],
+      "work": [
+        {
+          "step": "4.2.1",
+          "action": "Implement immutable types for CategoryGroup, Category, Account, DistributionRuleVersion, RuleLine, IncomeEvent, Allocation, LedgerEntry, SpendingTransaction and AppSettings.",
+          "details": []
+        },
+        {
+          "step": "4.2.2",
+          "action": "Implement CategoryType with the values resolved in OQ-03, and encode each type's headroom semantics as a method on the domain side.",
+          "details": [
+            "The engine asks the category for its headroom rather than switching on a type code in three places."
+          ]
+        },
+        {
+          "step": "4.2.3",
+          "action": "Implement every other enumeration as a sealed type or enum with stable string serialisation, never ordinal.",
+          "details": []
+        },
+        {
+          "step": "4.2.4",
+          "action": "Add validating factories that reject invalid states at construction.",
+          "details": [
+            "Negative or zero ceiling when a ceiling is set.",
+            "Basis points outside 0 to 10000.",
+            "Empty or whitespace-only names.",
+            "A category whose redirect target is itself.",
+            "A FIXED_RECURRING category with no bill amount, or an anchor day outside 1 to 31.",
+            "A sink category that has a ceiling."
+          ]
+        },
+        {
+          "step": "4.2.5",
+          "action": "Implement equality, hashCode and copyWith on every entity so tests can compare by value.",
+          "details": []
+        },
+        {
+          "step": "4.2.6",
+          "action": "Confirm the domain package compiles as pure Dart with no Flutter dependency, using the guard from substage 3.4.",
+          "details": []
+        },
+        {
+          "step": "4.2.7",
+          "action": "Write unit tests proving each invalid construction is rejected with a typed failure rather than an exception.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every listed invalid construction is rejected, proven by a test.",
+        "No entity exposes a floating point monetary value.",
+        "Enumerations serialise as stable strings, proven by a round-trip test.",
+        "The layering guard passes on the domain package.",
+        "Headroom semantics live on the category type, not scattered across call sites."
+      ],
+      "outputs": [
+        "lib/domain/entities/**"
+      ],
+      "must_not": [
+        "Do not allow a public constructor that bypasses validation.",
+        "Do not store enums as ordinals."
+      ],
+      "common_pitfalls": [
+        "Validation in a separate validator that callers can forget, rather than in the constructor.",
+        "copyWith that allows a valid entity to be copied into an invalid one."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01",
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.03",
+      "substage": "4.3",
+      "position": "3 of 11",
+      "name": "Database schema definition and code generation",
+      "goal": "Transcribe SCHEMA.md into table definitions exactly, and prove the transcription is faithful.",
+      "why_it_matters": "Any divergence here invalidates the Stage 2 design review, silently.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.2 (Domain entities, enums and invalid-state prevention) is complete and ticked off."
+      ],
+      "inputs": [
+        "SCHEMA.md sections 2, 3 and 4.",
+        "The generator toolchain from substage 3.3."
+      ],
+      "work": [
+        {
+          "step": "4.3.1",
+          "action": "Define every table with the exact columns, types, nullability and defaults from the design.",
+          "details": [
+            "Money as integer columns, percentages as integer basis points, timestamps as integer epoch milliseconds, ids as TEXT UUID."
+          ]
+        },
+        {
+          "step": "4.3.2",
+          "action": "Add the five sync columns to every synced table: updated_at_ms, updated_by_device, hlc, is_deleted, deleted_at_ms.",
+          "details": []
+        },
+        {
+          "step": "4.3.3",
+          "action": "Enable foreign key enforcement explicitly at connection open, and prove it is on.",
+          "details": [
+            "Many SQLite configurations leave it off by default, which silently permits orphan rows.",
+            "Write a test that attempts an orphan insert and expects it to fail."
+          ]
+        },
+        {
+          "step": "4.3.4",
+          "action": "Run the code generator and resolve every warning it produces rather than ignoring them.",
+          "details": []
+        },
+        {
+          "step": "4.3.5",
+          "action": "Build the schema-versus-design comparison table.",
+          "details": [
+            "One row per designed table and column, with the implemented type and a difference column.",
+            "This table goes into the stage report and is the evidence that the transcription is faithful."
+          ]
+        },
+        {
+          "step": "4.3.6",
+          "action": "Write an automated check that asserts no column in the database has a floating point storage class.",
+          "details": [
+            "Read the schema at runtime rather than trusting the definition source, so a generator change cannot slip past."
+          ]
+        },
+        {
+          "step": "4.3.7",
+          "action": "Set the initial schema version constant and store it in app_settings.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The comparison table shows no undocumented differences from SCHEMA.md.",
+        "A test proves foreign key enforcement is active by failing an orphan insert.",
+        "The automated floating-point check reads the live schema and passes.",
+        "Code generation completes with no unresolved warnings.",
+        "Every synced table carries all five sync columns."
+      ],
+      "outputs": [
+        "lib/data/database/** with table definitions and generated code."
+      ],
+      "must_not": [
+        "Do not silently deviate from SCHEMA.md - amend the document and note it.",
+        "Do not assume foreign keys are enforced."
+      ],
+      "common_pitfalls": [
+        "A nullable column that the design marked required, which permits invalid rows the domain will later trip over.",
+        "Foreign keys defined but never enforced, so orphans accumulate until a report breaks."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-01",
+          "INV-09",
+          "INV-12"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.04",
+      "substage": "4.4",
+      "position": "4 of 11",
+      "name": "Repository interfaces and CRUD implementation",
+      "goal": "Implement repository interfaces in the domain and their database-backed implementations in the data layer.",
+      "why_it_matters": "Stage 5 and Stage 6 must depend on interfaces, so both can be tested without a database.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.3 (Database schema definition and code generation) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 4.2 entities.",
+        "Substage 4.3 tables.",
+        "ARCHITECTURE.md dependency rule."
+      ],
+      "work": [
+        {
+          "step": "4.4.1",
+          "action": "Define repository interfaces in the domain layer, expressed entirely in domain types.",
+          "details": [
+            "No database row type, no generated class and no SQL concept crosses the interface."
+          ]
+        },
+        {
+          "step": "4.4.2",
+          "action": "Implement full CRUD for categories, groups, accounts, rule versions, rule lines and settings.",
+          "details": []
+        },
+        {
+          "step": "4.4.3",
+          "action": "Implement soft delete for every configuration record: set is_deleted and deleted_at_ms, never remove the row.",
+          "details": [
+            "Ensure every read path filters tombstones by default, with an explicit opt-in to include them for sync."
+          ]
+        },
+        {
+          "step": "4.4.4",
+          "action": "Implement reactive queries returning streams for everything the dashboard and reports watch.",
+          "details": [
+            "The stream must emit when a row changes through any code path, including a future background sync writer.",
+            "Write a test that mutates through a second path and asserts the stream emits."
+          ]
+        },
+        {
+          "step": "4.4.5",
+          "action": "Implement list queries with the filters the PRD journeys require: by group, by account, by archived state, by date range.",
+          "details": []
+        },
+        {
+          "step": "4.4.6",
+          "action": "Implement mapping between database rows and domain entities in one place, with round-trip tests.",
+          "details": [
+            "A round-trip test catches the field that quietly stops being persisted when the schema changes."
+          ]
+        },
+        {
+          "step": "4.4.7",
+          "action": "Write repository tests against an in-memory database instance so they are fast and hermetic.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No repository method signature exposes a database or generated type.",
+        "Every configuration delete is soft, proven by a test that finds the row still present with a tombstone.",
+        "Reactive streams emit on changes made through a different code path, proven by a test.",
+        "Row-to-entity mapping round-trips every field, proven per entity.",
+        "Repository tests run against an in-memory database with no file system dependency."
+      ],
+      "outputs": [
+        "lib/domain/repositories/** interfaces.",
+        "lib/data/repositories/** implementations."
+      ],
+      "must_not": [
+        "Do not leak persistence types into the domain.",
+        "Do not hard-delete a synced record."
+      ],
+      "common_pitfalls": [
+        "Read paths that forget to filter tombstones, so deleted categories reappear in pickers.",
+        "A mapping function updated for writes but not for reads, losing a field silently."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01",
+          "FR-03",
+          "FR-05"
+        ],
+        "invariants": [
+          "INV-10"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.05",
+      "substage": "4.5",
+      "position": "5 of 11",
+      "name": "Append-only ledger and transactional writes",
+      "goal": "Make INV-03 impossible to violate through the repository API, and make multi-row writes atomic.",
+      "why_it_matters": "An editable ledger is an unauditable ledger. Enforcing append-only at the API surface is stronger than enforcing it by discipline.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.4 (Repository interfaces and CRUD implementation) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 4.4 repositories.",
+        "SCHEMA.md ledger design."
+      ],
+      "work": [
+        {
+          "step": "4.5.1",
+          "action": "Implement ledger writes as append-only: an insert method and nothing else.",
+          "details": [
+            "There must be no update method and no delete method on the ledger repository at all.",
+            "A correction is a new compensating entry referencing the entry it reverses."
+          ]
+        },
+        {
+          "step": "4.5.2",
+          "action": "Implement the income event write as a single atomic transaction covering the event row and every allocation ledger entry.",
+          "details": [
+            "Either all rows commit or none do.",
+            "Write a test that injects a failure midway and asserts zero rows remain."
+          ]
+        },
+        {
+          "step": "4.5.3",
+          "action": "Implement the spending write and the reversal write with the same atomicity guarantee.",
+          "details": []
+        },
+        {
+          "step": "4.5.4",
+          "action": "Implement idempotent inserts keyed by the client-generated UUID, so a retry cannot duplicate an entry.",
+          "details": [
+            "This matters in Stage 7, but the guarantee belongs here where the write happens."
+          ]
+        },
+        {
+          "step": "4.5.5",
+          "action": "Add a test that attempts, by any available route, to modify an existing ledger row, and demonstrates there is no such route.",
+          "details": [
+            "This is a design test, not a behaviour test; it documents the guarantee for future maintainers."
+          ]
+        },
+        {
+          "step": "4.5.6",
+          "action": "Implement the reversal linkage: a reversal entry references its original, and the original is marked as reversed without being altered.",
+          "details": [
+            "State how marked-as-reversed is represented without mutating the immutable row - typically a separate lookup by reverses_entry_id."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The ledger repository exposes no update or delete method.",
+        "A failure injected midway through an income event write leaves zero rows, proven by a test.",
+        "Inserting the same ledger entry UUID twice is a no-op rather than a duplicate, proven by a test.",
+        "Reversal linkage works without altering the original row, proven by a test.",
+        "The design test documenting immutability exists and passes."
+      ],
+      "outputs": [
+        "lib/data/repositories/ledger_repository.dart and its tests."
+      ],
+      "must_not": [
+        "Do not add an update path for the ledger for any reason, including data repair - repair is a compensating entry.",
+        "Do not represent reversed by mutating the original row."
+      ],
+      "common_pitfalls": [
+        "A generic repository base class that supplies update and delete to every table including the ledger.",
+        "Non-atomic writes that leave an income event with only some of its allocations, which breaks conservation permanently."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-02",
+          "INV-03",
+          "INV-12"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.06",
+      "substage": "4.6",
+      "position": "6 of 11",
+      "name": "Balance derivation and cache verification",
+      "goal": "Implement balances as derived values with a recompute-and-compare verifier.",
+      "why_it_matters": "INV-04. A stored balance that nobody can re-derive is a number nobody can trust after the first sync merge.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.5 (Append-only ledger and transactional writes) is complete and ticked off."
+      ],
+      "inputs": [
+        "SCHEMA.md balance policy from substage 2.4.",
+        "Substage 4.5 ledger."
+      ],
+      "work": [
+        {
+          "step": "4.6.1",
+          "action": "Implement the derivation query: a category balance is the signed sum of its ledger entries.",
+          "details": [
+            "Verify the query uses the index designed in substage 2.4 by inspecting the query plan."
+          ]
+        },
+        {
+          "step": "4.6.2",
+          "action": "Implement period-scoped derivations the engine needs: allocated_in_current_period for fixed-recurring categories.",
+          "details": [
+            "Period boundaries follow the anchor day rule from the design, including the short-month behaviour.",
+            "Take the period definition as an input rather than computing it from the system clock here."
+          ]
+        },
+        {
+          "step": "4.6.3",
+          "action": "If the design chose a cache table, implement it with explicit invalidation on every ledger write.",
+          "details": [
+            "Never update a cached balance by incrementing it from application code without also being able to recompute it."
+          ]
+        },
+        {
+          "step": "4.6.4",
+          "action": "Implement the recompute-and-compare verifier.",
+          "details": [
+            "Recomputes every balance from the ledger and compares against cached or displayed values.",
+            "Returns a list of discrepancies rather than throwing, so it can be run as a diagnostic.",
+            "Write a test that corrupts a cached balance deliberately and asserts the verifier finds it."
+          ]
+        },
+        {
+          "step": "4.6.5",
+          "action": "Implement per-account totals as the sum of the balances of linked categories, and test that they reconcile.",
+          "details": []
+        },
+        {
+          "step": "4.6.6",
+          "action": "Measure derivation cost against a synthetic ledger at the five-year volume from the PRD, and record the timing.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every balance is derivable from the ledger alone.",
+        "The verifier detects a deliberately corrupted cached balance, proven by a test.",
+        "Period-scoped derivation handles an anchor day of 31 through a 28-day February without skipping or duplicating a period.",
+        "Per-account totals reconcile with the sum of linked category balances.",
+        "Derivation timing at five-year volume is recorded and within the NFR-06 budget."
+      ],
+      "outputs": [
+        "lib/data/balances/** and tests.",
+        "Recompute-and-compare diagnostic."
+      ],
+      "must_not": [
+        "Do not expose a setter for a balance.",
+        "Do not read the system clock inside a derivation."
+      ],
+      "common_pitfalls": [
+        "A cached balance updated on write but never verified, which drifts after a sync merge and is discovered by a user.",
+        "Period logic that silently skips February when the anchor day is 30 or 31."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-04"
+        ],
+        "covers": [
+          "FR-11",
+          "FR-13",
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.07",
+      "substage": "4.7",
+      "position": "7 of 11",
+      "name": "Seed data, suggested categories and the sink",
+      "goal": "Ship the suggested categories as editable proposals, create the mandatory sink, and make seeding idempotent and non-destructive.",
+      "why_it_matters": "FR-08 and NFR-04. A first-time budgeter facing an empty app abandons it, and a suggestion the user cannot change is a constraint.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.6 (Balance derivation and cache verification) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest predefined_categories with suggested types.",
+        "OQ-07 resolution for the sink."
+      ],
+      "work": [
+        {
+          "step": "4.7.1",
+          "action": "Implement the seed set from the manifest, including each entry's suggested type.",
+          "details": [
+            "Spending, savings and business groups exactly as listed, with the suggested type carried through."
+          ]
+        },
+        {
+          "step": "4.7.2",
+          "action": "Flag every seeded record with is_suggested_seed and a seed_version, so a user's own creation is distinguishable from an untouched suggestion.",
+          "details": []
+        },
+        {
+          "step": "4.7.3",
+          "action": "Seed default percentages that produce a configuration passing every validator.",
+          "details": [
+            "Group split and every within-group split must total exactly 10000 basis points.",
+            "Write the test that asserts this before writing the numbers, so a mistake cannot ship."
+          ]
+        },
+        {
+          "step": "4.7.4",
+          "action": "Create the sink category per OQ-07: uncapped, non-deletable, renameable, in the agreed group, with is_sink set.",
+          "details": [
+            "If a separate business sink was agreed, create that too.",
+            "Assert at seed time that the sink is uncapped, since the engine's termination guarantee depends on it."
+          ]
+        },
+        {
+          "step": "4.7.5",
+          "action": "Make seeding idempotent.",
+          "details": [
+            "Running it twice must not duplicate anything.",
+            "Prove it with a test comparing row counts and updated_at values before and after a second run."
+          ]
+        },
+        {
+          "step": "4.7.6",
+          "action": "Make seeding non-destructive.",
+          "details": [
+            "Editing a seeded category and re-running the seeder must leave the edit intact.",
+            "Prove it with a test."
+          ]
+        },
+        {
+          "step": "4.7.7",
+          "action": "Externalise every seeded string so localisation is possible later without touching logic.",
+          "details": []
+        },
+        {
+          "step": "4.7.8",
+          "action": "Implement the reset-to-suggestions path if the design calls for one, and make explicit that it is destructive and confirmed.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Seeding an empty database produces a configuration that passes every validator from substage 4.8.",
+        "Default percentages total exactly 10000 at group level and within every group, proven by a test.",
+        "Running the seeder twice is a no-op, proven by a test.",
+        "A user edit to a seeded category survives a re-run, proven by a test.",
+        "The sink exists, is uncapped, and is flagged non-deletable.",
+        "Every seeded category can be renamed, retyped, re-ceilinged and removed."
+      ],
+      "outputs": [
+        "lib/data/seed/** and its tests."
+      ],
+      "must_not": [
+        "Do not make any seeded category permanent or uneditable, except the sink's existence.",
+        "Do not hardcode seeded strings inside logic."
+      ],
+      "common_pitfalls": [
+        "Default percentages that total 9999 because of a hand-computed split, which blocks onboarding.",
+        "A seeder that overwrites user edits on every app launch."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-08",
+          "NFR-04"
+        ],
+        "invariants": [
+          "INV-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.08",
+      "substage": "4.8",
+      "position": "8 of 11",
+      "name": "Configuration validators and cycle detection",
+      "goal": "Implement every validation rule from the design and wire it into the write path so invalid state cannot be persisted.",
+      "why_it_matters": "The engine assumes a valid configuration. This layer is what guarantees it, including after a sync merge.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.7 (Seed data, suggested categories and the sink) is complete and ticked off."
+      ],
+      "inputs": [
+        "SCHEMA.md section 6 validation rules.",
+        "Substage 4.4 repositories."
+      ],
+      "work": [
+        {
+          "step": "4.8.1",
+          "action": "Implement each validator in the domain layer, returning typed failures rather than throwing.",
+          "details": [
+            "Group basis points total exactly 10000.",
+            "Within-group basis points total exactly 10000 for every group with a non-zero share.",
+            "A group with a non-zero share has at least one active category.",
+            "Ceiling greater than zero when set.",
+            "Redirect target exists, is active, and is not the category itself.",
+            "FIXED_RECURRING has a bill amount greater than zero and an anchor day within 1 to 31.",
+            "The sink exists, is uncapped and is not archived.",
+            "An account with linked categories cannot be deleted without reassignment.",
+            "Currency and exponent are immutable once any ledger entry exists."
+          ]
+        },
+        {
+          "step": "4.8.2",
+          "action": "Implement redirect-graph cycle detection and run it on every save that touches a redirect target.",
+          "details": [
+            "Use a traversal with a visited set over the whole graph, not just the immediate pair.",
+            "Test two-node, three-node and longer cycles, plus a self-reference."
+          ]
+        },
+        {
+          "step": "4.8.3",
+          "action": "Implement the archive guard: a category that is another category's redirect target cannot be archived, and the error names the dependant.",
+          "details": []
+        },
+        {
+          "step": "4.8.4",
+          "action": "Wire validators into the repository write path so a caller that forgets to validate still cannot persist invalid state.",
+          "details": [
+            "Validation at the call site alone is not sufficient - Stage 7 will write through a different path."
+          ]
+        },
+        {
+          "step": "4.8.5",
+          "action": "Implement the post-merge validation entry point Stage 7 will call, returning a discrepancy list rather than throwing.",
+          "details": []
+        },
+        {
+          "step": "4.8.6",
+          "action": "Write a test for every rule with both a passing and a failing case.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "A two-node redirect cycle is rejected, proven by a test.",
+        "A three-node redirect cycle is rejected, proven by a test.",
+        "A self-referencing redirect is rejected.",
+        "Deleting or archiving the sink is rejected.",
+        "Rule lines totalling 9999 and 10001 are both rejected.",
+        "Validation cannot be bypassed by writing directly through the repository, proven by a test.",
+        "The post-merge validation entry point exists and returns a discrepancy list."
+      ],
+      "outputs": [
+        "lib/domain/validation/** and its tests."
+      ],
+      "must_not": [
+        "Do not enforce an invariant-protecting rule only in the UI.",
+        "Do not throw from a validator - return a typed failure."
+      ],
+      "common_pitfalls": [
+        "Cycle detection that only checks the direct target, missing a three-node loop.",
+        "Validation wired into the UI but not the repository, so sync writes bypass it."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-07",
+          "INV-11"
+        ],
+        "risks": [
+          "R-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.09",
+      "substage": "4.9",
+      "position": "9 of 11",
+      "name": "Migrations, export and backup",
+      "goal": "Build the migration framework and its fixture testing, plus a full export and import that round-trips exactly.",
+      "why_it_matters": "NFR-07. A schema change after release must never cost a user their history, and every user must be able to take their data elsewhere.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.8 (Configuration validators and cycle detection) is complete and ticked off."
+      ],
+      "inputs": [
+        "SCHEMA.md migration strategy.",
+        "Substage 4.3 schema version constant."
+      ],
+      "work": [
+        {
+          "step": "4.9.1",
+          "action": "Implement the migration framework with the initial version, even though there is only one version today.",
+          "details": [
+            "The framework existing before it is needed is what makes the first real migration safe."
+          ]
+        },
+        {
+          "step": "4.9.2",
+          "action": "Implement the migration test harness: open a fixture database at version N, migrate, assert data intact and schema matching version N plus one.",
+          "details": []
+        },
+        {
+          "step": "4.9.3",
+          "action": "Commit a fixture database at version 1 now, so the first real migration has something to test against.",
+          "details": [
+            "Populate it with a representative dataset, including a reversal, a redirect and an archived category."
+          ]
+        },
+        {
+          "step": "4.9.4",
+          "action": "Implement full JSON export covering every table, including tombstones and sync columns.",
+          "details": [
+            "Amounts as integer minor units, never decimal strings in the machine-readable export.",
+            "Include schema version, currency configuration and export timestamp in a header block."
+          ]
+        },
+        {
+          "step": "4.9.5",
+          "action": "Implement import that restores an export onto an empty database.",
+          "details": [
+            "Refuse an import whose schema version is newer than the app understands.",
+            "Refuse an import whose currency configuration differs from the current install, with a clear explanation."
+          ]
+        },
+        {
+          "step": "4.9.6",
+          "action": "Implement the automatic pre-migration export written to app storage before any migration runs.",
+          "details": [
+            "State where it is written and how many are retained."
+          ]
+        },
+        {
+          "step": "4.9.7",
+          "action": "Write the round-trip test: export, wipe, import, then assert every balance and every ledger entry is byte-identical.",
+          "details": []
+        },
+        {
+          "step": "4.9.8",
+          "action": "Measure export duration at the five-year volume and record it.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The migration test harness runs in CI with the version 1 fixture present.",
+        "Export, wipe and import reproduces identical balances and ledger contents, proven by a test.",
+        "The export header contains schema version and currency configuration.",
+        "Import refuses a newer schema version and a mismatched currency, each proven by a test.",
+        "A pre-migration export is written automatically, proven by a test.",
+        "Export duration at five-year volume is recorded."
+      ],
+      "outputs": [
+        "lib/data/migrations/**",
+        "lib/data/backup/**",
+        "test fixture database at version 1."
+      ],
+      "must_not": [
+        "Do not write amounts as floating point in the export.",
+        "Do not allow an import that silently drops unknown fields."
+      ],
+      "common_pitfalls": [
+        "A migration framework added only when the first migration is needed, under time pressure.",
+        "An export that omits tombstones, so importing resurrects deleted records."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-07"
+        ],
+        "risks": [
+          "R-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.10. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.10",
+      "substage": "4.10",
+      "position": "10 of 11",
+      "name": "Data layer test suite and performance smoke test",
+      "goal": "Complete the test suite to the coverage target and prove the layer performs at realistic volume.",
+      "why_it_matters": "Stage 5 must be able to trust this layer completely, and Stage 9 should find nothing here.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.9 (Migrations, export and backup) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 4.1 to 4.9."
+      ],
+      "work": [
+        {
+          "step": "4.10.1",
+          "action": "Audit coverage per file and list every uncovered line with a justification or a new test.",
+          "details": []
+        },
+        {
+          "step": "4.10.2",
+          "action": "Ensure every entity has create, read, update where permitted, soft delete, list-with-filters and stream-emission tests.",
+          "details": []
+        },
+        {
+          "step": "4.10.3",
+          "action": "Ensure the three structural guarantees each have an explicit test: append-only, transactional atomicity and foreign key enforcement.",
+          "details": []
+        },
+        {
+          "step": "4.10.4",
+          "action": "Ensure seed idempotency, seed non-destructiveness and default configuration validity are each covered.",
+          "details": []
+        },
+        {
+          "step": "4.10.5",
+          "action": "Ensure every validator has a passing and a failing case.",
+          "details": []
+        },
+        {
+          "step": "4.10.6",
+          "action": "Test balance derivation against hand-computed expected values, including a category whose history contains a reversal.",
+          "details": [
+            "Hand-computed means computed independently, not copied from the implementation's output."
+          ]
+        },
+        {
+          "step": "4.10.7",
+          "action": "Build the synthetic five-year dataset generator from the PRD volume assumptions and commit it as a test utility.",
+          "details": [
+            "Stage 8 and Stage 9 will reuse it, so build it once here and build it well."
+          ]
+        },
+        {
+          "step": "4.10.8",
+          "action": "Run the performance smoke test: balance query, date-range query, per-account totals and export, at five-year volume.",
+          "details": [
+            "Record actual timings in the stage report against the NFR-06 targets."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "All tests pass and the command output is captured in the stage report.",
+        "Domain and data layer coverage is at least 90 percent, with every uncovered line justified.",
+        "Balance derivation is verified against independently computed values.",
+        "The synthetic dataset generator is committed and reusable.",
+        "Performance timings are recorded against their targets."
+      ],
+      "outputs": [
+        "Completed test suite.",
+        "Synthetic dataset generator utility."
+      ],
+      "must_not": [
+        "Do not copy implementation output into an expected value.",
+        "Do not lower the coverage target to pass."
+      ],
+      "common_pitfalls": [
+        "Coverage achieved by tests that assert nothing meaningful.",
+        "A performance test run on an empty database, which proves nothing."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_4_WORKLOG.md, then continue to substage 4.11. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S04.11",
+      "substage": "4.11",
+      "position": "11 of 11",
+      "name": "Data layer documentation and gate preparation",
+      "goal": "Document the implemented layer, prove it matches the design, and prepare the stage gate.",
+      "why_it_matters": "Stage 5 depends on a precise statement of what this layer guarantees.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 4.10 (Data layer test suite and performance smoke test) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 4.1 to 4.10."
+      ],
+      "work": [
+        {
+          "step": "4.11.1",
+          "action": "Write docs/DATA_LAYER.md.",
+          "details": [
+            "The schema-versus-design comparison table from substage 4.3.",
+            "The repository API surface, with the guarantees each method provides.",
+            "The seed data policy and how a user's edits are protected.",
+            "The migration and backup procedure.",
+            "Known limitations."
+          ]
+        },
+        {
+          "step": "4.11.2",
+          "action": "State explicitly the guarantees Stage 5 may rely on.",
+          "details": [
+            "Balances are ledger-derived and verifiable.",
+            "Ledger entries are immutable and idempotent by UUID.",
+            "Configuration reaching the engine has passed validation.",
+            "No repository method reads the clock."
+          ]
+        },
+        {
+          "step": "4.11.3",
+          "action": "Delete any throwaway inspection harness built during this stage and confirm it is gone.",
+          "details": []
+        },
+        {
+          "step": "4.11.4",
+          "action": "Update docs/TRACEABILITY.md for the requirements this stage advances.",
+          "details": []
+        },
+        {
+          "step": "4.11.5",
+          "action": "Write docs/reports/STAGE_4_REPORT.md with test output, coverage figures, performance timings and the comparison table.",
+          "details": []
+        },
+        {
+          "step": "4.11.6",
+          "action": "Prepare the gate question.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "DATA_LAYER.md states the guarantees Stage 5 relies on, explicitly.",
+        "The throwaway harness, if any, has been removed and its removal verified.",
+        "TRACEABILITY.md is updated.",
+        "The stage report contains test output, coverage and timings."
+      ],
+      "outputs": [
+        "docs/DATA_LAYER.md",
+        "docs/reports/STAGE_4_REPORT.md"
+      ],
+      "must_not": [
+        "Do not leave a manual inspection UI in the codebase."
+      ],
+      "common_pitfalls": [
+        "Documenting the intended guarantees rather than the implemented ones."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "A guarantee Stage 5 needs cannot be provided as designed."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "lib/domain/**",
+      "format": "code"
+    },
+    {
+      "path": "lib/data/**",
+      "format": "code"
+    },
+    {
+      "path": "test/**",
+      "format": "code"
+    },
+    {
+      "path": "docs/DATA_LAYER.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_4_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "All data layer tests pass in CI.",
+    "Coverage of the domain and data layers is at least 90 percent.",
+    "The implemented schema matches SCHEMA.md, evidenced by a comparison table.",
+    "Seeding produces a valid, fully editable default configuration.",
+    "Export and import round-trip without data loss.",
+    "TRACEABILITY.md updated for the requirements this stage advances."
+  ],
+  "stage_must_not": [
+    "Do not build UI screens beyond a throwaway harness, and delete that harness before the stage ends.",
+    "Do not implement the distribution algorithm here, not even a simplified version.",
+    "Do not expose any repository method that updates or deletes a ledger entry.",
+    "Do not use hard deletes on synced tables.",
+    "Do not store money as a floating point value anywhere, including in export files.",
+    "Do not add network or Google account code in this stage."
+  ],
+  "anti_patterns": [
+    "A balance column that allocation code increments directly - it drifts and cannot be audited.",
+    "Seed data the user cannot edit or remove, which turns suggestions into constraints.",
+    "Auto-increment integer primary keys, which collide the first time two offline devices sync.",
+    "Repository methods returning database row types, leaking persistence into the domain."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-05"
+  ],
+  "risks_in_focus": [
+    "R-07",
+    "R-03"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "Domain entities and the Money type are the engine's inputs and outputs in Stage 5.",
+      "Repository interfaces let Stage 5 test the engine with no database at all.",
+      "Balance derivation supplies the headroom inputs the engine needs.",
+      "Sync columns and tombstones are what Stage 7 merges."
+    ],
+    "summary_to_write": "State the exact repository interface the engine depends on, and confirm the append-only guarantee is enforced at the API level."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_4_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 4 (Data layer) is complete. <N> tests pass, coverage is <X> percent, and the schema matches the approved design. Notable implementation decisions: <list>. Do you approve moving to Stage 5, the distribution engine?"
+  }
+}

@@ -1,0 +1,919 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 9,
+  "stage_id": "S09",
+  "name": "Testing & QA Pass",
+  "one_line_goal": "Deliberately try to break the app - especially its money math, its sync and its failure paths - and fix or document everything found.",
+  "objective": "Complete full app-level testing: widget coverage, end-to-end journeys, adversarial manual testing, accessibility, performance and privacy verification, producing an honest test report.",
+  "rationale": "Earlier stages tested their own work in isolation. This stage tests the seams, the failure paths and the things nobody wanted to think about, before a real person's savings depend on it.",
+  "depends_on": [
+    "S08"
+  ],
+  "blocks": [
+    "S10"
+  ],
+  "entry_criteria": [
+    "All prior stage gates approved.",
+    "All existing test suites green in CI.",
+    "A physical Android device is available for manual and accessibility testing."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-01 through FR-15, all verified here"
+    ],
+    "non_functional_requirements": [
+      "NFR-01 through NFR-08"
+    ],
+    "invariants": [
+      "INV-01 through INV-12, all re-verified here"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 8,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_9_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "9.1 Widget and golden test coverage completion",
+      "9.2 End-to-end journey tests",
+      "9.3 Adversarial and edge case manual testing",
+      "9.4 Money correctness audit",
+      "9.5 Accessibility pass",
+      "9.6 Performance and resource testing",
+      "9.7 Privacy and security verification on the release build",
+      "9.8 Defect triage and the test report"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S09.01",
+      "substage": "9.1",
+      "position": "1 of 8",
+      "name": "Widget and golden test coverage completion",
+      "goal": "Close every gap in screen-level testing and lock the money-critical screens with golden images.",
+      "why_it_matters": "Screens added late in Stages 6 and 8 are the ones most likely to be under-tested.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "All prior stage gates approved.",
+        "All existing test suites green in CI.",
+        "A physical Android device is available for manual and accessibility testing."
+      ],
+      "inputs": [
+        "The full screen inventory.",
+        "Existing test suites."
+      ],
+      "work": [
+        {
+          "step": "9.1.1",
+          "action": "Audit every screen against the test suite and list which lack a test for their empty, loading or error state.",
+          "details": [
+            "Produce the gap list first; do not start writing tests until you know the shape of the gap."
+          ]
+        },
+        {
+          "step": "9.1.2",
+          "action": "Write the missing tests, prioritising screens that display or accept money.",
+          "details": []
+        },
+        {
+          "step": "9.1.3",
+          "action": "Add golden image tests for the dashboard, the allocation preview and the reports screen.",
+          "details": [
+            "Four variants each: default and 200 percent font scale, light and dark theme."
+          ]
+        },
+        {
+          "step": "9.1.4",
+          "action": "Add a test asserting that no screen displays a monetary value that disagrees with its ledger-derived source.",
+          "details": [
+            "Do this by rendering with a known dataset and comparing displayed figures against an independent recomputation."
+          ]
+        },
+        {
+          "step": "9.1.5",
+          "action": "Re-run coverage and record the presentation layer figure.",
+          "details": []
+        },
+        {
+          "step": "9.1.6",
+          "action": "Record any deliberately untested area with its justification.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every screen has tests for all three states.",
+        "Golden tests exist for the three money-critical screens in four variants each.",
+        "Presentation layer coverage is at least 75 percent with named exclusions.",
+        "The displayed-versus-derived assertion passes for every money-bearing screen."
+      ],
+      "outputs": [
+        "Completed widget and golden test suites.",
+        "Coverage gap list with justifications."
+      ],
+      "must_not": [
+        "Do not write a test that asserts only that a widget rendered."
+      ],
+      "common_pitfalls": [
+        "Golden tests taken at only one font scale, which then hide the layout failure that actually affects users."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S09.02",
+      "substage": "9.2",
+      "position": "2 of 8",
+      "name": "End-to-end journey tests",
+      "goal": "Automate the full user journeys across layers, asserting on data as well as on screens.",
+      "why_it_matters": "The seams between layers are where the remaining bugs live, and they are invisible to unit tests.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.1 (Widget and golden test coverage completion) is complete and ticked off."
+      ],
+      "inputs": [
+        "PRD journeys.",
+        "Stage 5 golden vectors.",
+        "The two-device harness from Stage 7."
+      ],
+      "work": [
+        {
+          "step": "9.2.1",
+          "action": "Automate the primary journey: fresh install, onboarding with defaults, add income, verify the split matches the engine's expected output, log spending, verify the dashboard.",
+          "details": []
+        },
+        {
+          "step": "9.2.2",
+          "action": "Automate the ceiling journey: configure a low ceiling, add income that overfills it, verify the redirect landed in the correct category and the explanation is shown.",
+          "details": []
+        },
+        {
+          "step": "9.2.3",
+          "action": "Automate the chained redirect journey ending at the sink.",
+          "details": []
+        },
+        {
+          "step": "9.2.4",
+          "action": "Automate the override journey: override, confirm, then undo, verifying balances return exactly.",
+          "details": []
+        },
+        {
+          "step": "9.2.5",
+          "action": "Automate the sync round-trip journey with the fake remote store: device A creates data, device B receives it, device B edits, device A converges.",
+          "details": []
+        },
+        {
+          "step": "9.2.6",
+          "action": "Automate the business separation journey: verify business figures never appear in personal totals.",
+          "details": []
+        },
+        {
+          "step": "9.2.7",
+          "action": "Automate the multi-month journey: several months of income and spending, then verify reports and export reconcile.",
+          "details": []
+        },
+        {
+          "step": "9.2.8",
+          "action": "Ensure every journey asserts on the underlying ledger state, not only on rendered widgets.",
+          "details": [
+            "Otherwise a display bug and a data bug are indistinguishable, and the more dangerous one hides behind the other."
+          ]
+        },
+        {
+          "step": "9.2.9",
+          "action": "Reproduce the Stage 5 ceiling golden vectors end to end, so the engine's behaviour is confirmed through the full stack.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All journeys pass on a physical device, and in CI where feasible.",
+        "Each journey asserts ledger state as well as rendered output.",
+        "The ceiling journeys reproduce the Stage 5 golden vectors through the full stack.",
+        "The sync journey demonstrates convergence between two simulated devices."
+      ],
+      "outputs": [
+        "integration_test/** journey suite."
+      ],
+      "must_not": [
+        "Do not assert only on visible text for a money-moving journey."
+      ],
+      "common_pitfalls": [
+        "Journeys that share state and pass only in a particular order.",
+        "A sync journey that uses one shared database instance and therefore tests nothing."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-04",
+          "FR-09",
+          "FR-10",
+          "FR-12",
+          "FR-14"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S09.03",
+      "substage": "9.3",
+      "position": "3 of 8",
+      "name": "Adversarial and edge case manual testing",
+      "goal": "Execute a written checklist of the failure modes that are hard to automate and certain to happen.",
+      "why_it_matters": "Some failures cannot be automated cheaply but will absolutely happen to a real user with real money in the app.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.2 (End-to-end journey tests) is complete and ticked off."
+      ],
+      "inputs": [
+        "A physical Android device.",
+        "The release-configuration build if available."
+      ],
+      "work": [
+        {
+          "step": "9.3.1",
+          "action": "Write docs/MANUAL_TEST_CHECKLIST.md as a reusable table with pass, fail and notes columns, so every future release reuses it.",
+          "details": []
+        },
+        {
+          "step": "9.3.2",
+          "action": "Execute the connectivity and permission cases.",
+          "details": [
+            "First launch with no internet, all the way through onboarding and a first income event.",
+            "Google permission revoked from the account page mid-use, then an attempted sync.",
+            "Sign out, then sign in with a different Google account.",
+            "Airplane mode toggled repeatedly during a sync."
+          ]
+        },
+        {
+          "step": "9.3.3",
+          "action": "Execute the interruption cases.",
+          "details": [
+            "App killed by the system during onboarding, during income confirmation, and during a sync.",
+            "Device storage full during a write, a migration and an export.",
+            "Low memory, using the platform's background process limits.",
+            "Incoming phone call mid-flow."
+          ]
+        },
+        {
+          "step": "9.3.4",
+          "action": "Execute the input abuse cases.",
+          "details": [
+            "Malformed manual overrides: zero, negative, non-numeric, too many decimals, pasted text, totals that do not match.",
+            "Extremely long category names, emoji, right-to-left text, and names containing commas, quotes and newlines, through the UI and through CSV export.",
+            "Very large amounts near the documented maximum, and the smallest possible amount of 1 minor unit.",
+            "Rapid double-tap on confirm, which must not create two income events."
+          ]
+        },
+        {
+          "step": "9.3.5",
+          "action": "Execute the environment cases.",
+          "details": [
+            "Device date and time changed backwards and forwards, across a month boundary and across a daylight-saving transition.",
+            "Rotation and multi-window mode mid-flow.",
+            "System font scale at maximum and display size at maximum.",
+            "Dark mode toggled mid-session."
+          ]
+        },
+        {
+          "step": "9.3.6",
+          "action": "Execute the recovery cases.",
+          "details": [
+            "Restore from a JSON export onto a fresh install.",
+            "Reinstall with the same Google account and confirm history returns.",
+            "Remote app data wiped from Drive settings, then a sync attempt."
+          ]
+        },
+        {
+          "step": "9.3.7",
+          "action": "Record every result with notes and screenshots, and log every failure as a defect with a severity.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every checklist item has a recorded result with evidence.",
+        "No item results in data loss, a duplicated income event, or a balance disagreeing with the ledger.",
+        "Every failure is fixed or logged with a severity and a rationale for deferring.",
+        "The checklist is written to be reusable for every future release."
+      ],
+      "outputs": [
+        "docs/MANUAL_TEST_CHECKLIST.md with results.",
+        "Defect log entries."
+      ],
+      "must_not": [
+        "Do not skip an item because it seems unlikely.",
+        "Do not record a pass without evidence."
+      ],
+      "common_pitfalls": [
+        "Testing on a debug build only, which behaves differently from the release build in exactly the areas that matter.",
+        "Rapid double-tap untested, which is one of the most common real-world duplication causes."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-02",
+          "NFR-07"
+        ],
+        "risks": [
+          "R-03",
+          "R-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S09.04",
+      "substage": "9.4",
+      "position": "4 of 8",
+      "name": "Money correctness audit",
+      "goal": "Independently verify that no money has been lost, invented or misplaced anywhere in the system.",
+      "why_it_matters": "NFR-05 and INV-02 deserve a dedicated pass, independent of the engine's own tests, because the engine is not the only thing that touches money.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.3 (Adversarial and edge case manual testing) is complete and ticked off."
+      ],
+      "inputs": [
+        "The synthetic dataset generator.",
+        "The reconciliation assertions from Stage 8."
+      ],
+      "work": [
+        {
+          "step": "9.4.1",
+          "action": "Write an independent reconciliation script, in tool/, that can be run on demand against any database.",
+          "details": [
+            "It must be independent: written against the schema, not reusing the app's aggregation code.",
+            "Independence is the point - reusing the app's own code would only prove the code agrees with itself."
+          ]
+        },
+        {
+          "step": "9.4.2",
+          "action": "Generate a large randomised history: multiple years, all category types, redirects, reversals, overrides and sync merges.",
+          "details": []
+        },
+        {
+          "step": "9.4.3",
+          "action": "Recompute every balance from the ledger and compare against every displayed and cached value.",
+          "details": []
+        },
+        {
+          "step": "9.4.4",
+          "action": "Verify the global identity: the sum of all category balances equals total income minus total spending, exactly, across the entire history.",
+          "details": []
+        },
+        {
+          "step": "9.4.5",
+          "action": "Verify per-event conservation: every income event's allocations sum exactly to its amount, for every event in the history.",
+          "details": []
+        },
+        {
+          "step": "9.4.6",
+          "action": "Verify the CSV export of the full history reconciles to the same totals.",
+          "details": []
+        },
+        {
+          "step": "9.4.7",
+          "action": "Verify balances after a sync merge equal balances before the merge plus the merged-in entries.",
+          "details": []
+        },
+        {
+          "step": "9.4.8",
+          "action": "Grep the whole codebase for double, float and num on the money path and justify or remove every hit.",
+          "details": []
+        },
+        {
+          "step": "9.4.9",
+          "action": "Commit the script so it can be run before every future release.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Zero discrepancies across the entire generated history.",
+        "The global identity holds exactly.",
+        "Per-event conservation holds for every event.",
+        "CSV export reconciles to the same totals.",
+        "No unjustified floating point type remains on the money path.",
+        "The script is committed and runnable on demand."
+      ],
+      "outputs": [
+        "tool/reconcile.dart",
+        "Audit results in the test report."
+      ],
+      "must_not": [
+        "Do not build the audit on the app's own aggregation code.",
+        "Do not accept a discrepancy of one minor unit as rounding - there is no acceptable discrepancy."
+      ],
+      "common_pitfalls": [
+        "An audit that reuses the reporting queries, which proves only self-consistency.",
+        "Running the audit only on a clean dataset, missing the reversal and merge cases."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-01",
+          "INV-02",
+          "INV-04"
+        ],
+        "risks": [
+          "R-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "Any discrepancy at all - stop and find the cause before continuing the stage."
+        ]
+      }
+    },
+    {
+      "id": "S09.05",
+      "substage": "9.5",
+      "position": "5 of 8",
+      "name": "Accessibility pass",
+      "goal": "Verify the app is usable without sight, with limited motor control, and at maximum text size.",
+      "why_it_matters": "NFR-08, and because a budgeting app that requires perfect eyesight excludes people from managing their own money.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.4 (Money correctness audit) is complete and ticked off."
+      ],
+      "inputs": [
+        "A physical device with TalkBack available."
+      ],
+      "work": [
+        {
+          "step": "9.5.1",
+          "action": "Complete the primary journey with TalkBack and the screen off or covered.",
+          "details": [
+            "Onboarding, adding income, reading the preview, confirming, and checking a balance.",
+            "Record the attempt step by step, including where it was difficult, not only where it failed."
+          ]
+        },
+        {
+          "step": "9.5.2",
+          "action": "Verify every interactive element has a meaningful label, not a raw widget name.",
+          "details": [
+            "Verify money amounts are announced in a form that makes sense read aloud, not as a digit sequence."
+          ]
+        },
+        {
+          "step": "9.5.3",
+          "action": "Verify all touch targets are at least 48dp, including inline edit controls in the allocation preview.",
+          "details": []
+        },
+        {
+          "step": "9.5.4",
+          "action": "Verify text contrast meets at least 4.5:1 for body text in both themes, measured rather than estimated.",
+          "details": []
+        },
+        {
+          "step": "9.5.5",
+          "action": "Verify layouts at 200 percent font scale and maximum display size, on the smallest supported screen.",
+          "details": []
+        },
+        {
+          "step": "9.5.6",
+          "action": "Verify no information is conveyed by colour alone, particularly ceiling progress and the business scope distinction.",
+          "details": []
+        },
+        {
+          "step": "9.5.7",
+          "action": "Verify focus order is logical and no focus trap exists in any dialog or multi-step flow.",
+          "details": []
+        },
+        {
+          "step": "9.5.8",
+          "action": "Test with reduced motion enabled, and confirm nothing becomes unusable or unintelligible.",
+          "details": []
+        },
+        {
+          "step": "9.5.9",
+          "action": "Log every finding as a defect with a severity, and fix everything that blocks task completion.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The full primary journey is completable with TalkBack, evidenced by a step-by-step log or recording.",
+        "No contrast, touch target or focus order failure remains unfixed or undocumented.",
+        "The app is usable at 200 percent font scale on a small screen with no clipped content.",
+        "No meaning depends on colour alone.",
+        "Amounts are announced intelligibly by the screen reader."
+      ],
+      "outputs": [
+        "Accessibility findings section of the test report.",
+        "Accessibility defect entries."
+      ],
+      "must_not": [
+        "Do not substitute a linter for actually using the app with a screen reader.",
+        "Do not defer a blocking accessibility failure to a future release."
+      ],
+      "common_pitfalls": [
+        "Labels added mechanically that read as nonsense aloud, such as button button.",
+        "Contrast estimated by eye rather than measured."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S09.06",
+      "substage": "9.6",
+      "position": "6 of 8",
+      "name": "Performance and resource testing",
+      "goal": "Measure every NFR-06 target on representative hardware at realistic data volume.",
+      "why_it_matters": "The app is opened many times a day, often on a modest phone, with years of accumulated data.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.5 (Accessibility pass) is complete and ticked off."
+      ],
+      "inputs": [
+        "The five-year synthetic dataset.",
+        "A mid-tier physical device."
+      ],
+      "work": [
+        {
+          "step": "9.6.1",
+          "action": "Measure and record: cold start, warm start, dashboard render, allocation preview latency while typing, report generation, export duration, and sync bootstrap.",
+          "details": [
+            "Measure on a mid-tier device with the five-year dataset loaded, and name the device in the report."
+          ]
+        },
+        {
+          "step": "9.6.2",
+          "action": "Profile for dropped frames while scrolling the dashboard and the transaction history.",
+          "details": []
+        },
+        {
+          "step": "9.6.3",
+          "action": "Measure memory over a long session and check for leaks across 100 navigation cycles.",
+          "details": []
+        },
+        {
+          "step": "9.6.4",
+          "action": "Measure database size growth and export duration at five-year volume.",
+          "details": []
+        },
+        {
+          "step": "9.6.5",
+          "action": "Measure battery and data impact of background sync over a simulated day.",
+          "details": []
+        },
+        {
+          "step": "9.6.6",
+          "action": "Record every figure against its NFR-06 target, and fix anything that misses.",
+          "details": [
+            "Profile before optimising, and re-run the full correctness suite after any optimisation."
+          ]
+        },
+        {
+          "step": "9.6.7",
+          "action": "Record any target that is missed and explicitly accepted, with the reason.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every measured figure meets its target or has a documented, accepted deviation.",
+        "No memory leak is detectable across 100 navigation cycles.",
+        "Background sync does not appear as a significant battery consumer over a simulated day.",
+        "All figures are recorded with the device they were measured on."
+      ],
+      "outputs": [
+        "Performance measurements section of the test report."
+      ],
+      "must_not": [
+        "Do not measure on a flagship device and report it as representative.",
+        "Do not optimise without profiling first."
+      ],
+      "common_pitfalls": [
+        "Measuring on an empty database, which produces figures no user will ever see.",
+        "An optimisation that improves a timing and breaks a golden vector."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S09.07",
+      "substage": "9.7",
+      "position": "7 of 8",
+      "name": "Privacy and security verification on the release build",
+      "goal": "Re-verify the privacy promise on a release-configuration build, not a development build.",
+      "why_it_matters": "NFR-01 is the product's central claim, and release builds differ from debug builds in exactly the ways that matter.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.6 (Performance and resource testing) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 7 privacy verification evidence.",
+        "A release-configuration build."
+      ],
+      "work": [
+        {
+          "step": "9.7.1",
+          "action": "Repeat the full-session traffic capture on a release-configuration build and compare it against the Stage 7 capture.",
+          "details": []
+        },
+        {
+          "step": "9.7.2",
+          "action": "Confirm the dependency tree still contains no telemetry, analytics or advertising SDK.",
+          "details": []
+        },
+        {
+          "step": "9.7.3",
+          "action": "Confirm no financial data appears in logs, in crash output, or in the Android backup.",
+          "details": [
+            "Configure Android backup rules deliberately - decide what is included and exclude anything sensitive.",
+            "Default backup behaviour can copy app data to Google's backup service, which is a decision that must be made consciously rather than inherited."
+          ]
+        },
+        {
+          "step": "9.7.4",
+          "action": "Confirm the app requests only the permissions it needs, and justify each one in writing.",
+          "details": []
+        },
+        {
+          "step": "9.7.5",
+          "action": "Confirm exported files land only where the user directed them.",
+          "details": []
+        },
+        {
+          "step": "9.7.6",
+          "action": "Confirm the deletion path: what happens to local data and remote data on sign-out and on explicit deletion request.",
+          "details": [
+            "Document it precisely, because the privacy policy must state it and the store listing must match it."
+          ]
+        },
+        {
+          "step": "9.7.7",
+          "action": "Confirm no secret, key or credential is present in the built artefact by inspecting it.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The release-build traffic capture shows only the expected Google endpoints.",
+        "Android backup behaviour is explicitly configured and documented, not inherited from defaults.",
+        "The permission list is minimal and each entry is justified in writing.",
+        "The deletion path is documented precisely enough for the privacy policy.",
+        "No secret or credential is present in the built artefact."
+      ],
+      "outputs": [
+        "Privacy verification section of the test report.",
+        "Backup rules configuration."
+      ],
+      "must_not": [
+        "Do not verify on a debug build only.",
+        "Do not leave Android backup behaviour at its default without a decision."
+      ],
+      "common_pitfalls": [
+        "Release builds enabling something debug builds disable, which only a release capture reveals.",
+        "App data silently included in cloud backup, contradicting the privacy claim."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01"
+        ],
+        "invariants": [
+          "INV-05"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_9_WORKLOG.md, then continue to substage 9.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "Any outbound call, backup path or log entry that exposes financial data."
+        ]
+      }
+    },
+    {
+      "id": "S09.08",
+      "substage": "9.8",
+      "position": "8 of 8",
+      "name": "Defect triage and the test report",
+      "goal": "Produce an honest record of what was found, what was fixed, and what remains.",
+      "why_it_matters": "The value of a QA pass is the record it leaves behind, and the honesty of that record.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 9.7 (Privacy and security verification on the release build) is complete and ticked off."
+      ],
+      "inputs": [
+        "Findings from substages 9.1 to 9.7."
+      ],
+      "work": [
+        {
+          "step": "9.8.1",
+          "action": "Triage every defect with a severity.",
+          "details": [
+            "Sev-1: data loss or incorrect money. Sev-2: a broken core flow.",
+            "Sev-3: degraded experience. Sev-4: cosmetic."
+          ]
+        },
+        {
+          "step": "9.8.2",
+          "action": "Fix every Sev-1 and Sev-2, and add a test for each that would have caught it.",
+          "details": [
+            "A fix without a test is an invitation for the same defect to return."
+          ]
+        },
+        {
+          "step": "9.8.3",
+          "action": "For every deferred Sev-3 and Sev-4, write the rationale and the release it is deferred to.",
+          "details": []
+        },
+        {
+          "step": "9.8.4",
+          "action": "Compile docs/TEST_REPORT.md.",
+          "details": [
+            "Scope and environment, coverage by layer with figures, automated results, manual checklist results, money correctness audit, accessibility findings, performance measurements, privacy verification, defect list by severity, known limitations, and an NFR compliance table.",
+            "Use figures, not adjectives."
+          ]
+        },
+        {
+          "step": "9.8.5",
+          "action": "Update docs/TRACEABILITY.md so every FR and NFR shows its verifying artefact and a final status.",
+          "details": [
+            "No row may lack a verification artefact at this point."
+          ]
+        },
+        {
+          "step": "9.8.6",
+          "action": "State plainly in the report whether the app is fit for release, and list anything a user should be warned about.",
+          "details": []
+        },
+        {
+          "step": "9.8.7",
+          "action": "Write docs/reports/STAGE_9_REPORT.md and prepare the gate question with real figures.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No Sev-1 or Sev-2 defect remains open.",
+        "Every fixed defect has a test that would have caught it.",
+        "Every deferred defect has a written rationale.",
+        "TRACEABILITY.md has no row without a verification artefact.",
+        "The report states fitness for release plainly, with figures rather than adjectives."
+      ],
+      "outputs": [
+        "docs/TEST_REPORT.md",
+        "docs/TRACEABILITY.md complete.",
+        "docs/reports/STAGE_9_REPORT.md"
+      ],
+      "must_not": [
+        "Do not reclassify a defect to clear the gate.",
+        "Do not close a defect without a regression test."
+      ],
+      "common_pitfalls": [
+        "A test report that reads as reassurance rather than evidence.",
+        "Known limitations omitted, which then surface as user complaints after release."
+      ],
+      "traceability": {
+        "covers": [
+          "All FR and NFR"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "A Sev-1 defect that cannot be fixed without a design change - raise it rather than deferring it."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "docs/TEST_REPORT.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/MANUAL_TEST_CHECKLIST.md",
+      "format": "markdown"
+    },
+    {
+      "path": "tool/reconcile.dart or equivalent",
+      "format": "code"
+    },
+    {
+      "path": "test/** additions",
+      "format": "code"
+    },
+    {
+      "path": "docs/reports/STAGE_9_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "No open Sev-1 or Sev-2 defects.",
+    "Coverage targets met: engine at least 95 percent, domain and data at least 90 percent, presentation at least 75 percent.",
+    "The money correctness audit finds zero discrepancies.",
+    "The primary journey is completable with TalkBack.",
+    "All NFR-06 performance targets met or explicitly accepted.",
+    "Release-build privacy verification passes.",
+    "TRACEABILITY.md complete for every FR and NFR."
+  ],
+  "stage_must_not": [
+    "Do not add features in this stage; fix defects only.",
+    "Do not mark a defect resolved without a test that would have caught it.",
+    "Do not lower a coverage target to make it pass.",
+    "Do not defer a Sev-1 or Sev-2 defect to a later release.",
+    "Do not report a test as passing without the evidence attached.",
+    "Do not add crash reporting or analytics to help QA."
+  ],
+  "anti_patterns": [
+    "Testing only the happy path and calling the stage complete.",
+    "Reclassifying an inconvenient Sev-1 as Sev-3 to clear the gate.",
+    "Accessibility checked with a linter rather than with a screen reader.",
+    "Performance measured on a flagship device and reported as representative."
+  ],
+  "open_questions_to_resolve": [],
+  "risks_in_focus": [
+    "R-01",
+    "R-02",
+    "R-03",
+    "R-07"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "The defect list and known limitations feed the Stage 10 release notes.",
+      "Privacy verification and permission justification feed the privacy policy and data safety form.",
+      "The manual checklist becomes the pre-release ritual for every future version."
+    ],
+    "summary_to_write": "State plainly whether the app is fit for release, and list anything a user should be warned about."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_9_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 9 (QA) is complete. Coverage: engine <A> percent, domain/data <B> percent, presentation <C> percent. Defects found: <N>, all Sev-1 and Sev-2 fixed. Known limitations: <list>. Do you approve moving to Stage 10, release prep?"
+  }
+}

@@ -1,0 +1,936 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 1,
+  "stage_id": "S01",
+  "name": "Requirements Gathering & Documentation",
+  "one_line_goal": "Turn the feature wish-list into a precise, testable specification that nobody has to guess at later.",
+  "objective": "Produce a complete, unambiguous Product Requirements Document before writing any code, and surface every ambiguity as an explicit question rather than a silent assumption.",
+  "rationale": "Every requirement in this brief touches money movement. An ambiguity that survives into the schema costs a migration and a data-correctness incident later. This stage exists to make the expensive questions cheap.",
+  "depends_on": [],
+  "blocks": [
+    "S02"
+  ],
+  "entry_criteria": [
+    "00_project_manifest.json has been read in full, including the invariants and the open questions register.",
+    "The user is available to answer clarifying questions before Stage 2 begins."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-01 through FR-15"
+    ],
+    "non_functional_requirements": [
+      "NFR-01",
+      "NFR-02",
+      "NFR-03",
+      "NFR-04"
+    ],
+    "open_questions_owned": [
+      "OQ-01",
+      "OQ-02",
+      "OQ-04",
+      "OQ-06",
+      "OQ-09"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 8,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_1_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "1.1 Intake and source reconciliation",
+      "1.2 Personas and end-to-end journeys",
+      "1.3 User stories and acceptance criteria",
+      "1.4 The money model in plain language",
+      "1.5 Non-functional requirements with measurable targets",
+      "1.6 Scope boundaries and the version 1 cut line",
+      "1.7 Open questions and ambiguity register",
+      "1.8 Traceability matrix and PRD assembly"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S01.01",
+      "substage": "1.1",
+      "position": "1 of 8",
+      "name": "Intake and source reconciliation",
+      "goal": "Inventory every stated requirement from the source brief so nothing can be quietly dropped later.",
+      "why_it_matters": "The most common requirements failure is not misinterpretation, it is omission. Building the inventory first makes omission detectable.",
+      "estimated_session": "Short session. Mechanical but load-bearing.",
+      "entry_criteria": [
+        "00_project_manifest.json has been read in full, including the invariants and the open questions register.",
+        "The user is available to answer clarifying questions before Stage 2 begins."
+      ],
+      "inputs": [
+        "00_project_manifest.json feature_requirements, non_functional_requirements, predefined_categories, cloud_sync_requirements."
+      ],
+      "work": [
+        {
+          "step": "1.1.1",
+          "action": "Extract every distinct requirement statement from the manifest into a flat working list, one line each, preserving the original wording verbatim alongside its FR or NFR id.",
+          "details": [
+            "Do not paraphrase at this point - paraphrasing is where requirements quietly change meaning.",
+            "Include requirements that are implied by the predefined_categories and cloud_sync_requirements blocks, not only those in the FR list.",
+            "Note that the manifest lists 15 FRs and 8 NFRs; if your inventory has a different count, reconcile before continuing."
+          ]
+        },
+        {
+          "step": "1.1.2",
+          "action": "Split any compound requirement that contains more than one testable claim into separate sub-requirements, keeping the parent id and adding a letter suffix.",
+          "details": [
+            "Example: FR-04 covers both logging an income event and auto-splitting it; those are two verifiable behaviours and become FR-04a and FR-04b.",
+            "Example: FR-14 covers monthly summaries, yearly summaries, category trends and CSV export - four distinct capabilities."
+          ]
+        },
+        {
+          "step": "1.1.3",
+          "action": "Classify each requirement: functional, non-functional, constraint, or assumption presented as a requirement.",
+          "details": [
+            "A constraint is something the design must not do, such as never using a third-party server.",
+            "An assumption presented as a requirement is a red flag - route it to substage 1.7."
+          ]
+        },
+        {
+          "step": "1.1.4",
+          "action": "Identify the requirements that touch money movement and mark them as CRITICAL, because they will need failure-case acceptance criteria in substage 1.3.",
+          "details": []
+        },
+        {
+          "step": "1.1.5",
+          "action": "Cross-check the inventory against the global invariants INV-01 to INV-12 and flag any requirement that appears to conflict with one.",
+          "details": [
+            "A conflict here is a genuine finding and must be escalated, not resolved silently."
+          ]
+        },
+        {
+          "step": "1.1.6",
+          "action": "Write the inventory into docs/PRD.md as an appendix table so the final document carries its own provenance.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every FR and NFR id from the manifest appears in the inventory exactly once, with its verbatim source wording.",
+        "Every compound requirement has been split, and the split is justified in one line each.",
+        "Requirements touching money movement are marked CRITICAL and counted.",
+        "Any requirement conflicting with an invariant is listed separately and escalated rather than resolved."
+      ],
+      "outputs": [
+        "docs/PRD.md appendix: source requirement inventory table."
+      ],
+      "must_not": [
+        "Do not paraphrase source wording in this substage.",
+        "Do not resolve conflicts you discover - record and escalate them."
+      ],
+      "common_pitfalls": [
+        "Collapsing two requirements into one because they appear in the same sentence.",
+        "Treating the predefined category list as decorative rather than as a requirement with real implications for onboarding."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01 through FR-15",
+          "NFR-01 through NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "The inventory is complete, counted, and cross-checked against the invariants."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.02",
+      "substage": "1.2",
+      "position": "2 of 8",
+      "name": "Personas and end-to-end journeys",
+      "goal": "Describe who uses the app and the exact step-by-step paths they take, including the paths where things go wrong.",
+      "why_it_matters": "Stage 2 derives the navigation graph directly from these journeys. A missing journey becomes a missing screen.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.1 (Intake and source reconciliation) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest personas P1 and P2.",
+        "The requirement inventory from substage 1.1."
+      ],
+      "work": [
+        {
+          "step": "1.2.1",
+          "action": "Expand persona P1, the personal saver: goals, financial context, technical confidence, device assumptions, what triggers them to open the app, and what would make them abandon it.",
+          "details": [
+            "Be concrete about context of use: often on a phone, often distracted, often within minutes of receiving money.",
+            "State their prior budgeting experience as none, because NFR-04 depends on that assumption."
+          ]
+        },
+        {
+          "step": "1.2.2",
+          "action": "Expand persona P2, the owner-operator: the same, plus the business pressures that make mixing business and personal money costly for them.",
+          "details": [
+            "Capture why separation matters emotionally, not only structurally - business float spent on groceries is the failure they fear."
+          ]
+        },
+        {
+          "step": "1.2.3",
+          "action": "Write the P1 primary journey as numbered steps, naming a screen at every step.",
+          "details": [
+            "First launch, currency confirmation, choosing scope, setting top-level ratios, accepting suggested categories, setting within-group percentages, optionally setting ceilings, optionally adding accounts, landing on the dashboard.",
+            "Then: logging the first salary, previewing the split, confirming, seeing the result.",
+            "Then: logging a grocery spend and checking the dashboard the next day."
+          ]
+        },
+        {
+          "step": "1.2.4",
+          "action": "Write the P2 primary journey, covering business setup and a business income event that hits an inventory ceiling and overflows.",
+          "details": [
+            "The overflow moment is the single most important thing to get right in the design; describe what the user should understand at that moment."
+          ]
+        },
+        {
+          "step": "1.2.5",
+          "action": "Write at least five failure journeys, each ending with the user still in control of their data.",
+          "details": [
+            "No internet on first launch, all the way through onboarding and a first income event.",
+            "Google permission revoked later, discovered on the next sync attempt.",
+            "A mistaken income entry that must be undone.",
+            "A second device added months later, needing to receive existing history.",
+            "The user's phone is lost and they install on a replacement device."
+          ]
+        },
+        {
+          "step": "1.2.6",
+          "action": "For every journey, mark the step with the highest abandonment risk and state in one sentence what the design must do at that step.",
+          "details": []
+        },
+        {
+          "step": "1.2.7",
+          "action": "Estimate the wall-clock time for the P1 setup journey when every default is accepted, and record the target of under 5 minutes from NFR-04.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Both primary journeys are written as numbered steps with a named screen at each step.",
+        "At least five failure journeys exist and none ends in a dead end or in data loss.",
+        "Every journey names its highest-risk step and the design response.",
+        "The P1 default-accepting setup path is short enough to plausibly complete in under 5 minutes, and the step count supports that claim."
+      ],
+      "outputs": [
+        "docs/PRD.md section 2: personas and journeys."
+      ],
+      "must_not": [
+        "Do not design screens here - name them and describe what the user does, not how the screen looks.",
+        "Do not invent a third persona without raising it as a scope question."
+      ],
+      "common_pitfalls": [
+        "Writing only happy-path journeys, which produces a design with no error states.",
+        "Journeys written at a level so abstract that no screen can be derived from them."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-03",
+          "NFR-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.03",
+      "substage": "1.3",
+      "position": "3 of 8",
+      "name": "User stories and acceptance criteria",
+      "goal": "Convert every inventoried requirement into a user story with observable Given/When/Then criteria.",
+      "why_it_matters": "A wish-list item is not testable. A story with criteria is what Stage 9 verifies against.",
+      "estimated_session": "The longest substage of this stage. Expect it to take a full session.",
+      "entry_criteria": [
+        "Substage 1.2 (Personas and end-to-end journeys) is complete and ticked off."
+      ],
+      "inputs": [
+        "The requirement inventory from 1.1.",
+        "The journeys from 1.2."
+      ],
+      "work": [
+        {
+          "step": "1.3.1",
+          "action": "For every inventoried requirement, write one or more stories in the form: As a <P1 or P2>, I want <capability>, so that <outcome>.",
+          "details": [
+            "Give each story a stable id US-001 onward and record the FR or NFR id it satisfies.",
+            "Where a requirement serves both personas differently, write two stories rather than one vague one."
+          ]
+        },
+        {
+          "step": "1.3.2",
+          "action": "Attach Given/When/Then acceptance criteria to every story, observable from outside the app.",
+          "details": [
+            "No criterion may reference an internal class, table or function.",
+            "Each criterion must be checkable by a person holding a phone."
+          ]
+        },
+        {
+          "step": "1.3.3",
+          "action": "For every story marked CRITICAL in 1.1, add at least one negative or failure criterion.",
+          "details": [
+            "For income splitting: what happens at zero, at one minor unit, at a very large amount, and when the percentages are stale.",
+            "For ceilings: what the user sees when a category is already full before the income arrives.",
+            "For overrides: what happens when the overridden amounts do not total the income."
+          ]
+        },
+        {
+          "step": "1.3.4",
+          "action": "Write the interaction stories explicitly, because FR-10, FR-11 and FR-12 interact and the interaction is where defects live.",
+          "details": [
+            "A manual override that pushes a category past its ceiling - state the expected behaviour.",
+            "A fixed-recurring category that is already funded for the period when new income arrives.",
+            "A redirect target that is itself full - state what the user should see.",
+            "A redirect chain that ends at the sink - state how it is explained."
+          ]
+        },
+        {
+          "step": "1.3.5",
+          "action": "Assign MoSCoW priority to each story, inheriting the manifest FR priority unless there is a reason to differ, and state the reason where you differ.",
+          "details": []
+        },
+        {
+          "step": "1.3.6",
+          "action": "Flag every story whose criteria you could not write without guessing, and carry the guess to substage 1.7 as an open question.",
+          "details": []
+        },
+        {
+          "step": "1.3.7",
+          "action": "Build the FR-to-story coverage table and confirm no FR is uncovered.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every FR id is covered by at least one story; the coverage table shows no gaps.",
+        "No story contains the words etc, and so on, appropriate, or as needed.",
+        "Every story has at least one Given/When/Then criterion.",
+        "Every CRITICAL story has at least one negative or failure criterion.",
+        "The four interaction cases between ceilings, fixed-recurring categories and overrides each have an explicit expected behaviour."
+      ],
+      "outputs": [
+        "docs/PRD.md section 5: functional requirements as user stories.",
+        "docs/PRD.md coverage table: FR id to story ids."
+      ],
+      "must_not": [
+        "Do not write criteria that presuppose an implementation.",
+        "Do not skip the negative cases for money-moving stories - they are the point."
+      ],
+      "common_pitfalls": [
+        "Acceptance criteria that restate the story in different words without adding a check.",
+        "Leaving the ceiling-plus-override interaction undefined, which forces the Stage 5 implementer to invent policy."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01 through FR-15"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.04",
+      "substage": "1.4",
+      "position": "4 of 8",
+      "name": "The money model in plain language",
+      "goal": "Define what a balance, a ceiling, a redirect and a category type mean in words a non-developer can act on.",
+      "why_it_matters": "Stage 2 designs the schema straight from this section. Loose words here produce a loose schema.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.3 (User stories and acceptance criteria) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest domain glossary and global invariants.",
+        "Stories from 1.3."
+      ],
+      "work": [
+        {
+          "step": "1.4.1",
+          "action": "Define what a category balance means, and just as importantly what it does not mean.",
+          "details": [
+            "It is money set aside and not yet spent, as recorded in the app.",
+            "It is not necessarily what any bank shows, because the app has no bank connection.",
+            "State that it is always derived from recorded events, never typed in directly (INV-04)."
+          ]
+        },
+        {
+          "step": "1.4.2",
+          "action": "Define each category type, what full means for it, and what happens on overflow.",
+          "details": [
+            "ACCUMULATING_RESERVE: grows toward a ceiling; overflow redirects.",
+            "FIXED_RECURRING: funded up to a known bill amount per period; surplus redirects rather than accumulating.",
+            "UNCAPPED_FLOW if OQ-03 is resolved in favour: a spending envelope with no cap and therefore no overflow.",
+            "State plainly for each type whether spending from it reopens headroom."
+          ]
+        },
+        {
+          "step": "1.4.3",
+          "action": "Define a ceiling as a target for accumulation, and state explicitly that it is not a spending limit.",
+          "details": [
+            "This distinction confuses users of other budgeting apps and must be unambiguous in the product language."
+          ]
+        },
+        {
+          "step": "1.4.4",
+          "action": "Define the relationship between categories and bank accounts, resolving OQ-02 or presenting both options with their consequences.",
+          "details": [
+            "Option A: accounts are informational labels with a derived total.",
+            "Option B: accounts hold real balances requiring transfers and reconciliation, which is materially more scope."
+          ]
+        },
+        {
+          "step": "1.4.5",
+          "action": "State the conservation rule in user terms.",
+          "details": [
+            "Every unit of income lands in exactly one category, always.",
+            "The app will always be able to show the user where every unit went.",
+            "Nothing is ever rounded away or absorbed."
+          ]
+        },
+        {
+          "step": "1.4.6",
+          "action": "Describe redirect chains with a worked, human-readable example using real seeded category names and real figures.",
+          "details": [
+            "Use a chain of at least three categories ending somewhere uncapped.",
+            "Show the arithmetic so a reader can verify conservation by hand."
+          ]
+        },
+        {
+          "step": "1.4.7",
+          "action": "Define the sink category concept in user language and state that it cannot be deleted, per OQ-07.",
+          "details": []
+        },
+        {
+          "step": "1.4.8",
+          "action": "Define what a reversal is, per OQ-09: history is never edited, mistakes are corrected by an opposing entry that stays visible.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "A non-developer reading this section can correctly predict where money goes in a ceiling-overflow scenario.",
+        "At least one worked numeric example is included and its arithmetic conserves the input exactly.",
+        "Nothing in the section contradicts INV-01 through INV-12.",
+        "Each category type states its full condition, its overflow behaviour, and whether spending reopens headroom."
+      ],
+      "outputs": [
+        "docs/PRD.md section 4: the money model."
+      ],
+      "must_not": [
+        "Do not introduce schema or column names.",
+        "Do not use percentages expressed as decimals - the product language should stay in whole percentages, with basis points reserved for the design."
+      ],
+      "common_pitfalls": [
+        "Describing a ceiling in a way that a user reads as a spending cap.",
+        "Leaving the spending-reopens-headroom question implicit, which produces two incompatible reasonable implementations."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-10",
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-04",
+          "INV-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.05",
+      "substage": "1.5",
+      "position": "5 of 8",
+      "name": "Non-functional requirements with measurable targets",
+      "goal": "Give every quality attribute a number or a binary observable condition, plus the stage that verifies it.",
+      "why_it_matters": "Fast and private are not requirements until they have a threshold and a test.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.4 (The money model in plain language) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest NFR-01 to NFR-08.",
+        "Journeys from 1.2 for data volume reasoning."
+      ],
+      "work": [
+        {
+          "step": "1.5.1",
+          "action": "Restate NFR-01 to NFR-08 in the PRD and sharpen each measurable target where you can make it more specific.",
+          "details": []
+        },
+        {
+          "step": "1.5.2",
+          "action": "Specify offline behaviour in detail.",
+          "details": [
+            "Which operations must succeed with no network - the answer should be all of them.",
+            "What the UI shows when sync is stale, and what it shows for a user who never signs in.",
+            "How the user is told their data is device-only, without alarming them."
+          ]
+        },
+        {
+          "step": "1.5.3",
+          "action": "Specify sync expectations from the user's point of view, not the engineer's.",
+          "details": [
+            "What they should see if they edited the same category on two devices.",
+            "What they should see after a month offline.",
+            "What they should never see: a spinner blocking the app, or data silently changing without explanation."
+          ]
+        },
+        {
+          "step": "1.5.4",
+          "action": "Specify privacy in language reusable as the basis of the Stage 10 privacy policy.",
+          "details": [
+            "What leaves the device, what permissions are requested and why, what the developer can never see.",
+            "State the constraint that there is no developer-operated backend of any kind."
+          ]
+        },
+        {
+          "step": "1.5.5",
+          "action": "Specify performance budgets with numbers.",
+          "details": [
+            "Cold start, dashboard render, allocation preview latency while typing, report generation, export duration.",
+            "Name the reference device class - a mid-tier phone, not a flagship."
+          ]
+        },
+        {
+          "step": "1.5.6",
+          "action": "Specify accessibility targets concretely: screen reader coverage, touch target size, contrast ratio, font scaling limit.",
+          "details": []
+        },
+        {
+          "step": "1.5.7",
+          "action": "Derive data volume assumptions and state the five-year ledger size they imply.",
+          "details": [
+            "Categories 10 to 40, income events 1 to 20 per month, spending transactions 30 to 200 per month.",
+            "Compute the resulting row counts, because Stage 2 sizes indexes from this and Stage 9 builds synthetic datasets from it."
+          ]
+        },
+        {
+          "step": "1.5.8",
+          "action": "For each NFR, name the stage and the artefact that will verify it.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every NFR has a number or a binary observable condition attached.",
+        "Every NFR names its verifying stage and artefact.",
+        "The data volume section produces concrete five-year row counts.",
+        "The privacy section is complete enough to draft a policy from without further research."
+      ],
+      "outputs": [
+        "docs/PRD.md section 6: non-functional requirements.",
+        "docs/PRD.md section 7: data volume and growth assumptions."
+      ],
+      "must_not": [
+        "Do not write a target you have no intention of measuring.",
+        "Do not specify a performance target on a flagship device and call it representative."
+      ],
+      "common_pitfalls": [
+        "Targets so loose they can never fail, which makes Stage 9 a formality.",
+        "Omitting the data volume section, which leaves Stage 2 unable to justify its indexes."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01 through NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.06",
+      "substage": "1.6",
+      "position": "6 of 8",
+      "name": "Scope boundaries and the version 1 cut line",
+      "goal": "Name what is in, what is out, what is deferred, and which deferrals still need schema accommodation now.",
+      "why_it_matters": "The brief implies more than one release. Naming what is out prevents it being built by accident, and naming what must be accommodated prevents a migration later.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.5 (Non-functional requirements with measurable targets) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest explicit_non_goals_v1.",
+        "Stories from 1.3 with their priorities."
+      ],
+      "work": [
+        {
+          "step": "1.6.1",
+          "action": "Restate the non-goals from the manifest and add any discovered during 1.1 to 1.5.",
+          "details": []
+        },
+        {
+          "step": "1.6.2",
+          "action": "For each story, decide in-scope for version 1 or deferred, and justify every deferral in one line.",
+          "details": []
+        },
+        {
+          "step": "1.6.3",
+          "action": "Produce the version 1 acceptance definition as a tick-list: the shortest set of capabilities that makes the app worth opening daily.",
+          "details": [
+            "If a capability is not on this list, it is not blocking release."
+          ]
+        },
+        {
+          "step": "1.6.4",
+          "action": "For every deferred feature, classify it as schema-safe to defer, or requires schema accommodation now.",
+          "details": [
+            "Name the accommodation explicitly where one is needed - for example the target_date column implied by OQ-04.",
+            "This classification is the single most valuable output of this substage."
+          ]
+        },
+        {
+          "step": "1.6.5",
+          "action": "Identify any scope creep risk implied by the business features and state the boundary that keeps this a budgeting app rather than accounting software (R-05).",
+          "details": []
+        },
+        {
+          "step": "1.6.6",
+          "action": "Sanity-check the cut line against the journeys from 1.2: every step of both primary journeys must be supported by an in-scope capability.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The version 1 cut line is a tick-list, not a paragraph.",
+        "Every deferral is labelled schema-safe or requires-accommodation, with the accommodation named where applicable.",
+        "Every step of both primary journeys is supported by an in-scope capability.",
+        "The boundary against accounting-software creep is stated in one sentence."
+      ],
+      "outputs": [
+        "docs/PRD.md section 3: scope, deferrals and the version 1 cut line."
+      ],
+      "must_not": [
+        "Do not defer anything that the primary journeys depend on.",
+        "Do not defer a feature that needs schema accommodation without naming the accommodation."
+      ],
+      "common_pitfalls": [
+        "A cut line so generous that Stage 6 never ends.",
+        "Deferring a feature whose later addition would force a data migration, without saying so."
+      ],
+      "traceability": {
+        "covers": [
+          "Scope control for all FRs"
+        ],
+        "risks": [
+          "R-05"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.07",
+      "substage": "1.7",
+      "position": "7 of 8",
+      "name": "Open questions and ambiguity register",
+      "goal": "Collect every ambiguity into one register, each with options, consequences and a recommended default.",
+      "why_it_matters": "Unanswered questions are the real output of a requirements stage. Questions answered by silent assumption are how projects go wrong.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.6 (Scope boundaries and the version 1 cut line) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest open_questions_register OQ-01 to OQ-10.",
+        "Flags raised in substages 1.1 through 1.6."
+      ],
+      "work": [
+        {
+          "step": "1.7.1",
+          "action": "Carry all ten manifest open questions into docs/OPEN_QUESTIONS.md unchanged.",
+          "details": []
+        },
+        {
+          "step": "1.7.2",
+          "action": "Add every ambiguity flagged during this stage, numbered from OQ-11 onward.",
+          "details": [
+            "Candidate questions worth interrogating if not already raised: is income only salary or any inbound money including business revenue and refunds; does business revenue flow through the same three-way split or a business-only split; can one bank account hold several categories, and can one category span several accounts; what happens when a group has a non-zero percentage but no active categories; should spending from a savings category be possible at all or only a transfer out; is there a concept of a transfer between categories."
+          ]
+        },
+        {
+          "step": "1.7.3",
+          "action": "For each question record: the question in plain language, why it matters, which stage it blocks, the options with their consequences, and your recommended default.",
+          "details": [
+            "The recommended default is what lets the user answer go with your defaults in a single message."
+          ]
+        },
+        {
+          "step": "1.7.4",
+          "action": "Split the register into BLOCKING - must be answered before Stage 2 - and NON-BLOCKING.",
+          "details": [
+            "Be ruthless. A question is blocking only if design cannot proceed without it."
+          ]
+        },
+        {
+          "step": "1.7.5",
+          "action": "Write the blocking list as a short numbered list in plain language, free of technical jargon, ready to put in front of the user at the gate.",
+          "details": []
+        },
+        {
+          "step": "1.7.6",
+          "action": "Record every non-blocking default as an assumption A-xx in docs/ASSUMPTIONS.md, with the impact if it turns out wrong and a review point.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every open question states a recommended default.",
+        "The blocking list is short enough to answer in a few minutes.",
+        "No question requires the user to understand Flutter, databases or sync to answer it.",
+        "Every non-blocking default appears as a numbered assumption with its impact-if-wrong stated."
+      ],
+      "outputs": [
+        "docs/OPEN_QUESTIONS.md",
+        "docs/ASSUMPTIONS.md",
+        "docs/PRD.md section 8: open questions summary."
+      ],
+      "must_not": [
+        "Do not resolve a blocking question by assumption.",
+        "Do not pad the register with trivia that buries the important questions."
+      ],
+      "common_pitfalls": [
+        "Phrasing a question so the user cannot answer without a design conversation.",
+        "Recording a default without stating what breaks if it is wrong."
+      ],
+      "traceability": {
+        "covers": [
+          "OQ-01 through OQ-10 plus new"
+        ],
+        "risks": [
+          "R-05"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_1_WORKLOG.md, then continue to substage 1.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S01.08",
+      "substage": "1.8",
+      "position": "8 of 8",
+      "name": "Traceability matrix and PRD assembly",
+      "goal": "Assemble the finished PRD, build the traceability matrix, and prepare the stage gate.",
+      "why_it_matters": "The matrix is the mechanism that stops a requirement quietly disappearing between Stage 1 and Stage 10.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 1.7 (Open questions and ambiguity register) is complete and ticked off."
+      ],
+      "inputs": [
+        "All PRD sections drafted in 1.1 to 1.7."
+      ],
+      "work": [
+        {
+          "step": "1.8.1",
+          "action": "Build docs/TRACEABILITY.md with columns: FR or NFR id, story ids, implementing stage or stages, verifying artefact, status.",
+          "details": [
+            "Seed every status as NOT_STARTED; later stages update the same file rather than creating their own."
+          ]
+        },
+        {
+          "step": "1.8.2",
+          "action": "Verify the matrix has one row per manifest FR and NFR, with no empty implementing-stage cell.",
+          "details": []
+        },
+        {
+          "step": "1.8.3",
+          "action": "Assemble docs/PRD.md in the required section order and read it end to end as a single document.",
+          "details": [
+            "Sections: purpose and vision; personas and journeys; scope and cut line; money model; user stories; non-functional requirements; data volume; open questions; glossary; traceability reference; source inventory appendix."
+          ]
+        },
+        {
+          "step": "1.8.4",
+          "action": "Run a consistency pass across the whole PRD.",
+          "details": [
+            "Terminology matches the manifest glossary exactly - no synonyms introduced.",
+            "No section contains implementation detail.",
+            "No requirement appears in one section and contradicts itself in another.",
+            "Every number stated in one place matches the same number stated elsewhere."
+          ]
+        },
+        {
+          "step": "1.8.5",
+          "action": "Run a completeness pass against the substage 1.1 inventory: every inventoried requirement appears somewhere in the finished PRD.",
+          "details": []
+        },
+        {
+          "step": "1.8.6",
+          "action": "Write docs/reports/STAGE_1_REPORT.md using the manifest stage report sections.",
+          "details": [
+            "Include the count of stories written, the coverage table result, and the blocking question list."
+          ]
+        },
+        {
+          "step": "1.8.7",
+          "action": "Prepare the gate message: deliverables, blocking questions in plain language, and the request to proceed.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "TRACEABILITY.md has exactly one row per manifest FR and NFR, none with an empty implementing stage.",
+        "The completeness pass shows every inventoried requirement present in the PRD.",
+        "The consistency pass finds no contradictory statements or introduced synonyms.",
+        "The stage report is complete and the gate question is drafted."
+      ],
+      "outputs": [
+        "docs/PRD.md complete.",
+        "docs/TRACEABILITY.md",
+        "docs/reports/STAGE_1_REPORT.md"
+      ],
+      "must_not": [
+        "Do not proceed to Stage 2 before the user answers the blocking questions or explicitly authorises the defaults."
+      ],
+      "common_pitfalls": [
+        "A traceability matrix built once and never updated, which is worse than none because it looks authoritative.",
+        "Assembling without reading end to end, which leaves contradictions between sections written on different days."
+      ],
+      "traceability": {
+        "covers": [
+          "All FR and NFR"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "The user has not answered the blocking questions.",
+          "The completeness pass finds a requirement with no home in the PRD."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "docs/PRD.md",
+      "format": "markdown",
+      "note": "Assembled progressively across substages 1.2 to 1.8."
+    },
+    {
+      "path": "docs/TRACEABILITY.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/ASSUMPTIONS.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/OPEN_QUESTIONS.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_1_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "PRD.md contains all required sections with no placeholder text.",
+    "Every manifest FR and NFR is traceable to at least one user story.",
+    "All open questions are registered, prioritised and carry a recommended default.",
+    "No section of the PRD contains implementation detail - no class names, table definitions or package choices.",
+    "The blocking questions have been put to the user in plain language."
+  ],
+  "stage_must_not": [
+    "Do not write any application code.",
+    "Do not create UI mockups, wireframes or visual designs.",
+    "Do not define database schemas, table structures or column types.",
+    "Do not choose packages, libraries or a state management approach - that is Stage 2.",
+    "Do not resolve a blocking open question by assumption. Ask.",
+    "Do not silently expand scope beyond the brief; propose additions as open questions instead."
+  ],
+  "anti_patterns": [
+    "Restating the feature list with different formatting and calling it a PRD.",
+    "Writing acceptance criteria that only an engineer could test.",
+    "Burying an ambiguity in a parenthetical instead of raising it.",
+    "Producing thirty open questions, most of them trivial, so the important three get lost."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-01",
+    "OQ-02",
+    "OQ-04",
+    "OQ-06",
+    "OQ-09"
+  ],
+  "risks_in_focus": [
+    "R-05",
+    "R-06"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "PRD.md section on the money model drives the Stage 2 data model.",
+      "PRD.md journeys drive the Stage 2 navigation flow.",
+      "PRD.md NFR targets drive Stage 2 architecture trade-offs.",
+      "Answered open questions unblock Stage 2 design decisions."
+    ],
+    "summary_to_write": "List the design constraints Stage 2 must honour, derived from this stage."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_1_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 1 (Requirements) is complete. Deliverables: PRD.md, TRACEABILITY.md, ASSUMPTIONS.md, OPEN_QUESTIONS.md. I need answers to these blocking questions before design: <numbered list>. Do you approve moving to Stage 2?"
+  }
+}

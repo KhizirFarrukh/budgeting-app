@@ -1,0 +1,1627 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 2,
+  "stage_id": "S02",
+  "name": "System Design & Architecture",
+  "one_line_goal": "Decide the architecture, the data model and above all the exact allocation algorithm, on paper, before a line of app code exists.",
+  "objective": "Design the app's layering, local and cloud data models, navigation flow and the auto-distribution algorithm, all traceable to the approved PRD.",
+  "rationale": "The allocation engine is the product; everything else is a shell around it. Designing it in prose and pseudocode first, with worked numbers, makes the Stage 5 implementation a transcription exercise rather than an invention exercise.",
+  "depends_on": [
+    "S01"
+  ],
+  "blocks": [
+    "S03",
+    "S04",
+    "S05",
+    "S07"
+  ],
+  "entry_criteria": [
+    "PRD.md approved by the user.",
+    "Blocking open questions from Stage 1 answered, or explicit permission to proceed on the recorded defaults."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-02",
+      "FR-03",
+      "FR-05",
+      "FR-06",
+      "FR-07",
+      "FR-09",
+      "FR-10",
+      "FR-11",
+      "FR-15"
+    ],
+    "non_functional_requirements": [
+      "NFR-01",
+      "NFR-02",
+      "NFR-05",
+      "NFR-06",
+      "NFR-07"
+    ],
+    "invariants": [
+      "INV-01 through INV-12"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 13,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_2_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "2.1 State management decision",
+      "2.2 Layering, dependency rule and directory structure",
+      "2.3 Data model: entities, tables and columns",
+      "2.4 Data model: constraints, indexes, balances and migrations",
+      "2.5 Allocation algorithm: contracts and phase A base split",
+      "2.6 Allocation algorithm: phase B ceilings, redirects and termination",
+      "2.7 Allocation algorithm: overrides, reversals and the error taxonomy",
+      "2.8 Allocation algorithm: pseudocode, worked examples and the test vector table",
+      "2.9 Cloud sync data model and merge strategy",
+      "2.10 Validation and configuration integrity rules",
+      "2.11 Navigation, screen inventory and per-screen states",
+      "2.12 Technology decision set",
+      "2.13 Design review, assembly and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S02.01",
+      "substage": "2.1",
+      "position": "1 of 13",
+      "name": "State management decision",
+      "goal": "Choose the Flutter state management approach against explicit criteria and record ADR-001.",
+      "why_it_matters": "It determines how testable the app is and how offline and sync state reach the UI without blocking it.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "PRD.md approved by the user.",
+        "Blocking open questions from Stage 1 answered, or explicit permission to proceed on the recorded defaults."
+      ],
+      "inputs": [
+        "PRD NFR section, particularly offline behaviour and performance budgets."
+      ],
+      "work": [
+        {
+          "step": "2.1.1",
+          "action": "Write the evaluation criteria before naming any candidate.",
+          "details": [
+            "Testability of business logic without Flutter bindings.",
+            "Ergonomics for reactive streams from a local database, since the dashboard must update when background sync mutates data.",
+            "How naturally it expresses derived state - a balance derived from a ledger stream.",
+            "Boilerplate cost across roughly a dozen screens.",
+            "Maintenance signal and community size.",
+            "Ease of injecting fakes for Clock, IdGenerator and repositories."
+          ]
+        },
+        {
+          "step": "2.1.2",
+          "action": "Evaluate at least Riverpod and Bloc against those criteria, and note any third candidate you consider.",
+          "details": [
+            "Name specific weaknesses, not generalities. A weakness that could apply to any library is not an evaluation."
+          ]
+        },
+        {
+          "step": "2.1.3",
+          "action": "Check current package status and maintenance on pub.dev rather than relying on remembered versions.",
+          "details": []
+        },
+        {
+          "step": "2.1.4",
+          "action": "State the decision and define the state layer's boundaries.",
+          "details": [
+            "What is held in state versus what is recomputed from the database on demand.",
+            "Where use cases live and how they are invoked from the UI.",
+            "How a background sync mutation propagates to a visible screen."
+          ]
+        },
+        {
+          "step": "2.1.5",
+          "action": "Write ADR-001 with Status, Context, Decision, Alternatives considered, Consequences and Date.",
+          "details": []
+        },
+        {
+          "step": "2.1.6",
+          "action": "State how the choice will be enforced - for example that presentation widgets never call repositories directly.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "ADR-001 exists with all required sections and names the criteria before the winner.",
+        "The decision explicitly addresses how UI state stays correct while background sync mutates the database underneath it.",
+        "At least two candidates are evaluated with specific, non-generic weaknesses."
+      ],
+      "outputs": [
+        "docs/decisions/ADR-001-state-management.md",
+        "docs/ARCHITECTURE.md section 3."
+      ],
+      "must_not": [
+        "Do not choose by familiarity alone without stating criteria.",
+        "Do not pick an approach that requires business logic to import Flutter."
+      ],
+      "common_pitfalls": [
+        "Choosing a library whose testing story requires a widget test for every business rule.",
+        "Ignoring the background-mutation case, which is the one that actually matters here."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-02",
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.02",
+      "substage": "2.2",
+      "position": "2 of 13",
+      "name": "Layering, dependency rule and directory structure",
+      "goal": "Define four layers, the dependency rule, the enforcement mechanism and the exact directory tree Stage 3 will create.",
+      "why_it_matters": "The allocation engine must be unit-testable with no Flutter, no database and no clock. Only a filesystem-visible boundary keeps that true under pressure.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.1 (State management decision) is complete and ticked off."
+      ],
+      "inputs": [
+        "ADR-001.",
+        "Manifest engineering_conventions layering entry."
+      ],
+      "work": [
+        {
+          "step": "2.2.1",
+          "action": "Define the four layers and what belongs in each.",
+          "details": [
+            "domain: entities, value types, validators, the allocation engine, repository interfaces. Pure Dart, no I/O.",
+            "data: database, repository implementations, sync, remote adapters, serialisation.",
+            "application: use cases and state notifiers.",
+            "presentation: widgets, screens, theming."
+          ]
+        },
+        {
+          "step": "2.2.2",
+          "action": "State the dependency rule and its direction, and list what each layer may import.",
+          "details": [
+            "domain imports nothing from the other three and nothing from Flutter.",
+            "data may import domain only.",
+            "application may import domain and data interfaces.",
+            "presentation may import application, and domain types for display only."
+          ]
+        },
+        {
+          "step": "2.2.3",
+          "action": "Specify the enforcement mechanism Stage 3 will implement.",
+          "details": [
+            "A lint rule or a CI grep that fails if domain imports package:flutter, dart:io, or any data-layer path.",
+            "A check that no file outside data imports the database package.",
+            "State that these checks must fail on a deliberate violation, demonstrated in Stage 3."
+          ]
+        },
+        {
+          "step": "2.2.4",
+          "action": "Write the complete directory tree, deep enough that Stage 3 creates it verbatim with no invention.",
+          "details": [
+            "Decide feature-first or layer-first and justify the choice against the screen count and team size.",
+            "Include test directory structure mirroring lib."
+          ]
+        },
+        {
+          "step": "2.2.5",
+          "action": "Name the abstractions the domain layer requires injected: Clock, IdGenerator, and each repository interface.",
+          "details": []
+        },
+        {
+          "step": "2.2.6",
+          "action": "Draw the confirm-income sequence diagram as a Mermaid sequence block.",
+          "details": [
+            "User taps Confirm, use case gathers balances, engine computes, repository writes atomically, reactive stream emits, dashboard updates.",
+            "Mark clearly on the diagram where the engine purity boundary sits and what crosses it."
+          ]
+        },
+        {
+          "step": "2.2.7",
+          "action": "Define cross-cutting concerns and where they live: error types, logging policy that excludes financial data, time handling, id generation, currency formatting.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The directory tree is complete enough to be created verbatim in Stage 3.",
+        "The dependency rule states, per layer, exactly what may be imported.",
+        "The enforcement mechanism is named and is mechanical, not a convention.",
+        "The sequence diagram renders and shows the engine purity boundary."
+      ],
+      "outputs": [
+        "docs/ARCHITECTURE.md sections 1, 2, 4, 8, 10."
+      ],
+      "must_not": [
+        "Do not allow any design in which the engine reads the clock or the database.",
+        "Do not describe the layering without naming how it will be enforced."
+      ],
+      "common_pitfalls": [
+        "A layering diagram nobody can check, which erodes within two stages.",
+        "Putting validators in the data layer, so the domain cannot validate without a database."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.03",
+      "substage": "2.3",
+      "position": "3 of 13",
+      "name": "Data model: entities, tables and columns",
+      "goal": "Define every table, column, type and enumeration needed by the approved user stories.",
+      "why_it_matters": "This is the contract Stage 4 implements and Stage 7 must merge across devices.",
+      "estimated_session": "Long session. Expect to revisit it after substage 2.4.",
+      "entry_criteria": [
+        "Substage 2.2 (Layering, dependency rule and directory structure) is complete and ticked off."
+      ],
+      "inputs": [
+        "PRD money model section.",
+        "PRD user stories.",
+        "Manifest invariants and conventions."
+      ],
+      "work": [
+        {
+          "step": "2.3.1",
+          "action": "Enumerate the tables required, at minimum:",
+          "details": [
+            "category_group, category, account, distribution_rule_version, rule_line, income_event, allocation, ledger_entry, spending_transaction, app_settings, sync_metadata, outbox.",
+            "Decide whether allocation and spending_transaction are separate tables or subtypes of ledger_entry, and justify it."
+          ]
+        },
+        {
+          "step": "2.3.2",
+          "action": "For every table define columns with type, nullability, default and meaning.",
+          "details": [
+            "Money columns are integer minor units. Percentage columns are integer basis points.",
+            "Timestamps are integer UTC epoch milliseconds.",
+            "Primary keys are TEXT UUIDs, client-generated (INV-12).",
+            "Every synced table carries updated_at_ms, updated_by_device, hlc, is_deleted, deleted_at_ms."
+          ]
+        },
+        {
+          "step": "2.3.3",
+          "action": "Model the category record fully.",
+          "details": [
+            "id, group_id, name, type, sort_order, is_archived, is_suggested_seed, seed_version.",
+            "ceiling_minor nullable, for ACCUMULATING_RESERVE.",
+            "bill_amount_minor and period_anchor_day nullable, for FIXED_RECURRING.",
+            "redirect_target_category_id nullable self-reference.",
+            "linked_account_id nullable.",
+            "target_date nullable, reserved for the deferred OQ-04 feature so adding it later is not a migration.",
+            "is_sink boolean, non-deletable when true."
+          ]
+        },
+        {
+          "step": "2.3.4",
+          "action": "Model rule versioning so historical events stay explainable (INV-11).",
+          "details": [
+            "distribution_rule_version: id, effective_from_ms, created_at_ms, note.",
+            "rule_line: id, rule_version_id, scope (GROUP or CATEGORY), group_id or category_id, basis_points.",
+            "income_event carries the rule_version_id actually used."
+          ]
+        },
+        {
+          "step": "2.3.5",
+          "action": "Model the ledger so it is append-only and self-describing.",
+          "details": [
+            "ledger_entry: id, category_id, account_id, direction, amount_minor, occurred_at_ms, recorded_at_ms, source_type (ALLOCATION, SPENDING, REVERSAL, ADJUSTMENT), source_id, reason (BASE, REDIRECT, MANUAL_OVERRIDE, SINK_TERMINAL), redirected_from_category_id, reverses_entry_id, note.",
+            "State that there is no update or delete path for this table (INV-03)."
+          ]
+        },
+        {
+          "step": "2.3.6",
+          "action": "Model app_settings: currency code, minor unit exponent, locale, business scope enabled, sink category id, onboarding completion state, schema version.",
+          "details": []
+        },
+        {
+          "step": "2.3.7",
+          "action": "Define every enumeration and its permitted values, and state that values are stored as stable strings rather than ordinals so reordering an enum cannot corrupt data.",
+          "details": []
+        },
+        {
+          "step": "2.3.8",
+          "action": "Produce the ER diagram as a Mermaid erDiagram block matching the written schema exactly.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No column stores money or a percentage as a real, double, float or numeric type.",
+        "Every synced table carries the five sync columns.",
+        "The ledger table has no design affordance for update or delete.",
+        "Every enumeration lists its permitted values and is stored as a stable string.",
+        "The ER diagram renders and matches the written schema with no discrepancy.",
+        "The target_date column is present and documented as reserved."
+      ],
+      "outputs": [
+        "docs/SCHEMA.md sections 1, 2, 3, 4."
+      ],
+      "must_not": [
+        "Do not use auto-increment integer primary keys.",
+        "Do not model a balance as a directly-mutable column without the derivation policy from substage 2.4.",
+        "Do not store enums as ordinals."
+      ],
+      "common_pitfalls": [
+        "Forgetting the rule version reference on income_event, which makes historical events unexplainable after a percentage change.",
+        "Omitting redirected_from on the ledger, which makes it impossible to show the user where overflow went."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01",
+          "FR-02",
+          "FR-03",
+          "FR-05",
+          "FR-07",
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-01",
+          "INV-03",
+          "INV-09",
+          "INV-11",
+          "INV-12"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.04",
+      "substage": "2.4",
+      "position": "4 of 13",
+      "name": "Data model: constraints, indexes, balances and migrations",
+      "goal": "Specify integrity constraints, the indexes the real queries need, the balance derivation policy and the migration strategy.",
+      "why_it_matters": "A schema without constraints is a suggestion, and a schema without indexes fails the Stage 9 performance pass on a five-year ledger.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.3 (Data model: entities, tables and columns) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 2.3 tables.",
+        "PRD data volume assumptions.",
+        "PRD journeys, for the query patterns."
+      ],
+      "work": [
+        {
+          "step": "2.4.1",
+          "action": "Define foreign keys for every relationship and state the on-delete behaviour, remembering that deletes are soft.",
+          "details": [
+            "State that foreign key enforcement must be explicitly enabled at connection time, since many SQLite setups default it off."
+          ]
+        },
+        {
+          "step": "2.4.2",
+          "action": "Define unique constraints.",
+          "details": [
+            "Category name unique within a group among non-archived rows.",
+            "One active rule version at a time, or an explicit rule for overlapping effective dates.",
+            "Account name unique among non-archived rows."
+          ]
+        },
+        {
+          "step": "2.4.3",
+          "action": "List the real queries the app will run, taken from the PRD journeys, and define an index for each.",
+          "details": [
+            "Ledger by category and date range - the balance and history queries.",
+            "Ledger by date range across all categories - the report queries.",
+            "Ledger by source_id - reversal lookup.",
+            "Category by group and sort order - the dashboard.",
+            "Outbox by state and created_at - the sync worker.",
+            "For each index state which query it serves; an index with no named query does not belong in the design."
+          ]
+        },
+        {
+          "step": "2.4.4",
+          "action": "Specify check constraints where the database can enforce them: non-negative ceilings, basis points within 0 to 10000, direction in its permitted set.",
+          "details": []
+        },
+        {
+          "step": "2.4.5",
+          "action": "Decide and document the balance policy required by INV-04.",
+          "details": [
+            "Option A: always derived by summing ledger entries.",
+            "Option B: a materialised cache table with an explicit invalidation and recompute path.",
+            "Whichever is chosen, define the recompute-and-compare verification procedure and when it runs.",
+            "State the expected cost of a full recompute at the five-year volume from the PRD."
+          ]
+        },
+        {
+          "step": "2.4.6",
+          "action": "Define the migration strategy.",
+          "details": [
+            "Versioned migrations, forward-only, each with a fixture database from the previous version.",
+            "The rule that every schema change ships with a migration test.",
+            "The automatic pre-migration export required by NFR-07."
+          ]
+        },
+        {
+          "step": "2.4.7",
+          "action": "Define the deletion and retention policy: soft delete everywhere, tombstone retention window, and the safe-purge condition.",
+          "details": []
+        },
+        {
+          "step": "2.4.8",
+          "action": "Document the schema version constant and where it is stored, since both the database and the remote payload need it.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every index names the specific query it serves.",
+        "Foreign key enforcement is called out as an explicit requirement rather than assumed.",
+        "The balance policy is chosen, with a verification procedure defined.",
+        "The migration strategy names the fixture-testing requirement.",
+        "Tombstone retention has a stated window and a safe-purge condition."
+      ],
+      "outputs": [
+        "docs/SCHEMA.md sections 5, 6, 7."
+      ],
+      "must_not": [
+        "Do not specify an index without a query.",
+        "Do not choose a cached balance without a recompute-and-compare path."
+      ],
+      "common_pitfalls": [
+        "Assuming SQLite enforces foreign keys by default, which it commonly does not.",
+        "Purging tombstones on a timer, which resurrects records on a device that was offline longer than the timer."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-04",
+          "INV-10"
+        ],
+        "covers": [
+          "NFR-06",
+          "NFR-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.05",
+      "substage": "2.5",
+      "position": "5 of 13",
+      "name": "Allocation algorithm: contracts and phase A base split",
+      "goal": "Define the engine's input and output contracts and specify the integer-only percentage split with largest-remainder rounding.",
+      "why_it_matters": "Rounding drift is where budgeting apps lose money one unit at a time. Specifying it precisely here removes the implementer's discretion.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.4 (Data model: constraints, indexes, balances and migrations) is complete and ticked off."
+      ],
+      "inputs": [
+        "PRD money model.",
+        "Substage 2.3 schema.",
+        "Manifest INV-01, INV-02, INV-08."
+      ],
+      "work": [
+        {
+          "step": "2.5.1",
+          "action": "Define the AllocationRequest contract - everything the engine needs, passed in, because it reads nothing itself.",
+          "details": [
+            "income_amount_minor as int64.",
+            "evaluated_at_ms, passed in rather than read from a clock.",
+            "rule_version snapshot: group basis points and within-group category basis points.",
+            "For every active category: id, group, type, sort_order, ceiling_minor or bill_amount_minor, current_balance_minor, allocated_in_current_period_minor, redirect_target_id, is_sink.",
+            "sink_category_id.",
+            "optional overrides: map of category id to amount_minor.",
+            "period definition inputs for fixed-recurring categories."
+          ]
+        },
+        {
+          "step": "2.5.2",
+          "action": "Define the AllocationResult contract.",
+          "details": [
+            "Ordered allocation line items: category_id, amount_minor, reason, redirected_from_category_id, hop_count.",
+            "A diagnostics trace: an ordered list of human-readable events describing every acceptance and every redirect, suitable for rendering directly in the UI.",
+            "The rule_version_id used.",
+            "A summary: total allocated, total redirected, categories filled during this event."
+          ]
+        },
+        {
+          "step": "2.5.3",
+          "action": "State the purity contract explicitly.",
+          "details": [
+            "Synchronous, no async, no I/O, no clock, no global state, no randomness.",
+            "Same inputs produce byte-identical output, including ordering (INV-08)."
+          ]
+        },
+        {
+          "step": "2.5.4",
+          "action": "Specify phase A group split with integer arithmetic only.",
+          "details": [
+            "floor_share = (amount * bp) integer-divided by 10000.",
+            "remainder_numerator = (amount * bp) modulo 10000.",
+            "Sum the floors, compute leftover = amount - sum(floors).",
+            "Distribute leftover one minor unit at a time to the largest remainder numerators."
+          ]
+        },
+        {
+          "step": "2.5.5",
+          "action": "Specify the deterministic tie-break for equal remainder numerators.",
+          "details": [
+            "Lower sort_order wins, then lower id as a string comparison.",
+            "State this precisely enough that a reader can predict which category receives a leftover unit."
+          ]
+        },
+        {
+          "step": "2.5.6",
+          "action": "Specify that the identical routine runs again within each group to split the group amount across its categories.",
+          "details": []
+        },
+        {
+          "step": "2.5.7",
+          "action": "Specify the overflow guard on the amount times basis points intermediate, and state the documented maximum supported income.",
+          "details": [
+            "Compute the bound explicitly for int64 and state it in the document, so Stage 5 can implement a check rather than guess one."
+          ]
+        },
+        {
+          "step": "2.5.8",
+          "action": "State the phase A conservation assertion: group amounts sum to the income, and each group's category amounts sum to that group's amount.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The pseudocode for phase A contains no floating point operation.",
+        "The tie-break rule is stated precisely enough to predict the winner by hand.",
+        "The documented maximum income is a specific number, derived and shown.",
+        "The purity contract forbids clock, I/O and randomness explicitly.",
+        "Phase A conservation assertions are named as engine-internal checks that fail loudly."
+      ],
+      "outputs": [
+        "docs/ALLOCATION_ALGORITHM.md sections 1, 2, 5."
+      ],
+      "must_not": [
+        "Do not permit any floating point in the split.",
+        "Do not allow the engine to fetch a balance itself - balances arrive in the request."
+      ],
+      "common_pitfalls": [
+        "Distributing the leftover to the first category in iteration order, which biases allocation and is non-deterministic across map implementations.",
+        "Forgetting that the same rounding routine is needed twice, at group level and within group."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-02",
+          "FR-06",
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-01",
+          "INV-02",
+          "INV-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.06",
+      "substage": "2.6",
+      "position": "6 of 13",
+      "name": "Allocation algorithm: phase B ceilings, redirects and termination",
+      "goal": "Specify headroom by category type, the worklist that resolves capacity, redirect chaining, cycle defence and the terminal sink.",
+      "why_it_matters": "FR-10 and FR-11 are the app's differentiator, and chained redirects are where naive implementations silently lose money.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.5 (Allocation algorithm: contracts and phase A base split) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 2.5 contracts.",
+        "PRD money model.",
+        "OQ-03, OQ-05, OQ-07 resolutions."
+      ],
+      "work": [
+        {
+          "step": "2.6.1",
+          "action": "Define headroom precisely for each category type.",
+          "details": [
+            "ACCUMULATING_RESERVE: max(0, ceiling_minor - current_balance_minor - accepted_so_far_this_run).",
+            "FIXED_RECURRING: max(0, bill_amount_minor - allocated_in_current_period_minor - accepted_so_far_this_run).",
+            "UNCAPPED_FLOW: unbounded.",
+            "Sink: unbounded by construction, and this must be validated at configuration time."
+          ]
+        },
+        {
+          "step": "2.6.2",
+          "action": "Specify the accepted_so_far_this_run tracker and why it exists.",
+          "details": [
+            "Two parcels arriving at the same category within one event must not both consume the same headroom.",
+            "This is the single most commonly missed detail in this algorithm."
+          ]
+        },
+        {
+          "step": "2.6.3",
+          "action": "Specify the worklist algorithm.",
+          "details": [
+            "Seed a queue with the phase A allocations in deterministic order: sort_order then id.",
+            "Pop a parcel, compute the destination's current headroom including accepted_so_far.",
+            "accepted = min(pending, headroom); record it with its reason.",
+            "overflow = pending - accepted; if greater than zero, push a new parcel to the redirect target with hop_count incremented and the visited set extended.",
+            "Continue until the queue is empty."
+          ]
+        },
+        {
+          "step": "2.6.4",
+          "action": "Specify termination defences.",
+          "details": [
+            "Each parcel carries a visited set of category ids.",
+            "If the redirect target is already in the visited set, route the remainder to the sink and record a cycle warning.",
+            "If hop_count exceeds MAX_HOPS, recommended 32, route the remainder to the sink and record a hop-limit warning.",
+            "State that the sink is uncapped, so termination is guaranteed (INV-07)."
+          ]
+        },
+        {
+          "step": "2.6.5",
+          "action": "Specify handling of a degraded redirect target: missing, archived, soft-deleted, or pointing at itself.",
+          "details": [
+            "Route to the sink, record a warning in diagnostics, and never throw."
+          ]
+        },
+        {
+          "step": "2.6.6",
+          "action": "Specify the diagnostics trace entries produced at each hop, in language a user can read.",
+          "details": [
+            "Category filled, amount accepted, amount moved on, destination named, and the reason."
+          ]
+        },
+        {
+          "step": "2.6.7",
+          "action": "Specify what happens when the sink itself is missing from the request - a typed failure, since this is a configuration bug.",
+          "details": []
+        },
+        {
+          "step": "2.6.8",
+          "action": "State the final conservation assertion: sum of all accepted amounts equals the income exactly, checked before returning.",
+          "details": []
+        },
+        {
+          "step": "2.6.9",
+          "action": "Work the reference chained example through by hand and record every intermediate value.",
+          "details": [
+            "Savings group receives 300,000. Medical 4000bp gives 120,000, Emergency 3500bp gives 105,000, Trip 2500bp gives 75,000.",
+            "Medical: ceiling 500,000, balance 420,000, headroom 80,000, accepts 80,000, overflows 40,000 to Emergency.",
+            "Emergency: ceiling 1,000,000, balance 900,000, headroom 100,000, pending 105,000 + 40,000 = 145,000, accepts 100,000, overflows 45,000 to Trip.",
+            "Trip: uncapped, accepts 75,000 + 45,000 = 120,000.",
+            "Total accepted 80,000 + 100,000 + 120,000 = 300,000, conserved."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "Headroom is defined for every category type, including the accepted_so_far term.",
+        "The worklist algorithm is written step by step with a deterministic ordering rule.",
+        "Cycle defence, hop limit and degraded-target handling are all specified and all end at the sink.",
+        "The reference chained example is worked through with every intermediate value shown and conserves exactly.",
+        "The final conservation assertion is specified as failing loudly rather than adjusting."
+      ],
+      "outputs": [
+        "docs/ALLOCATION_ALGORITHM.md section 3."
+      ],
+      "must_not": [
+        "Do not specify clamping that discards excess - every overflowing unit must have a destination.",
+        "Do not rely on configuration validation alone for cycle safety; the runtime defence is also required."
+      ],
+      "common_pitfalls": [
+        "Omitting accepted_so_far, so two parcels each consume the full headroom and the category ends above its ceiling.",
+        "Recursion without a depth guard.",
+        "Processing in map iteration order, which makes output non-deterministic."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-10",
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-07"
+        ],
+        "risks": [
+          "R-01",
+          "R-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.07",
+      "substage": "2.7",
+      "position": "7 of 13",
+      "name": "Allocation algorithm: overrides, reversals and the error taxonomy",
+      "goal": "Specify manual override semantics, reversal generation, and every typed failure the engine can return.",
+      "why_it_matters": "FR-12 lets the user bend the rules for one payment; it must not be able to corrupt the rules or break conservation.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.6 (Allocation algorithm: phase B ceilings, redirects and termination) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substages 2.5 and 2.6.",
+        "OQ-09 resolution."
+      ],
+      "work": [
+        {
+          "step": "2.7.1",
+          "action": "Specify override semantics step by step.",
+          "details": [
+            "Overridden categories take their stated amounts, replacing their phase A share.",
+            "The remaining income is redistributed across non-overridden categories by their relative basis points, using the same largest-remainder rounding.",
+            "Worked example: income 500,000 to Savings; Medical 4000bp overridden to 200,000; remaining 300,000 across Emergency 3500bp and Trip 2500bp, relative total 6000, giving Emergency 175,000 and Trip 125,000; total 500,000."
+          ]
+        },
+        {
+          "step": "2.7.2",
+          "action": "Specify the override validation rules.",
+          "details": [
+            "Overrides summing to more than the income is a typed failure.",
+            "Overrides summing to exactly the income leaves nothing to redistribute, which is valid.",
+            "Overrides summing to less than the income with no non-overridden categories available is a typed failure.",
+            "A negative override amount is a typed failure."
+          ]
+        },
+        {
+          "step": "2.7.3",
+          "action": "State the policy on whether an override may push a category past its ceiling.",
+          "details": [
+            "Recommended: permitted, marked MANUAL_OVERRIDE, surfaced as a warning in diagnostics, and not redirected away.",
+            "State the alternative and its consequence, so the choice is visible."
+          ]
+        },
+        {
+          "step": "2.7.4",
+          "action": "State that an override applies to one event only and never mutates the stored rule version (INV-11).",
+          "details": []
+        },
+        {
+          "step": "2.7.5",
+          "action": "Specify reversal generation.",
+          "details": [
+            "A reversal mirrors the recorded allocations of the original event with opposing direction; it does not re-run the algorithm.",
+            "State why: a rule change between the event and the reversal would otherwise cause a mismatch.",
+            "Each reversal entry references the entry it reverses.",
+            "The original entries are never modified or removed (INV-03)."
+          ]
+        },
+        {
+          "step": "2.7.6",
+          "action": "Define the complete error taxonomy as a sealed set, each with the condition, the typed failure and the user-facing message intent.",
+          "details": [
+            "IncomeNotPositive, IncomeExceedsMaximum, GroupBasisPointsInvalid, CategoryBasisPointsInvalid, EmptyGroupWithNonZeroShare, SinkMissing, SinkIsCapped, OverridesExceedIncome, OverrideNegative, NoCategoriesAvailableForRemainder, RedirectTargetInvalid as warning not failure.",
+            "For each, state whether it is a configuration bug that validation should have caught, or a user input error."
+          ]
+        },
+        {
+          "step": "2.7.7",
+          "action": "State that no failure path may produce partial allocations - the engine returns either a complete conserved result or a failure.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The override redistribution rule is worked through with exact figures that total the income.",
+        "Every override validation rule names its typed failure.",
+        "The ceiling-versus-override policy is decided and its alternative recorded.",
+        "Reversal is specified as mirroring recorded allocations, not recomputing them.",
+        "The error taxonomy is complete and each entry says whether it indicates a configuration bug or user input error."
+      ],
+      "outputs": [
+        "docs/ALLOCATION_ALGORITHM.md sections 4 and 6."
+      ],
+      "must_not": [
+        "Do not allow an override to write to the stored rule version.",
+        "Do not specify reversal as a recomputation.",
+        "Do not permit partial results on failure."
+      ],
+      "common_pitfalls": [
+        "Redistributing the remainder evenly rather than by relative weight, which surprises the user.",
+        "Recomputing on reversal, which fails to balance whenever the rules changed in between."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-12"
+        ],
+        "invariants": [
+          "INV-03",
+          "INV-11"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.08",
+      "substage": "2.8",
+      "position": "8 of 13",
+      "name": "Allocation algorithm: pseudocode, worked examples and the test vector table",
+      "goal": "Write the complete language-agnostic pseudocode and the vector table Stage 5 implements verbatim.",
+      "why_it_matters": "The vector table is the contract between design and implementation, and later the regression net for every refactor.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.7 (Allocation algorithm: overrides, reversals and the error taxonomy) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substages 2.5, 2.6 and 2.7."
+      ],
+      "work": [
+        {
+          "step": "2.8.1",
+          "action": "Write the full pseudocode end to end: validation, phase A, phase B, override handling, assertions, result assembly.",
+          "details": [
+            "Language-agnostic, integer-only, with every variable named and every loop bounded.",
+            "Include the assertions inline where they run, not as a footnote."
+          ]
+        },
+        {
+          "step": "2.8.2",
+          "action": "Write out each worked example with every intermediate value shown, so a reader can verify by hand.",
+          "details": []
+        },
+        {
+          "step": "2.8.3",
+          "action": "Build the test vector table with inputs and expected outputs for at minimum these fifteen cases.",
+          "details": [
+            "V-01 plain three-group split: income 1,000,000 at 5000/3000/2000 gives 500,000 / 300,000 / 200,000.",
+            "V-02 largest-remainder rounding: income 100 across 3333/3333/3334 gives 33 / 33 / 34.",
+            "V-03 rounding tie-break: income 3 across 3333/3333/3334 gives 1 / 1 / 1, with floors 0/0/1 and remainders 9999/9999/2.",
+            "V-04 single ceiling redirect: the Medical case, 80,000 accepted and 40,000 redirected.",
+            "V-05 chained multi-hop redirect: Medical 80,000, Emergency 100,000, Trip 120,000, total 300,000.",
+            "V-06 everything full lands in the sink.",
+            "V-07 redirect cycle defended at runtime, remainder to sink, no infinite loop.",
+            "V-08 fixed-recurring overflow: bill 250,000 with 200,000 already allocated, base 120,000, accepts 50,000, redirects 70,000.",
+            "V-09 manual override with redistribution: 200,000 / 175,000 / 125,000 from 500,000.",
+            "V-10 override exceeding income rejected.",
+            "V-11 zero and negative income rejected.",
+            "V-12 group with a non-zero share but no active categories.",
+            "V-13 smallest indivisible income of 1 minor unit.",
+            "V-14 simultaneous ceiling hits all redirecting to the same target.",
+            "V-15 very large income near the documented maximum across 40 categories."
+          ]
+        },
+        {
+          "step": "2.8.4",
+          "action": "Verify every expected value arithmetically by hand or with a scratch calculation, and record that you did.",
+          "details": [
+            "Do not carry an unverified expected value into Stage 5; it becomes a test that enshrines a bug."
+          ]
+        },
+        {
+          "step": "2.8.5",
+          "action": "Define the JSON fixture format the vectors will be stored in, so Stage 5 can implement a loader.",
+          "details": [
+            "Fields: id, description, request, expected_allocations, expected_failure, notes."
+          ]
+        },
+        {
+          "step": "2.8.6",
+          "action": "List the properties Stage 5 must verify with property-based testing, so they are design requirements rather than an implementer's idea.",
+          "details": [
+            "Conservation, non-negativity, ceiling respect except under override, determinism, termination, input-order independence, and scaling within one minor unit."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The pseudocode is complete, integer-only and includes its assertions inline.",
+        "All fifteen vectors are tabulated with exact inputs and expected outputs.",
+        "Every expected value has been verified independently of any implementation.",
+        "The fixture JSON format is defined.",
+        "The seven required properties are listed as design requirements."
+      ],
+      "outputs": [
+        "docs/ALLOCATION_ALGORITHM.md sections 7, 8, 9, 10."
+      ],
+      "must_not": [
+        "Do not write an expected value you have not checked.",
+        "Do not leave any vector as a description without numbers."
+      ],
+      "common_pitfalls": [
+        "A vector table with prose instead of figures, which lets Stage 5 invent the expectation.",
+        "Skipping the tie-break vector, which is exactly the case that differs between implementations."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-05"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "A worked example does not conserve - stop and fix the algorithm, not the example."
+        ]
+      }
+    },
+    {
+      "id": "S02.09",
+      "substage": "2.9",
+      "position": "9 of 13",
+      "name": "Cloud sync data model and merge strategy",
+      "goal": "Choose the storage target against the privacy constraint, design the remote format, and define merge semantics per record class.",
+      "why_it_matters": "FR-09 and INV-05 are the product's central promise; a sync design retrofitted in Stage 7 would not honour them.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.8 (Allocation algorithm: pseudocode, worked examples and the test vector table) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest cloud_sync_requirements including the analysis note.",
+        "Substage 2.3 sync columns."
+      ],
+      "work": [
+        {
+          "step": "2.9.1",
+          "action": "Analyse Drive appDataFolder against Firestore specifically on the question of who controls the storage and who can read the data.",
+          "details": [
+            "A Firebase project is developer-owned infrastructure; the developer becomes the holder of user financial records.",
+            "Drive appDataFolder is a hidden per-user folder inside the user's own Drive that the developer can never read.",
+            "Also weigh the honest costs of appDataFolder: it consumes the user's Drive quota, offers no server-side query or merge, no realtime push, and the user can wipe it from Drive settings."
+          ]
+        },
+        {
+          "step": "2.9.2",
+          "action": "Choose one and write ADR-002, addressing the control question explicitly.",
+          "details": []
+        },
+        {
+          "step": "2.9.3",
+          "action": "Design the remote file layout.",
+          "details": [
+            "A manifest file: schema version, device registry, latest snapshot id, compaction state.",
+            "Compacted snapshots containing full state at a point in time.",
+            "Per-device append-only change chunks, so two devices never write the same file.",
+            "Compression format, recorded in the manifest."
+          ]
+        },
+        {
+          "step": "2.9.4",
+          "action": "Define merge semantics per record class rather than as one blanket policy.",
+          "details": [
+            "Immutable records - ledger entries, income events, allocations - merge by union on UUID and can never conflict.",
+            "Mutable configuration - categories, accounts, rule versions, settings - uses last-write-wins ordered by hybrid logical clock, with device id as the final deterministic tie-break.",
+            "Tombstones always beat older edits, so a delete is never resurrected by a stale peer."
+          ]
+        },
+        {
+          "step": "2.9.5",
+          "action": "Define the hybrid logical clock format and its advance rules.",
+          "details": [
+            "Components: physical milliseconds, logical counter, device id.",
+            "On local write: physical = max(local physical, wall clock), counter incremented if physical is unchanged.",
+            "On receiving remote: physical = max(local, remote), counter = max + 1 when equal.",
+            "State why raw wall-clock comparison is unsafe (R-08)."
+          ]
+        },
+        {
+          "step": "2.9.6",
+          "action": "Define compaction and bootstrap.",
+          "details": [
+            "When a snapshot is written, how superseded chunks are retired, and how the operation stays safe if interrupted.",
+            "How a fresh device bootstraps: latest snapshot, then subsequent chunks, then merge with any local data created before sign-in."
+          ]
+        },
+        {
+          "step": "2.9.7",
+          "action": "Define the sync state machine and the user-visible state for each: IDLE, PENDING, SYNCING, ERROR_RETRYING, ERROR_NEEDS_USER, LOCAL_ONLY.",
+          "details": []
+        },
+        {
+          "step": "2.9.8",
+          "action": "Define behaviour for adverse remote conditions.",
+          "details": [
+            "Remote store missing entirely, because the user cleared the app data from Drive settings.",
+            "Remote schema version newer than the app understands - refuse and prompt to update, never partially parse.",
+            "Currency configuration mismatch between local and remote - refuse and explain, never convert.",
+            "Corrupted or partially written payload."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "ADR-002 explicitly answers whether the chosen option puts user financial data on developer-controlled infrastructure.",
+        "Merge rules are stated per record class, not as one policy.",
+        "The design explains how a delete on device A survives a device B that was offline for a month.",
+        "A schema version field exists in the remote format with a stated newer-than-expected policy.",
+        "The HLC advance rules are specified for both local write and remote receive."
+      ],
+      "outputs": [
+        "docs/ARCHITECTURE.md sections 5 and 6.",
+        "docs/SCHEMA.md section 8.",
+        "docs/decisions/ADR-002-sync-target.md"
+      ],
+      "must_not": [
+        "Do not design any developer-operated backend, proxy or relay.",
+        "Do not apply last-write-wins to ledger entries.",
+        "Do not design a merge that requires the network to be available for the app to function."
+      ],
+      "common_pitfalls": [
+        "Describing a developer-owned Firebase project as the user's Google account.",
+        "Ordering concurrent edits by raw device timestamps."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-09",
+          "FR-15",
+          "NFR-01",
+          "NFR-02"
+        ],
+        "invariants": [
+          "INV-05",
+          "INV-09",
+          "INV-10"
+        ],
+        "risks": [
+          "R-03",
+          "R-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.10. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.10",
+      "substage": "2.10",
+      "position": "10 of 13",
+      "name": "Validation and configuration integrity rules",
+      "goal": "Enumerate every configuration validation, where it is enforced, and what happens when it fails.",
+      "why_it_matters": "Most money bugs are configuration bugs. Catching them at save time is far cheaper than at allocation time.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.9 (Cloud sync data model and merge strategy) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substages 2.3, 2.4 and 2.6."
+      ],
+      "work": [
+        {
+          "step": "2.10.1",
+          "action": "List every validation rule with its enforcement point: database constraint, repository, domain validator, or UI.",
+          "details": [
+            "State the rule that anything protecting an invariant is never enforced only in the UI."
+          ]
+        },
+        {
+          "step": "2.10.2",
+          "action": "Specify the percentage rules.",
+          "details": [
+            "Group basis points sum to exactly 10000.",
+            "Within-group category basis points sum to exactly 10000 for every group that has a non-zero share.",
+            "A group with a zero share may have no categories; a group with a non-zero share must have at least one active category."
+          ]
+        },
+        {
+          "step": "2.10.3",
+          "action": "Specify the ceiling and redirect rules.",
+          "details": [
+            "Ceiling is greater than zero when set.",
+            "Redirect target exists, is active, is not the category itself.",
+            "The redirect graph is acyclic - define the detection method and when it runs.",
+            "The sink exists, is uncapped, and cannot be deleted or archived.",
+            "A category cannot be archived while it is another category's redirect target - name the dependant in the error."
+          ]
+        },
+        {
+          "step": "2.10.4",
+          "action": "Specify the fixed-recurring rules: bill amount greater than zero, period anchor day within 1 to 31, and the behaviour for anchor days that do not exist in short months.",
+          "details": []
+        },
+        {
+          "step": "2.10.5",
+          "action": "Specify the account rules: an account cannot be deleted while categories are linked to it without explicit reassignment.",
+          "details": []
+        },
+        {
+          "step": "2.10.6",
+          "action": "Specify the currency rules: currency and minor unit exponent are immutable once any ledger entry exists.",
+          "details": []
+        },
+        {
+          "step": "2.10.7",
+          "action": "For each violation state whether it blocks the save, warns, or is auto-repaired, and what the recovery path is.",
+          "details": []
+        },
+        {
+          "step": "2.10.8",
+          "action": "Specify the auto-repair procedure for a database that arrives invalid via sync from an older app version, and state that repairs are recorded and surfaced rather than silent.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every rule names its enforcement point.",
+        "No invariant-protecting rule is enforced only in the UI.",
+        "Cycle detection has a named method and a stated trigger.",
+        "Every violation states block, warn or auto-repair, plus the recovery path.",
+        "The auto-repair procedure is specified as recorded and visible, never silent."
+      ],
+      "outputs": [
+        "docs/SCHEMA.md section 6."
+      ],
+      "must_not": [
+        "Do not rely on the UI to protect an invariant.",
+        "Do not auto-repair silently."
+      ],
+      "common_pitfalls": [
+        "Validating percentages only on the screen that edits them, so a sync merge can persist an invalid configuration.",
+        "Forgetting the anchor-day-31-in-February case, which produces skipped or duplicated periods."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-07",
+          "INV-11"
+        ],
+        "risks": [
+          "R-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.11. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.11",
+      "substage": "2.11",
+      "position": "11 of 13",
+      "name": "Navigation, screen inventory and per-screen states",
+      "goal": "Define every screen, the navigation graph, Android back behaviour, and the empty, loading and error state of each screen.",
+      "why_it_matters": "Stage 3 builds these as stubs and Stage 6 fills them in; a screen missing here is a feature missing in Stage 6.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.10 (Validation and configuration integrity rules) is complete and ticked off."
+      ],
+      "inputs": [
+        "PRD journeys from substage 1.2.",
+        "PRD scope cut line."
+      ],
+      "work": [
+        {
+          "step": "2.11.1",
+          "action": "List every screen with name, route path, purpose, entry points, exits, and the PRD journey step it serves.",
+          "details": [
+            "At minimum: onboarding steps, dashboard, add income, allocation preview and override, category list, category detail and edit, account list, account edit, spending entry, transaction history, business scope view, reports, settings, sync and sign-in status.",
+            "Every journey step from substage 1.2 must map to a named screen, and no screen may exist without a journey that reaches it."
+          ]
+        },
+        {
+          "step": "2.11.2",
+          "action": "Draw the navigation graph as a Mermaid flowchart and check it for unreachable screens and dead ends.",
+          "details": []
+        },
+        {
+          "step": "2.11.3",
+          "action": "Specify the navigation approach - declarative router or imperative - and justify it.",
+          "details": []
+        },
+        {
+          "step": "2.11.4",
+          "action": "Specify Android back behaviour for every multi-step flow.",
+          "details": [
+            "Onboarding back through steps without losing entered data.",
+            "Back from the allocation preview to the income form, preserving the entered amount.",
+            "Back out of the app from the dashboard, with a confirmation only where genuinely warranted."
+          ]
+        },
+        {
+          "step": "2.11.5",
+          "action": "Specify how the business scope stays separate: a distinct tab, a scope switch, or distinct theming - and justify the choice against NFR-03.",
+          "details": [
+            "State how the choice behaves for a personal-only user: no empty business surface, no dead navigation."
+          ]
+        },
+        {
+          "step": "2.11.6",
+          "action": "For every screen, define its empty state, loading state and error state in at least one line each.",
+          "details": [
+            "This is what prevents Stage 6 and Stage 10 from inventing them under time pressure."
+          ]
+        },
+        {
+          "step": "2.11.7",
+          "action": "Define the deep-link and notification-entry behaviour if any, or state explicitly that there is none in version 1.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every PRD journey step maps to a named screen and no journey step is homeless.",
+        "The navigation graph has no unreachable screen and no dead end.",
+        "Android back behaviour is specified for every multi-step flow.",
+        "Every screen has a defined empty, loading and error state.",
+        "The personal-only user's experience is specified explicitly."
+      ],
+      "outputs": [
+        "docs/NAVIGATION.md complete."
+      ],
+      "must_not": [
+        "Do not design visual layouts here - this is structure, states and flow.",
+        "Do not leave any screen without its three states."
+      ],
+      "common_pitfalls": [
+        "Screens invented in design that no journey ever reaches.",
+        "Back behaviour left to the framework default in a multi-step onboarding, which loses the user's input."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-03",
+          "NFR-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.12. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.12",
+      "substage": "2.12",
+      "position": "12 of 13",
+      "name": "Technology decision set",
+      "goal": "Choose the database and the remaining libraries with criteria, runner-ups and exit plans, recorded as ADRs.",
+      "why_it_matters": "Stage 3 needs a shopping list it can act on without re-litigating choices, and every dependency is a long-term liability.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.11 (Navigation, screen inventory and per-screen states) is complete and ticked off."
+      ],
+      "inputs": [
+        "ADR-001 and ADR-002.",
+        "Substage 2.4 migration and reactive query requirements."
+      ],
+      "work": [
+        {
+          "step": "2.12.1",
+          "action": "Choose the local database against explicit criteria.",
+          "details": [
+            "Type-safe queries, reactive streams, migration tooling, testability with an in-memory instance, maturity, and integer-column fidelity.",
+            "Evaluate at least two candidates and name specific weaknesses for the loser.",
+            "Write ADR-003."
+          ]
+        },
+        {
+          "step": "2.12.2",
+          "action": "Choose the remaining libraries: charting, CSV, Google auth, the cloud client, background scheduling, dependency injection, UUID generation, mocking, and property-based testing.",
+          "details": [
+            "Group the low-risk ones into a single ADR-004 rather than writing eight ADRs."
+          ]
+        },
+        {
+          "step": "2.12.3",
+          "action": "For each dependency record purpose, licence, maintenance signal, and the exit plan if it is abandoned.",
+          "details": [
+            "The exit plan matters most for the database and the cloud client, where a swap is expensive."
+          ]
+        },
+        {
+          "step": "2.12.4",
+          "action": "State explicitly that no analytics, crash reporting, advertising or telemetry dependency may be added at any stage, and that Stage 3 will add a CI check for this.",
+          "details": []
+        },
+        {
+          "step": "2.12.5",
+          "action": "Note that versions must be resolved at implementation time in Stage 3 rather than pinned from memory, and that Stage 3 records what was actually used.",
+          "details": []
+        },
+        {
+          "step": "2.12.6",
+          "action": "Specify the performance design implied by the choices, against NFR-06: what is computed lazily, what is cached, what is paginated.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "ADR-003 addresses migration testing and reactive query support explicitly.",
+        "Every dependency has a purpose, a licence, a maintenance signal and an exit plan.",
+        "The no-telemetry constraint is written down as a design decision, not an intention.",
+        "The performance design section names what is cached and what is paginated."
+      ],
+      "outputs": [
+        "docs/ARCHITECTURE.md sections 7 and 9.",
+        "docs/decisions/ADR-003-database.md",
+        "docs/decisions/ADR-004-supporting-libraries.md"
+      ],
+      "must_not": [
+        "Do not select a dependency without an exit plan.",
+        "Do not pin versions from memory."
+      ],
+      "common_pitfalls": [
+        "Choosing a database that cannot be instantiated in-memory for tests, which makes Stage 4 slow and flaky.",
+        "Adding a convenience library that pulls in analytics transitively."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01",
+          "NFR-06",
+          "NFR-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_2_WORKLOG.md, then continue to substage 2.13. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S02.13",
+      "substage": "2.13",
+      "position": "13 of 13",
+      "name": "Design review, assembly and gate preparation",
+      "goal": "Read the whole design as one document, check it against the PRD and the invariants, and prepare the gate.",
+      "why_it_matters": "Documents written across a dozen sessions contradict each other unless somebody reads them together on purpose.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 2.12 (Technology decision set) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from substages 2.1 to 2.11."
+      ],
+      "work": [
+        {
+          "step": "2.13.1",
+          "action": "Read ARCHITECTURE.md, SCHEMA.md, ALLOCATION_ALGORITHM.md and NAVIGATION.md end to end in one sitting.",
+          "details": []
+        },
+        {
+          "step": "2.13.2",
+          "action": "Run the consistency checks.",
+          "details": [
+            "Every entity in SCHEMA.md is used somewhere in ALLOCATION_ALGORITHM.md or NAVIGATION.md, or is justified as future-reserved.",
+            "Every screen in NAVIGATION.md has the data it needs available in SCHEMA.md.",
+            "Terminology matches the manifest glossary exactly across all four documents.",
+            "Numbers stated in one document match the same numbers stated in another."
+          ]
+        },
+        {
+          "step": "2.13.3",
+          "action": "Run the invariant check: walk INV-01 to INV-12 and name, for each, the specific design element that enforces it.",
+          "details": [
+            "An invariant with no named enforcing element is a gap and must be closed before the gate."
+          ]
+        },
+        {
+          "step": "2.13.4",
+          "action": "Run the requirement check: every PRD user story has a design element that will satisfy it.",
+          "details": []
+        },
+        {
+          "step": "2.13.5",
+          "action": "Re-verify every worked example in ALLOCATION_ALGORITHM.md arithmetically, independently of when it was first written.",
+          "details": []
+        },
+        {
+          "step": "2.13.6",
+          "action": "Update docs/TRACEABILITY.md: each FR and NFR now names its design artefact and moves to DESIGNED.",
+          "details": []
+        },
+        {
+          "step": "2.13.7",
+          "action": "Record the resolutions of OQ-03, OQ-05, OQ-06, OQ-07, OQ-08 and OQ-09 and confirm each is reflected in the design.",
+          "details": []
+        },
+        {
+          "step": "2.13.8",
+          "action": "List the decisions later stages may not change without a new ADR.",
+          "details": []
+        },
+        {
+          "step": "2.13.9",
+          "action": "Write docs/reports/STAGE_2_REPORT.md and prepare the gate question, highlighting the sync target and the ceiling and redirect behaviour for user confirmation.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every invariant names the design element that enforces it.",
+        "Every PRD story maps to a design element.",
+        "All worked examples re-verified and conserving.",
+        "TRACEABILITY.md updated to DESIGNED for every requirement.",
+        "The frozen-decisions list is written."
+      ],
+      "outputs": [
+        "docs/reports/STAGE_2_REPORT.md",
+        "docs/TRACEABILITY.md updated."
+      ],
+      "must_not": [
+        "Do not proceed to Stage 3 with an unenforced invariant or an unverified worked example."
+      ],
+      "common_pitfalls": [
+        "Treating assembly as formatting rather than as review.",
+        "Skipping the invariant walk because the invariants feel obvious."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-01 through INV-12"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "An invariant has no enforcing design element.",
+          "A worked example fails to conserve on re-check."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "docs/ARCHITECTURE.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/SCHEMA.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/ALLOCATION_ALGORITHM.md",
+      "format": "markdown",
+      "note": "The single most important document in the project."
+    },
+    {
+      "path": "docs/NAVIGATION.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/decisions/ADR-001 to ADR-004",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_2_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "ALLOCATION_ALGORITHM.md is complete enough that Stage 5 needs no new design decisions.",
+    "Every worked example has been arithmetically verified and conserves its input exactly.",
+    "SCHEMA.md covers every entity the PRD stories require, with no money column typed as floating point.",
+    "ADRs exist for state management, sync target and database choice.",
+    "TRACEABILITY.md updated: every FR names the design artefact that covers it.",
+    "OQ-03, OQ-05, OQ-06, OQ-07 and OQ-09 are resolved and reflected in the design."
+  ],
+  "stage_must_not": [
+    "Do not implement any code, including throwaway prototypes presented as deliverables.",
+    "Do not leave the auto-distribution algorithm partially specified.",
+    "Do not design any component that requires a developer-operated server, background service or analytics endpoint.",
+    "Do not introduce floating point into any money-related design element.",
+    "Do not defer the sync data model to Stage 7 - the local schema must be born sync-ready."
+  ],
+  "anti_patterns": [
+    "Specifying the split as multiply by the percentage and leaving rounding to the implementer.",
+    "Designing balances as a mutable column that allocation increments directly.",
+    "A single blanket last-write-wins policy applied to ledger entries.",
+    "Choosing Firestore for convenience and then describing it as the user's Google account."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-03",
+    "OQ-05",
+    "OQ-06",
+    "OQ-07",
+    "OQ-08",
+    "OQ-09"
+  ],
+  "risks_in_focus": [
+    "R-01",
+    "R-02",
+    "R-03",
+    "R-07"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "ARCHITECTURE.md directory tree and dependency list feed Stage 3.",
+      "SCHEMA.md feeds Stage 4.",
+      "ALLOCATION_ALGORITHM.md pseudocode and vector table feed Stage 5.",
+      "NAVIGATION.md feeds Stage 3 stubs and Stage 6 screens.",
+      "The sync design feeds Stage 7."
+    ],
+    "summary_to_write": "List the design decisions later stages are forbidden to change without a new ADR."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_2_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 2 (Design) is complete. Deliverables: ARCHITECTURE.md, SCHEMA.md, ALLOCATION_ALGORITHM.md, NAVIGATION.md, ADR-001 to ADR-004. Key decisions to confirm: <list, especially the sync target and the ceiling/redirect behaviour>. Do you approve moving to Stage 3?"
+  }
+}

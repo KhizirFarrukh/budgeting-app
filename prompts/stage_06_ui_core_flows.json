@@ -1,0 +1,1379 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 6,
+  "stage_id": "S06",
+  "name": "UI Implementation - Core Flows",
+  "one_line_goal": "Turn the stub screens into a genuinely usable local-only app, backed by the real data layer and the real engine.",
+  "objective": "Build every core user flow - onboarding, add income with preview and override, category and account management, dashboard, spending log and business scope - wired to real local data.",
+  "rationale": "This is the first stage where the app becomes usable, and the last chance to find that a design decision does not survive contact with a real screen. Sync deliberately comes after it.",
+  "depends_on": [
+    "S05"
+  ],
+  "blocks": [
+    "S07"
+  ],
+  "entry_criteria": [
+    "The distribution engine passes all golden vectors and property tests.",
+    "The data layer is green and seeded defaults are valid.",
+    "NAVIGATION.md screen inventory and per-screen states are approved."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-01",
+      "FR-03",
+      "FR-04",
+      "FR-05",
+      "FR-06",
+      "FR-07",
+      "FR-08",
+      "FR-10",
+      "FR-12",
+      "FR-13",
+      "FR-15"
+    ],
+    "non_functional_requirements": [
+      "NFR-02",
+      "NFR-03",
+      "NFR-04",
+      "NFR-06",
+      "NFR-08"
+    ],
+    "invariants": [
+      "INV-02",
+      "INV-04",
+      "INV-06"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 12,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_6_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "6.1 App shell, state wiring and scope switching",
+      "6.2 Onboarding part one: currency, scope and top-level split",
+      "6.3 Onboarding part two: categories, percentages, ceilings and accounts",
+      "6.4 Add income form and live allocation preview",
+      "6.5 Manual override, confirmation and undo",
+      "6.6 Category management",
+      "6.7 Account management",
+      "6.8 Dashboard",
+      "6.9 Spending log and transaction history",
+      "6.10 Business scope separation",
+      "6.11 Cross-cutting UI quality: states, inputs and accessibility",
+      "6.12 Widget tests, flow tests and offline verification"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S06.01",
+      "substage": "6.1",
+      "position": "1 of 12",
+      "name": "App shell, state wiring and scope switching",
+      "goal": "Connect the presentation layer to use cases and repositories, and implement the personal and business scope switch.",
+      "why_it_matters": "Every subsequent substage builds on this plumbing; getting it wrong once costs eleven substages of rework.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "The distribution engine passes all golden vectors and property tests.",
+        "The data layer is green and seeded defaults are valid.",
+        "NAVIGATION.md screen inventory and per-screen states are approved."
+      ],
+      "inputs": [
+        "ADR-001 state management decision.",
+        "NAVIGATION.md scope separation decision.",
+        "Stage 4 repository interfaces."
+      ],
+      "work": [
+        {
+          "step": "6.1.1",
+          "action": "Set up dependency injection so screens receive use cases, and use cases receive repository interfaces and the engine.",
+          "details": [
+            "No widget may construct a repository or call the database directly.",
+            "Add a check or review rule that enforces this."
+          ]
+        },
+        {
+          "step": "6.1.2",
+          "action": "Implement the use case layer for the flows this stage builds: complete onboarding, preview allocation, confirm income, reverse income, save category, save account, log spending.",
+          "details": [
+            "A use case orchestrates; it does not contain allocation arithmetic.",
+            "Each use case returns a typed result the UI can map to a message."
+          ]
+        },
+        {
+          "step": "6.1.3",
+          "action": "Wire reactive repository streams into the state layer so any database change reaches the UI.",
+          "details": [
+            "Test it by mutating from a different code path and asserting the screen updates."
+          ]
+        },
+        {
+          "step": "6.1.4",
+          "action": "Implement the scope switch decided in Stage 2, with the state that tracks the active scope.",
+          "details": [
+            "Include the personal-only case: no business surface, no dead navigation, no empty group."
+          ]
+        },
+        {
+          "step": "6.1.5",
+          "action": "Implement app startup: read settings, decide whether to route to onboarding or dashboard, and handle the not-yet-seeded case.",
+          "details": []
+        },
+        {
+          "step": "6.1.6",
+          "action": "Implement the global error surface used by every screen for typed failures, so error handling is not reinvented twelve times.",
+          "details": []
+        },
+        {
+          "step": "6.1.7",
+          "action": "Confirm the app still launches and every route is reachable after the rewiring.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No widget constructs a repository or touches the database directly.",
+        "A change made through a non-UI code path updates the visible screen, proven by a test.",
+        "A personal-only configuration shows no business surface anywhere.",
+        "Startup routes correctly for a fresh install, a mid-onboarding install and a completed install.",
+        "The global error surface renders a typed failure with a specific message."
+      ],
+      "outputs": [
+        "lib/application/** use cases and state.",
+        "Scope switching.",
+        "Global error surface."
+      ],
+      "must_not": [
+        "Do not put allocation arithmetic in a use case.",
+        "Do not let a widget call a repository."
+      ],
+      "common_pitfalls": [
+        "Screens that each invent their own error handling, producing twelve inconsistent messages.",
+        "A scope switch implemented per screen rather than centrally, so one screen forgets it."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-03"
+        ],
+        "invariants": [
+          "INV-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.02",
+      "substage": "6.2",
+      "position": "2 of 12",
+      "name": "Onboarding part one: currency, scope and top-level split",
+      "goal": "Build the first three onboarding steps with an exact-100-percent constraint that cannot be violated.",
+      "why_it_matters": "NFR-04 and R-06. This is where a first-time budgeter is won or lost, and where an invalid configuration would poison everything after it.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.1 (App shell, state wiring and scope switching) is complete and ticked off."
+      ],
+      "inputs": [
+        "PRD P1 journey.",
+        "NAVIGATION.md onboarding steps.",
+        "Stage 4 validators."
+      ],
+      "work": [
+        {
+          "step": "6.2.1",
+          "action": "Step 1, welcome and currency.",
+          "details": [
+            "Detect from device locale, show the detected currency and let the user change it.",
+            "State in one plain sentence that it cannot be changed once transactions exist (OQ-01).",
+            "Store the ISO code and minor unit exponent in settings."
+          ]
+        },
+        {
+          "step": "6.2.2",
+          "action": "Step 2, scope selection: personal only, or personal plus business.",
+          "details": [
+            "Choosing personal only hides the business group entirely rather than showing an empty one.",
+            "State that it can be enabled later, and make sure that is true."
+          ]
+        },
+        {
+          "step": "6.2.3",
+          "action": "Step 3, top-level split across Spending, Savings and Business.",
+          "details": [
+            "Use a control that makes submitting anything other than exactly 100 percent impossible.",
+            "Show the live remainder as the user drags or types, so the constraint is visible rather than punitive.",
+            "Provide a sensible default that the user can accept immediately.",
+            "Convert to basis points on save and validate the total is exactly 10000."
+          ]
+        },
+        {
+          "step": "6.2.4",
+          "action": "Implement progress persistence so a killed app resumes at the same step with data intact.",
+          "details": []
+        },
+        {
+          "step": "6.2.5",
+          "action": "Implement Android back through these steps without losing entered data.",
+          "details": []
+        },
+        {
+          "step": "6.2.6",
+          "action": "Implement the skip-to-defaults path from step 3, and verify it produces a valid configuration.",
+          "details": []
+        },
+        {
+          "step": "6.2.7",
+          "action": "Write widget tests for the exact-100-percent constraint, including attempts to submit 99 and 101 percent.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "It is impossible to leave step 3 with a split that is not exactly 10000 basis points.",
+        "Killing the app mid-onboarding and reopening resumes at the same step with data intact.",
+        "Back navigation preserves entered data at every step.",
+        "The skip-to-defaults path produces a configuration that passes every validator.",
+        "The whole flow completes with no network connection."
+      ],
+      "outputs": [
+        "Onboarding steps 1 to 3.",
+        "Onboarding progress persistence."
+      ],
+      "must_not": [
+        "Do not allow the user to proceed with an invalid split and fix it later.",
+        "Do not require a network connection or a Google account."
+      ],
+      "common_pitfalls": [
+        "A percentage control that permits 99 percent and shows an error only on submit.",
+        "Onboarding state held only in memory, lost when Android reclaims the process."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-06",
+          "NFR-02",
+          "NFR-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.03",
+      "substage": "6.3",
+      "position": "3 of 12",
+      "name": "Onboarding part two: categories, percentages, ceilings and accounts",
+      "goal": "Build the remaining onboarding steps so a first-time user leaves with a valid, personal configuration.",
+      "why_it_matters": "FR-08 - suggestions must be genuinely editable, and the whole path must remain completable in under two minutes by accepting defaults.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.2 (Onboarding part one: currency, scope and top-level split) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 seed data.",
+        "PRD P1 and P2 journeys."
+      ],
+      "work": [
+        {
+          "step": "6.3.1",
+          "action": "Step 4, categories: present the seeded suggestions pre-selected, each editable and removable inline, with an obvious add-custom action.",
+          "details": [
+            "Show the suggested type for each and let the user change it.",
+            "Group them visibly by Spending, Savings and Business."
+          ]
+        },
+        {
+          "step": "6.3.2",
+          "action": "Step 5, within-group percentages: the same exact-100-percent constraint per group.",
+          "details": [
+            "Provide a one-tap split evenly action as an escape hatch.",
+            "Recompute automatically when a category is added or removed, rather than leaving the user with an invalid total."
+          ]
+        },
+        {
+          "step": "6.3.3",
+          "action": "Step 6, optional ceilings: let the user set a ceiling and redirect target for accumulating categories.",
+          "details": [
+            "Make skipping obvious and consequence-free, leaving them uncapped.",
+            "The redirect target picker must exclude choices that would create a cycle, computed live."
+          ]
+        },
+        {
+          "step": "6.3.4",
+          "action": "Step 7, optional accounts: add bank accounts and link them to categories, fully skippable.",
+          "details": [
+            "State plainly that these are labels and the app does not connect to any bank."
+          ]
+        },
+        {
+          "step": "6.3.5",
+          "action": "Step 8, done: land on the dashboard with a single prompt to add the first income.",
+          "details": []
+        },
+        {
+          "step": "6.3.6",
+          "action": "Verify the sink category exists and is reachable as a redirect target, and explain it in one line where it first appears.",
+          "details": []
+        },
+        {
+          "step": "6.3.7",
+          "action": "Time the full default-accepting path on a device and record it.",
+          "details": []
+        },
+        {
+          "step": "6.3.8",
+          "action": "Write a flow test covering the accept-everything path from launch to dashboard.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every seeded category can be renamed, retyped, re-ceilinged or removed during onboarding.",
+        "Adding or removing a category leaves the group percentages valid, never invalid.",
+        "The redirect target picker cannot offer a choice that creates a cycle, proven by a widget test.",
+        "The accept-everything path completes in under 2 minutes, timed and recorded.",
+        "Onboarding finishes with a configuration that passes every validator."
+      ],
+      "outputs": [
+        "Onboarding steps 4 to 8.",
+        "Onboarding flow test."
+      ],
+      "must_not": [
+        "Do not make any suggestion mandatory.",
+        "Do not require ceilings or accounts to finish onboarding."
+      ],
+      "common_pitfalls": [
+        "Removing a category and leaving the group at 85 percent with no prompt.",
+        "A cycle-creating redirect target offered in the picker and rejected only on save."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-08",
+          "FR-10",
+          "NFR-04"
+        ],
+        "invariants": [
+          "INV-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.04",
+      "substage": "6.4",
+      "position": "4 of 12",
+      "name": "Add income form and live allocation preview",
+      "goal": "Build the income entry form with a live, explained allocation preview computed by the engine.",
+      "why_it_matters": "FR-04. This is the moment the app delivers its core value, and the moment the user decides whether to trust it.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.3 (Onboarding part two: categories, percentages, ceilings and accounts) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 5 engine entry point and diagnostics trace.",
+        "Stage 4 balance derivation."
+      ],
+      "work": [
+        {
+          "step": "6.4.1",
+          "action": "Build the entry form: amount, source label, date, optional note, and for a business-enabled user the personal or business income toggle if that was the agreed model.",
+          "details": [
+            "Use the money input widget so an invalid amount cannot be entered."
+          ]
+        },
+        {
+          "step": "6.4.2",
+          "action": "Call the engine on every amount change and render the preview.",
+          "details": [
+            "Every category, its allocated amount, its resulting balance, and its progress toward its ceiling.",
+            "Debounce so typing stays smooth on a mid-tier device, but never so long that the preview feels detached from the keystroke."
+          ]
+        },
+        {
+          "step": "6.4.3",
+          "action": "Render the diagnostics trace as plain-language explanations, not developer output.",
+          "details": [
+            "For example: a category is full, so a stated amount moved to a named category instead.",
+            "Every hop the engine reports must be visible to the user in some form, at least on expansion."
+          ]
+        },
+        {
+          "step": "6.4.4",
+          "action": "Show the running total against the entered amount at all times, so conservation is visible (INV-02).",
+          "details": []
+        },
+        {
+          "step": "6.4.5",
+          "action": "Handle every engine typed failure with a specific message and a way forward.",
+          "details": [
+            "Zero or negative amount, amount above the maximum, invalid configuration, missing sink.",
+            "A configuration failure should route the user to the screen that fixes it."
+          ]
+        },
+        {
+          "step": "6.4.6",
+          "action": "Ensure the preview never performs any allocation arithmetic itself - it renders the engine's output only.",
+          "details": [
+            "Add a review rule or a test asserting the preview and the confirmed write produce identical figures."
+          ]
+        },
+        {
+          "step": "6.4.7",
+          "action": "Handle the empty and loading states: no categories configured, and the brief moment before the first computation.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The preview total always equals the entered amount, tested at 1 minor unit, typical values and near the documented maximum.",
+        "Every redirect the engine reports is explained in words a non-technical user understands.",
+        "The preview performs no arithmetic of its own, proven by a test comparing preview output to engine output.",
+        "Every typed failure produces a specific message and a route forward.",
+        "Typing remains smooth on a mid-tier device with 40 categories configured."
+      ],
+      "outputs": [
+        "Add income screen.",
+        "Allocation preview widget."
+      ],
+      "must_not": [
+        "Do not compute any part of the split in the widget layer.",
+        "Do not hide a redirect from the user."
+      ],
+      "common_pitfalls": [
+        "A preview that rounds for display in a way that makes the visible total disagree with the entered amount.",
+        "Diagnostics rendered as raw developer text."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-04",
+          "FR-10",
+          "FR-13"
+        ],
+        "invariants": [
+          "INV-02"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.05",
+      "substage": "6.5",
+      "position": "5 of 12",
+      "name": "Manual override, confirmation and undo",
+      "goal": "Let the user adjust a single income event, confirm it atomically, and undo it cleanly.",
+      "why_it_matters": "FR-12 and INV-03 - the user must be able to bend the rules for one payment, and to correct a mistake without history lying about it.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.4 (Add income form and live allocation preview) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 5 override and reversal implementations.",
+        "Stage 4 transactional writes."
+      ],
+      "work": [
+        {
+          "step": "6.5.1",
+          "action": "Implement per-category inline override editing within the preview.",
+          "details": [
+            "As the user overrides one category, redistribute the rest live via the engine and keep the total exact.",
+            "Show clearly which categories are overridden and which are computed."
+          ]
+        },
+        {
+          "step": "6.5.2",
+          "action": "Disable confirmation whenever the overridden total does not equal the income exactly, and state why in place.",
+          "details": [
+            "Never allow a confirm that would break conservation."
+          ]
+        },
+        {
+          "step": "6.5.3",
+          "action": "Show a warning where an override pushes a category past its ceiling, per the Stage 2 policy, without blocking it.",
+          "details": []
+        },
+        {
+          "step": "6.5.4",
+          "action": "Implement confirm: write the income event and every allocation in a single atomic transaction.",
+          "details": [
+            "Guard against double submission - a rapid double tap must not create two events.",
+            "Use the client-generated UUID so a retry is idempotent."
+          ]
+        },
+        {
+          "step": "6.5.5",
+          "action": "Implement the success state summarising what happened, including any redirects, with a direct undo action.",
+          "details": []
+        },
+        {
+          "step": "6.5.6",
+          "action": "Implement undo via the reversal path, and confirm balances return exactly to their pre-event values.",
+          "details": [
+            "Show the reversal in history rather than making the event disappear."
+          ]
+        },
+        {
+          "step": "6.5.7",
+          "action": "Implement reversal from the history screen too, not only from the immediate success state.",
+          "details": []
+        },
+        {
+          "step": "6.5.8",
+          "action": "Write flow tests for override, confirm, undo, and rapid double-tap.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Confirmation is impossible unless the total equals the income exactly.",
+        "Confirming writes exactly one income event with allocations summing exactly to the income, verified by reading the database.",
+        "A rapid double tap creates exactly one event, proven by a test.",
+        "A partially failed write leaves no rows behind, proven by a test.",
+        "Undo returns every balance exactly and leaves both the event and its reversal visible in history."
+      ],
+      "outputs": [
+        "Override editing.",
+        "Confirm flow.",
+        "Undo and reversal UI."
+      ],
+      "must_not": [
+        "Do not allow confirmation of a non-conserving total.",
+        "Do not make a reversed event disappear from history."
+      ],
+      "common_pitfalls": [
+        "Double submission from an un-debounced confirm button, which duplicates income silently.",
+        "Undo implemented as a delete, which violates the append-only ledger."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-12"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.06",
+      "substage": "6.6",
+      "position": "6 of 12",
+      "name": "Category management",
+      "goal": "Give the user full control over categories, types, percentages, ceilings and redirect targets, without ever permitting an invalid configuration.",
+      "why_it_matters": "FR-01, FR-10 and FR-11 - this is the user's control surface over their own money model.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.5 (Manual override, confirmation and undo) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 validators and cycle detection.",
+        "NAVIGATION.md category screens."
+      ],
+      "work": [
+        {
+          "step": "6.6.1",
+          "action": "Build the category list grouped by category group, with the business group visually distinct.",
+          "details": []
+        },
+        {
+          "step": "6.6.2",
+          "action": "Build create and edit: name, group, type, percentage within group, ceiling or bill amount and anchor day, redirect target, linked account, sort order.",
+          "details": []
+        },
+        {
+          "step": "6.6.3",
+          "action": "Enforce the exact-100-percent rule when a percentage changes.",
+          "details": [
+            "Either require explicit rebalancing of siblings, or offer automatic proportional rebalancing with a preview of exactly what will change.",
+            "Never save a configuration that fails validation, and never leave the user stuck with an invalid state they cannot exit."
+          ]
+        },
+        {
+          "step": "6.6.4",
+          "action": "Build the redirect target picker that excludes the category itself and any choice creating a cycle, computed live.",
+          "details": []
+        },
+        {
+          "step": "6.6.5",
+          "action": "Implement archive rather than delete for categories with ledger history, and explain the difference in one line.",
+          "details": [
+            "A category with history can never be hard-deleted without destroying the audit trail."
+          ]
+        },
+        {
+          "step": "6.6.6",
+          "action": "Block archiving a category that is another category's redirect target or that is the sink, naming the dependant in the message.",
+          "details": []
+        },
+        {
+          "step": "6.6.7",
+          "action": "Build the category detail screen showing current balance, ceiling progress, redirect destination and recent activity.",
+          "details": []
+        },
+        {
+          "step": "6.6.8",
+          "action": "Warn clearly when a rule change will alter future allocations, and confirm that history is unaffected.",
+          "details": []
+        },
+        {
+          "step": "6.6.9",
+          "action": "Write widget tests for the cycle-free picker, the percentage constraint and the archive guards.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The redirect picker cannot offer a cycle-creating option, proven against an adversarial configuration.",
+        "Saving with group percentages other than exactly 100 percent is blocked with a specific message.",
+        "Archiving a category with history preserves every ledger entry and reports still reconcile.",
+        "Archiving a redirect target or the sink is blocked and names the dependant.",
+        "Changing a percentage does not alter any past income event's allocations, proven by a test."
+      ],
+      "outputs": [
+        "Category list, edit and detail screens."
+      ],
+      "must_not": [
+        "Do not offer hard delete for a category with ledger history.",
+        "Do not let the UI be the only enforcer of a validation rule."
+      ],
+      "common_pitfalls": [
+        "Auto-rebalancing that silently changes percentages the user set deliberately.",
+        "An archive action that orphans a redirect target, breaking the next allocation."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-01",
+          "FR-02",
+          "FR-10",
+          "FR-11"
+        ],
+        "invariants": [
+          "INV-07",
+          "INV-11"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.07",
+      "substage": "6.7",
+      "position": "7 of 12",
+      "name": "Account management",
+      "goal": "Let the user record which real-world account holds which categories, without implying bank connectivity.",
+      "why_it_matters": "FR-03 - the user needs to know where the money physically sits, and must never think the app is reading their bank.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.6 (Category management) is complete and ticked off."
+      ],
+      "inputs": [
+        "OQ-02 resolution.",
+        "Stage 4 account repository."
+      ],
+      "work": [
+        {
+          "step": "6.7.1",
+          "action": "Build the account list with name, institution, optional last four digits, and the derived total of linked categories.",
+          "details": []
+        },
+        {
+          "step": "6.7.2",
+          "action": "Build create and edit, with a clear statement that these are labels and the app does not connect to any bank.",
+          "details": [
+            "If OQ-02 resolved toward real balances, implement that model instead and state it here."
+          ]
+        },
+        {
+          "step": "6.7.3",
+          "action": "Support linking many categories to one account, and show the linked categories from the account detail.",
+          "details": []
+        },
+        {
+          "step": "6.7.4",
+          "action": "Handle deletion of an account with linked categories: require explicit reassignment or unlinking, never orphan silently.",
+          "details": []
+        },
+        {
+          "step": "6.7.5",
+          "action": "Build the informational reconciliation view: expected total versus what the user says the bank shows.",
+          "details": [
+            "Purely informational; no automatic adjustment, no implication of a live feed."
+          ]
+        },
+        {
+          "step": "6.7.6",
+          "action": "Write tests asserting per-account totals equal the sum of linked category balances.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Per-account totals equal the sum of linked category balances, verified against ledger-derived values.",
+        "Deleting an account with links is impossible without explicit reassignment.",
+        "No screen implies live bank connectivity.",
+        "An account with no linked categories renders a clear empty state."
+      ],
+      "outputs": [
+        "Account list, edit and detail screens."
+      ],
+      "must_not": [
+        "Do not imply the app reads bank data.",
+        "Do not orphan a category by deleting its account."
+      ],
+      "common_pitfalls": [
+        "Wording such as connect your bank, which sets an expectation the app cannot meet.",
+        "Account totals computed from a cached value rather than the ledger."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-03"
+        ],
+        "invariants": [
+          "INV-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.08",
+      "substage": "6.8",
+      "position": "8 of 12",
+      "name": "Dashboard",
+      "goal": "Build the screen the user opens most, with every figure derived from the ledger and updating reactively.",
+      "why_it_matters": "FR-13 - one wrong number here loses the user's trust in everything else.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.7 (Account management) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 reactive queries and balance derivation.",
+        "NAVIGATION.md dashboard states."
+      ],
+      "work": [
+        {
+          "step": "6.8.1",
+          "action": "Show group-level totals for Spending, Savings and Business with clear separation.",
+          "details": []
+        },
+        {
+          "step": "6.8.2",
+          "action": "Show each category with balance, ceiling and progress indicator, in the user's sort order, with an option to sort by fullness.",
+          "details": []
+        },
+        {
+          "step": "6.8.3",
+          "action": "Highlight categories that are full and therefore redirecting, and name where their money is going.",
+          "details": [
+            "This turns the app's signature behaviour from a surprise into a feature."
+          ]
+        },
+        {
+          "step": "6.8.4",
+          "action": "Show recent income events and spending transactions with a link into history.",
+          "details": []
+        },
+        {
+          "step": "6.8.5",
+          "action": "Drive every figure from reactive queries so the screen updates when data changes underneath, including from a future background sync.",
+          "details": []
+        },
+        {
+          "step": "6.8.6",
+          "action": "Implement the empty state for a user who finished onboarding but logged nothing, with a single obvious action.",
+          "details": []
+        },
+        {
+          "step": "6.8.7",
+          "action": "Implement the loading and error states designed in Stage 2.",
+          "details": []
+        },
+        {
+          "step": "6.8.8",
+          "action": "Add pull-to-refresh that recomputes derived balances, and leave a hook for triggering sync in Stage 7.",
+          "details": []
+        },
+        {
+          "step": "6.8.9",
+          "action": "Test the dashboard against the five-year synthetic dataset for both correctness and render performance.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every displayed balance equals the ledger-derived value, proven by a test comparing rendered figures to a recomputation.",
+        "The dashboard renders within the NFR-06 budget with the five-year dataset loaded.",
+        "Adding an income event from another screen updates the dashboard without a manual refresh.",
+        "Full categories are visibly marked and name their redirect destination.",
+        "The empty state offers exactly one obvious next action."
+      ],
+      "outputs": [
+        "Dashboard screen and its states."
+      ],
+      "must_not": [
+        "Do not display a figure from a cached counter without the derivation path behind it.",
+        "Do not require a refresh to show a change made elsewhere in the app."
+      ],
+      "common_pitfalls": [
+        "A dashboard that loads everything eagerly and stutters at realistic data volume.",
+        "Progress indicators that show 100 percent before a category is genuinely full, due to display rounding."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-13"
+        ],
+        "invariants": [
+          "INV-04"
+        ],
+        "risks": [
+          "R-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.09",
+      "substage": "6.9",
+      "position": "9 of 12",
+      "name": "Spending log and transaction history",
+      "goal": "Let money leave categories, and make every past movement inspectable and correctable.",
+      "why_it_matters": "Balances only mean something if spending is recorded, and corrections must not rewrite history.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.8 (Dashboard) is complete and ticked off."
+      ],
+      "inputs": [
+        "OQ-06 resolution on negative balances.",
+        "Stage 4 append-only ledger."
+      ],
+      "work": [
+        {
+          "step": "6.9.1",
+          "action": "Build quick spending entry: amount, category, account, date, note.",
+          "details": [
+            "Offer the most recently used categories first, since speed matters at the point of purchase.",
+            "Default the account from the category's link."
+          ]
+        },
+        {
+          "step": "6.9.2",
+          "action": "Apply the OQ-06 policy for spending that takes a category negative.",
+          "details": [
+            "Warn prominently, explain the consequence, but do not block the user from recording reality."
+          ]
+        },
+        {
+          "step": "6.9.3",
+          "action": "Write spending as immutable ledger entries; an edit becomes a compensating entry plus a new entry.",
+          "details": [
+            "Show the correction in history rather than replacing the original."
+          ]
+        },
+        {
+          "step": "6.9.4",
+          "action": "Build the history screen with filters by date range, group, category and account, plus running balances.",
+          "details": []
+        },
+        {
+          "step": "6.9.5",
+          "action": "Show reversals, corrections and redirects explicitly, so nothing ever appears to vanish.",
+          "details": []
+        },
+        {
+          "step": "6.9.6",
+          "action": "Scope the pickers so business categories never appear in personal spending and vice versa.",
+          "details": []
+        },
+        {
+          "step": "6.9.7",
+          "action": "Implement pagination or lazy loading so history performs at the five-year data volume.",
+          "details": []
+        },
+        {
+          "step": "6.9.8",
+          "action": "Write tests for the correction path and for scope isolation.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Editing a spending entry leaves the original visible in history alongside its correction.",
+        "A personal spending entry cannot be assigned to a business category through any path in the UI.",
+        "History filters produce totals that reconcile with the dashboard for the same period.",
+        "History renders and scrolls within budget at the five-year volume.",
+        "Spending that takes a category negative warns clearly and still records."
+      ],
+      "outputs": [
+        "Spending entry screen.",
+        "History screen with filters."
+      ],
+      "must_not": [
+        "Do not mutate a ledger entry in place.",
+        "Do not block a user from recording a real transaction."
+      ],
+      "common_pitfalls": [
+        "An edit implemented as delete-and-reinsert, which destroys the audit trail.",
+        "Loading the entire history into memory to compute running balances."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-05",
+          "FR-07"
+        ],
+        "invariants": [
+          "INV-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.10. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.10",
+      "substage": "6.10",
+      "position": "10 of 12",
+      "name": "Business scope separation",
+      "goal": "Make business money impossible to confuse with household money, everywhere in the app.",
+      "why_it_matters": "FR-07 and NFR-03 - business float spent on groceries is precisely the failure persona P2 fears.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.9 (Spending log and transaction history) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 2 scope separation decision.",
+        "The theme extension from substage 3.6."
+      ],
+      "work": [
+        {
+          "step": "6.10.1",
+          "action": "Apply the scope separation consistently across dashboard, spending, categories, accounts and history.",
+          "details": [
+            "One mechanism, applied centrally, not re-implemented per screen."
+          ]
+        },
+        {
+          "step": "6.10.2",
+          "action": "Apply the distinct visual treatment from the theme, and verify it in dark mode and in greyscale.",
+          "details": [
+            "Meaning must not depend on colour alone (NFR-08)."
+          ]
+        },
+        {
+          "step": "6.10.3",
+          "action": "Ensure personal totals never silently include business figures anywhere, including summary cards.",
+          "details": [
+            "Any combined figure must be explicitly labelled as combined."
+          ]
+        },
+        {
+          "step": "6.10.4",
+          "action": "Handle the personal-only user: no business UI, no empty business group, no dead navigation, and a clear path to enabling it later.",
+          "details": []
+        },
+        {
+          "step": "6.10.5",
+          "action": "Handle enabling business after onboarding: seed the business categories, require the group percentages to be rebalanced to exactly 100 percent, and guide the user through it.",
+          "details": []
+        },
+        {
+          "step": "6.10.6",
+          "action": "Write a test that walks every screen and asserts no unlabelled figure mixes scopes.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No screen shows a combined personal-plus-business total unless explicitly labelled as combined.",
+        "A personal-only user sees no business surface anywhere.",
+        "Enabling business later produces a valid configuration and guides the rebalancing.",
+        "The visual distinction is legible in both themes and in greyscale.",
+        "The cross-screen scope test passes."
+      ],
+      "outputs": [
+        "Scope separation across all screens."
+      ],
+      "must_not": [
+        "Do not implement scope filtering separately on each screen.",
+        "Do not convey scope by colour alone."
+      ],
+      "common_pitfalls": [
+        "One summary card that quietly sums all groups, undoing the separation everywhere else.",
+        "Enabling business later leaving the group split at 100 percent across only two groups."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-07"
+        ],
+        "invariants": []
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.11. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.11",
+      "substage": "6.11",
+      "position": "11 of 12",
+      "name": "Cross-cutting UI quality: states, inputs and accessibility",
+      "goal": "Give every screen its three states, a safe money input, and accessibility built in rather than retrofitted.",
+      "why_it_matters": "It is far cheaper to build these in now than to audit twenty finished screens in Stage 10.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.10 (Business scope separation) is complete and ticked off."
+      ],
+      "inputs": [
+        "NAVIGATION.md per-screen states.",
+        "NFR-08 targets.",
+        "The money formatter from substage 3.6."
+      ],
+      "work": [
+        {
+          "step": "6.11.1",
+          "action": "Implement the empty, loading and error state for every screen as designed, with no exceptions.",
+          "details": [
+            "Walk the screen inventory and tick each one; a screen without all three is not finished."
+          ]
+        },
+        {
+          "step": "6.11.2",
+          "action": "Implement the money input widget.",
+          "details": [
+            "Accepts only valid amounts for the configured currency, with the correct number of decimal places.",
+            "Rejects invalid paste content rather than silently truncating it.",
+            "Produces an integer minor-unit value and never a floating point number.",
+            "Handles the currency exponent, including 0 and 3."
+          ]
+        },
+        {
+          "step": "6.11.3",
+          "action": "Add semantic labels for screen readers on every interactive element as it is built.",
+          "details": [
+            "Money amounts must be announced in a form that makes sense read aloud, not as raw digits."
+          ]
+        },
+        {
+          "step": "6.11.4",
+          "action": "Verify each screen at 200 percent font scale as it is completed, rather than at the end.",
+          "details": []
+        },
+        {
+          "step": "6.11.5",
+          "action": "Add confirmation dialogs for destructive and irreversible actions, and ensure nothing destructive is one accidental tap away.",
+          "details": []
+        },
+        {
+          "step": "6.11.6",
+          "action": "Keep every user-facing string in one place, ready for localisation.",
+          "details": []
+        },
+        {
+          "step": "6.11.7",
+          "action": "Verify minimum touch target sizes and logical focus order across the app.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No screen lacks an empty, loading or error state.",
+        "The money input cannot produce an invalid amount, including through paste, proven by tests.",
+        "Every screen remains usable at 200 percent font scale with no clipped or overlapping text.",
+        "Every interactive element has a screen-reader label.",
+        "No user-facing string is hardcoded inside a widget's logic."
+      ],
+      "outputs": [
+        "Money input widget.",
+        "State coverage across all screens.",
+        "Externalised strings."
+      ],
+      "must_not": [
+        "Do not defer accessibility labels to Stage 9 or 10.",
+        "Do not hardcode two decimal places in the input."
+      ],
+      "common_pitfalls": [
+        "A money input that accepts a pasted value with four decimals and rounds it silently.",
+        "Font scaling checked once at the end, when fixing it means relaying out every screen."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-08"
+        ],
+        "invariants": [
+          "INV-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_6_WORKLOG.md, then continue to substage 6.12. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S06.12",
+      "substage": "6.12",
+      "position": "12 of 12",
+      "name": "Widget tests, flow tests and offline verification",
+      "goal": "Test every screen and every core journey, and prove the whole app works with no network.",
+      "why_it_matters": "Stage 9 is a QA pass, not the first time anything is tested. And NFR-02 is only real if it is demonstrated.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 6.11 (Cross-cutting UI quality: states, inputs and accessibility) is complete and ticked off."
+      ],
+      "inputs": [
+        "All screens from 6.1 to 6.11.",
+        "The Stage 3 test harness."
+      ],
+      "work": [
+        {
+          "step": "6.12.1",
+          "action": "Write widget tests for each screen covering its empty, populated and error states.",
+          "details": []
+        },
+        {
+          "step": "6.12.2",
+          "action": "Write a flow test for onboarding through to a confirmed first income event.",
+          "details": []
+        },
+        {
+          "step": "6.12.3",
+          "action": "Write a flow test for hitting a ceiling and seeing the redirect explained in the preview.",
+          "details": []
+        },
+        {
+          "step": "6.12.4",
+          "action": "Write a flow test for override, confirm and undo, asserting balances return exactly.",
+          "details": []
+        },
+        {
+          "step": "6.12.5",
+          "action": "Write a flow test for the business scope: log business income and spending, and assert personal totals are unaffected.",
+          "details": []
+        },
+        {
+          "step": "6.12.6",
+          "action": "Run every flow in an offline configuration with no network permission and no account linked.",
+          "details": [
+            "This is the demonstration of NFR-02; capture the evidence for the stage report."
+          ]
+        },
+        {
+          "step": "6.12.7",
+          "action": "Assert on underlying data in each flow test, not only on rendered widgets, so a display bug and a data bug are distinguishable.",
+          "details": []
+        },
+        {
+          "step": "6.12.8",
+          "action": "Measure and record presentation layer coverage, naming any gaps.",
+          "details": []
+        },
+        {
+          "step": "6.12.9",
+          "action": "Time the first-time user path end to end and record it against the 5 minute NFR-04 target.",
+          "details": []
+        },
+        {
+          "step": "6.12.10",
+          "action": "Write docs/UI_NOTES.md and docs/reports/STAGE_6_REPORT.md, and prepare the gate.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All widget and flow tests pass, with output captured.",
+        "Every core flow completes offline with no account linked, with evidence recorded.",
+        "Each flow test asserts on ledger state as well as on widgets.",
+        "Presentation layer coverage is at least 70 percent with named gaps.",
+        "The first-time user path is timed and meets the 5 minute target."
+      ],
+      "outputs": [
+        "Widget and flow test suites.",
+        "docs/UI_NOTES.md",
+        "docs/reports/STAGE_6_REPORT.md"
+      ],
+      "must_not": [
+        "Do not skip the offline run - it is the evidence for NFR-02.",
+        "Do not assert only on rendered text for money-moving flows."
+      ],
+      "common_pitfalls": [
+        "Flow tests that pass because they assert on the same computed value the screen displays.",
+        "Offline verification done on a device that still has cached credentials, which hides a dependency."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-02",
+          "NFR-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "A core flow cannot complete offline - this contradicts NFR-02 and must be raised before the gate."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "lib/presentation/**",
+      "format": "code"
+    },
+    {
+      "path": "lib/application/**",
+      "format": "code"
+    },
+    {
+      "path": "test/presentation/** and integration_test/**",
+      "format": "code"
+    },
+    {
+      "path": "docs/UI_NOTES.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_6_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "Every core flow is completable end to end on a real device with no network connection.",
+    "Every figure shown in the UI is derived from the ledger, never from a hand-maintained counter.",
+    "All widget and flow tests pass.",
+    "A first-time user can complete onboarding and their first income split in under 5 minutes.",
+    "Business and personal data are separated everywhere.",
+    "TRACEABILITY.md updated for every requirement this stage completes."
+  ],
+  "stage_must_not": [
+    "Do not implement cloud sync, Google Sign-In or any network call in this stage.",
+    "Do not duplicate any allocation logic in the UI; the engine is the only place that computes a split.",
+    "Do not mutate balances directly from a screen.",
+    "Do not leave a screen without its empty, loading and error states.",
+    "Do not use placeholder content in anything a reviewer might mistake for finished work.",
+    "Do not add analytics, crash reporting or any SDK that transmits data off-device."
+  ],
+  "anti_patterns": [
+    "Recomputing a split in the widget layer for the preview, which then diverges from what confirmation writes.",
+    "An onboarding flow so thorough that a first-time user abandons it.",
+    "Showing a redirect as a bare number with no explanation, which reads as money going missing.",
+    "Deferring accessibility labels to Stage 10, where they become an audit instead of a habit."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-06"
+  ],
+  "risks_in_focus": [
+    "R-06",
+    "R-01"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "A complete, correct local app that Stage 7 makes multi-device without changing its behaviour.",
+      "Reactive queries throughout, so background sync updates the UI with no extra plumbing.",
+      "The sync status surface, stubbed and ready for Stage 7 to drive."
+    ],
+    "summary_to_write": "Confirm every core flow works offline and list anything intentionally deferred to Stage 10 polish."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_6_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 6 (Core UI) is complete. The app is fully usable offline: onboarding, income splitting with preview and override, categories, accounts, dashboard, spending and business scope. Deferred polish items: <list>. Do you approve moving to Stage 7, cloud sync?"
+  }
+}

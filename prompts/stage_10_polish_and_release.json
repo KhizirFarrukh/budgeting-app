@@ -1,0 +1,944 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 10,
+  "stage_id": "S10",
+  "name": "Polish & Release Prep",
+  "one_line_goal": "Make it look finished, make it legal to publish, and produce a signed build that installs and works.",
+  "objective": "Final UX polish, branding, privacy policy, store compliance material, signed release build and documentation for future maintenance.",
+  "rationale": "A correct app that looks unfinished will not be trusted with someone's savings, and a correct app without a privacy policy cannot be published at all. Both are release blockers, so both belong here rather than in a hopeful backlog.",
+  "depends_on": [
+    "S09"
+  ],
+  "blocks": [],
+  "entry_criteria": [
+    "No open Sev-1 or Sev-2 defects.",
+    "Privacy verification passed on a release-configuration build.",
+    "docs/PRIVACY_SOURCE.md from Stage 7 is complete."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "All - this stage ships them"
+    ],
+    "non_functional_requirements": [
+      "NFR-01",
+      "NFR-03",
+      "NFR-04",
+      "NFR-08"
+    ],
+    "invariants": [
+      "INV-05"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 8,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_10_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "10.1 Branding and visual identity",
+      "10.2 State polish and debug affordance removal",
+      "10.3 Privacy policy drafting and publication",
+      "10.4 Store compliance, data safety and OAuth verification",
+      "10.5 Signing and build configuration",
+      "10.6 Code shrinking and release-build smoke test",
+      "10.7 Documentation for future maintenance",
+      "10.8 Release readiness review"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S10.01",
+      "substage": "10.1",
+      "position": "1 of 8",
+      "name": "Branding and visual identity",
+      "goal": "Produce the app icon, splash screen and finalised theming that make a finance app feel safe to use.",
+      "why_it_matters": "First impressions decide whether someone trusts an app with their savings.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "No open Sev-1 or Sev-2 defects.",
+        "Privacy verification passed on a release-configuration build.",
+        "docs/PRIVACY_SOURCE.md from Stage 7 is complete."
+      ],
+      "inputs": [
+        "The theme from substage 3.6.",
+        "Screen inventory."
+      ],
+      "work": [
+        {
+          "step": "10.1.1",
+          "action": "Design the app icon, including the Android adaptive icon with properly separated foreground and background layers.",
+          "details": [
+            "Check it against circular, squircle and rounded-square launcher masks.",
+            "Check it at the smallest launcher size, where detail disappears.",
+            "Check it against both light and dark system themes."
+          ]
+        },
+        {
+          "step": "10.1.2",
+          "action": "Design the splash screen using the platform's native splash mechanism.",
+          "details": [
+            "The native mechanism avoids the blank frame that a Flutter-drawn splash cannot."
+          ]
+        },
+        {
+          "step": "10.1.3",
+          "action": "Finalise light and dark themes and remove every remaining hardcoded colour, spacing or font literal.",
+          "details": [
+            "Run a search to prove none remain rather than assuming."
+          ]
+        },
+        {
+          "step": "10.1.4",
+          "action": "Confirm the business scope's visual distinction is intentional and consistent, and still works in dark mode and greyscale.",
+          "details": []
+        },
+        {
+          "step": "10.1.5",
+          "action": "Verify icon and splash on the smallest and largest supported screen densities.",
+          "details": []
+        },
+        {
+          "step": "10.1.6",
+          "action": "Verify the app name as displayed on the launcher, which is often truncated and rarely checked.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The adaptive icon renders correctly in circular, squircle and rounded-square launchers.",
+        "There is no blank or white flash between the splash and the first screen.",
+        "A search finds no colour or spacing literal outside the theme definition.",
+        "The launcher name displays correctly without awkward truncation."
+      ],
+      "outputs": [
+        "App icon assets.",
+        "Splash configuration.",
+        "Finalised theme."
+      ],
+      "must_not": [
+        "Do not ship a placeholder icon."
+      ],
+      "common_pitfalls": [
+        "An adaptive icon whose foreground is clipped by the launcher mask.",
+        "A Flutter-drawn splash that appears after a blank frame, which reads as a slow app."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.02",
+      "substage": "10.2",
+      "position": "2 of 8",
+      "name": "State polish and debug affordance removal",
+      "goal": "Bring every empty, error and loading state to a finished standard, and remove everything that should not ship.",
+      "why_it_matters": "Half-finished states are where an app stops feeling trustworthy, and a leftover developer menu is where it stops looking professional.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.1 (Branding and visual identity) is complete and ticked off."
+      ],
+      "inputs": [
+        "The screen inventory.",
+        "The developer route menu added in substage 3.7."
+      ],
+      "work": [
+        {
+          "step": "10.2.1",
+          "action": "Review every empty state: does it explain what will appear here and offer the single most useful next action?",
+          "details": []
+        },
+        {
+          "step": "10.2.2",
+          "action": "Review every error state: plain language, an actionable cause, and a route forward.",
+          "details": [
+            "No stack traces. No bare error codes. No provider jargon.",
+            "Every message should tell the user what to do next, not only what went wrong."
+          ]
+        },
+        {
+          "step": "10.2.3",
+          "action": "Review every loading state: skeletons or inline indicators rather than full-screen blocking spinners.",
+          "details": [
+            "Nothing may block on the network."
+          ]
+        },
+        {
+          "step": "10.2.4",
+          "action": "Add transitions and micro-interactions that aid comprehension, particularly when money moves between categories during a redirect.",
+          "details": [
+            "Respect the reduced-motion system setting."
+          ]
+        },
+        {
+          "step": "10.2.5",
+          "action": "Add haptic feedback for confirmation of destructive and money-moving actions, respecting system settings.",
+          "details": []
+        },
+        {
+          "step": "10.2.6",
+          "action": "Ensure every destructive action has a confirmation and, where feasible, an undo.",
+          "details": []
+        },
+        {
+          "step": "10.2.7",
+          "action": "Remove the developer route menu, all debug logging, any test fixture shipped in assets, and any hidden debug gesture.",
+          "details": [
+            "Verify by inspecting the built artefact, not only the source."
+          ]
+        },
+        {
+          "step": "10.2.8",
+          "action": "Verify the release build contains no leftover TODO-visible text, placeholder copy or lorem ipsum.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No screen shows a raw exception message anywhere.",
+        "Every empty state names a next action.",
+        "The developer menu and all debug affordances are absent from the release build, verified by inspecting the artefact.",
+        "No placeholder copy remains anywhere in the app.",
+        "Reduced-motion and haptic system settings are respected."
+      ],
+      "outputs": [
+        "Polished states across all screens.",
+        "Debug affordance removal."
+      ],
+      "must_not": [
+        "Do not leave a debug entry point behind a hidden gesture.",
+        "Do not show a technical error message to a user."
+      ],
+      "common_pitfalls": [
+        "A debug menu removed from navigation but still reachable by route name.",
+        "Animation that ignores the reduced-motion setting and makes the app unusable for some users."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-04",
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.03",
+      "substage": "10.3",
+      "position": "3 of 8",
+      "name": "Privacy policy drafting and publication",
+      "goal": "Turn the verified privacy behaviour into a published, accurate, plain-language policy.",
+      "why_it_matters": "R-04. It is a hard blocker for publication, it is the public statement of the product's core promise, and it always takes longer than expected.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.2 (State polish and debug affordance removal) is complete and ticked off."
+      ],
+      "inputs": [
+        "docs/PRIVACY_SOURCE.md from Stage 7.",
+        "Stage 9 privacy verification evidence."
+      ],
+      "work": [
+        {
+          "step": "10.3.1",
+          "action": "Draft the policy from PRIVACY_SOURCE.md, covering every required point.",
+          "details": [
+            "What data the app collects and what it does not.",
+            "That financial data is stored only on the device and in the user's own Google account.",
+            "Exactly which OAuth scopes are requested and why each one is needed.",
+            "That the developer cannot read the data.",
+            "That there are no third-party recipients, no analytics and no advertising.",
+            "How the user deletes their data, locally and remotely, with concrete steps.",
+            "How to contact the developer, and the effective date."
+          ]
+        },
+        {
+          "step": "10.3.2",
+          "action": "Write it in plain language a non-lawyer can follow.",
+          "details": [
+            "Every claim must correspond to verified behaviour from Stage 9, not to intention."
+          ]
+        },
+        {
+          "step": "10.3.3",
+          "action": "Note clearly that this is drafting support and not legal advice, and that a qualified person should review it before publication.",
+          "details": []
+        },
+        {
+          "step": "10.3.4",
+          "action": "Publish it at a stable public URL.",
+          "details": [
+            "Both the store listing and the OAuth consent screen require one, and the URL must not change later."
+          ]
+        },
+        {
+          "step": "10.3.5",
+          "action": "Link to it from within the app, and verify the in-app link opens the published version.",
+          "details": []
+        },
+        {
+          "step": "10.3.6",
+          "action": "Cross-check every statement in the policy against the Stage 9 traffic capture and permission list.",
+          "details": [
+            "A policy that overstates or understates behaviour is a compliance problem, in either direction."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The policy is live at a stable URL and covers every required point.",
+        "Every claim corresponds to verified Stage 9 behaviour.",
+        "The in-app link opens the published policy.",
+        "The need for qualified legal review is stated explicitly to the user."
+      ],
+      "outputs": [
+        "docs/PRIVACY_POLICY.md",
+        "Published policy URL.",
+        "In-app link."
+      ],
+      "must_not": [
+        "Do not copy a template policy that describes behaviour this app does not have.",
+        "Do not present the draft as legal advice."
+      ],
+      "common_pitfalls": [
+        "A policy claiming no data is collected while the app requests a profile scope.",
+        "A policy URL that later moves, breaking both the store listing and the consent screen."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01"
+        ],
+        "invariants": [
+          "INV-05"
+        ],
+        "risks": [
+          "R-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.04",
+      "substage": "10.4",
+      "position": "4 of 8",
+      "name": "Store compliance, data safety and OAuth verification",
+      "goal": "Prepare every artefact the store and the OAuth consent process require, matching actual behaviour.",
+      "why_it_matters": "R-04. These are hard blockers, and OAuth verification in particular can take weeks of calendar time.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.3 (Privacy policy drafting and publication) is complete and ticked off."
+      ],
+      "inputs": [
+        "The published privacy policy.",
+        "Stage 9 privacy verification evidence."
+      ],
+      "work": [
+        {
+          "step": "10.4.1",
+          "action": "Complete the Play Console data safety declaration.",
+          "details": [
+            "Every answer must match verified behaviour, checked against the Stage 9 traffic capture.",
+            "A mismatch is a common cause of rejection and of later enforcement action."
+          ]
+        },
+        {
+          "step": "10.4.2",
+          "action": "Prepare the OAuth consent screen content and begin verification if the current requirements call for it.",
+          "details": [
+            "Check the current requirements in official documentation rather than assuming; scope classifications change.",
+            "Record the expected wait time and treat it as a scheduling dependency, not a formality."
+          ]
+        },
+        {
+          "step": "10.4.3",
+          "action": "Prepare the store listing assets.",
+          "details": [
+            "Title, short description and full description that describe only what the app actually does.",
+            "Feature graphic, and at least four screenshots: onboarding, income split with a visible redirect, the dashboard, and a report.",
+            "Content rating questionnaire response."
+          ]
+        },
+        {
+          "step": "10.4.4",
+          "action": "Confirm the listing makes no claim the app does not deliver.",
+          "details": [
+            "In particular, nothing that implies bank connectivity, financial advice or guaranteed outcomes.",
+            "This is both a rejection risk and a trust risk."
+          ]
+        },
+        {
+          "step": "10.4.5",
+          "action": "Confirm the target SDK level meets the current Play requirement at the time of upload.",
+          "details": []
+        },
+        {
+          "step": "10.4.6",
+          "action": "Prepare the release notes for version 1.0.0 from the Stage 9 findings, including the known limitations.",
+          "details": []
+        },
+        {
+          "step": "10.4.7",
+          "action": "Record the verification status and any expected wait in the release checklist so it is visible.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every data safety answer is verifiable against Stage 9 evidence.",
+        "The store listing makes no claim the app does not deliver.",
+        "OAuth verification has been started if required, with its status and expected wait recorded.",
+        "Target SDK meets the current Play requirement.",
+        "Release notes and known limitations are written and honest."
+      ],
+      "outputs": [
+        "Data safety declaration.",
+        "Store listing assets.",
+        "OAuth consent content.",
+        "Release notes."
+      ],
+      "must_not": [
+        "Do not answer a data safety question optimistically.",
+        "Do not imply bank connectivity or financial advice anywhere in the listing."
+      ],
+      "common_pitfalls": [
+        "Starting OAuth verification the week of launch and discovering it takes weeks.",
+        "Screenshots from a debug build showing the developer menu."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01"
+        ],
+        "risks": [
+          "R-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.05",
+      "substage": "10.5",
+      "position": "5 of 8",
+      "name": "Signing and build configuration",
+      "goal": "Configure release signing safely and produce the signed artefacts.",
+      "why_it_matters": "A lost or committed signing key permanently ends the ability to update the app under that listing.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.4 (Store compliance, data safety and OAuth verification) is complete and ticked off."
+      ],
+      "inputs": [
+        "docs/ENVIRONMENT.md.",
+        "The OAuth client configuration from Stage 7."
+      ],
+      "work": [
+        {
+          "step": "10.5.1",
+          "action": "Generate the upload keystore and store it securely outside the repository.",
+          "details": [
+            "Document where it is stored and the recovery plan, without recording the secret itself anywhere in the repository.",
+            "Losing this key without Play App Signing enabled means the app can never be updated."
+          ]
+        },
+        {
+          "step": "10.5.2",
+          "action": "Configure release signing so no key material or password is ever committed.",
+          "details": [
+            "Use a gitignored properties file or environment variables.",
+            "Verify the repository history contains no secret, not only the current tree."
+          ]
+        },
+        {
+          "step": "10.5.3",
+          "action": "Enable Play App Signing so a lost upload key is recoverable.",
+          "details": []
+        },
+        {
+          "step": "10.5.4",
+          "action": "Verify the release build against the registered OAuth fingerprint.",
+          "details": [
+            "Debug and release fingerprints differ; sign-in fails silently if the release fingerprint was never registered.",
+            "This was prepared in Stage 7; confirm it here on the actual release build."
+          ]
+        },
+        {
+          "step": "10.5.5",
+          "action": "Set the version name and version code, and define the versioning scheme for future releases.",
+          "details": []
+        },
+        {
+          "step": "10.5.6",
+          "action": "Build the App Bundle and also a signed APK for direct sideload testing.",
+          "details": []
+        },
+        {
+          "step": "10.5.7",
+          "action": "Record the exact build commands so the build is reproducible from a clean checkout.",
+          "details": []
+        },
+        {
+          "step": "10.5.8",
+          "action": "Record the artefact size.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The signed App Bundle builds reproducibly from a clean checkout, with the command recorded.",
+        "No secret, keystore or password is present anywhere in the repository or its history.",
+        "Play App Signing is enabled.",
+        "The release build's fingerprint is registered with the OAuth client.",
+        "Version name and code are set and the scheme is documented."
+      ],
+      "outputs": [
+        "Signed App Bundle and APK.",
+        "Signing configuration.",
+        "Build command documentation."
+      ],
+      "must_not": [
+        "Do not commit the keystore or any password.",
+        "Do not rely on the debug fingerprint for release sign-in."
+      ],
+      "common_pitfalls": [
+        "A keystore committed once and removed later, which leaves it in git history forever.",
+        "Discovering at first release test that sign-in fails because only the debug fingerprint was registered."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.06",
+      "substage": "10.6",
+      "position": "6 of 8",
+      "name": "Code shrinking and release-build smoke test",
+      "goal": "Enable shrinking safely and prove the release build behaves identically to the debug build.",
+      "why_it_matters": "Shrinking strips reflection-based code, and database, JSON and Google libraries are the usual casualties - always discovered at the worst moment.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.5 (Signing and build configuration) is complete and ticked off."
+      ],
+      "inputs": [
+        "The signed build from substage 10.5.",
+        "docs/MANUAL_TEST_CHECKLIST.md."
+      ],
+      "work": [
+        {
+          "step": "10.6.1",
+          "action": "Enable code shrinking and resource shrinking.",
+          "details": []
+        },
+        {
+          "step": "10.6.2",
+          "action": "Add the keep rules the chosen libraries require, and verify each rather than assuming.",
+          "details": [
+            "Database serialisation, JSON serialisation and the Google client libraries are the usual candidates."
+          ]
+        },
+        {
+          "step": "10.6.3",
+          "action": "Install the release build on a clean device and run the full manual checklist from Stage 9 against it.",
+          "details": [
+            "Against the release build specifically, not a debug build.",
+            "The first database access, the first sync and the first sign-in are the highest-risk moments."
+          ]
+        },
+        {
+          "step": "10.6.4",
+          "action": "Run the full automated suite against the release configuration where possible.",
+          "details": []
+        },
+        {
+          "step": "10.6.5",
+          "action": "Compare release and debug behaviour on the money-critical paths: income split, redirect, override, undo, report and export.",
+          "details": []
+        },
+        {
+          "step": "10.6.6",
+          "action": "Re-run the money correctness reconciliation script against data produced by the release build.",
+          "details": []
+        },
+        {
+          "step": "10.6.7",
+          "action": "Record the artefact size before and after shrinking.",
+          "details": []
+        },
+        {
+          "step": "10.6.8",
+          "action": "If any shrinking-related failure is found, fix the keep rules rather than disabling shrinking, and re-run the whole smoke test.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The release build installs on a clean device and completes the primary journey including sign-in and sync.",
+        "The full manual checklist passes against the release build.",
+        "Money-critical paths behave identically in release and debug.",
+        "The reconciliation script reports zero discrepancies against release-build data.",
+        "Artefact size before and after shrinking is recorded."
+      ],
+      "outputs": [
+        "Verified release build.",
+        "Keep rules.",
+        "Smoke test results."
+      ],
+      "must_not": [
+        "Do not disable shrinking to work around a failure.",
+        "Do not skip the release-build manual checklist."
+      ],
+      "common_pitfalls": [
+        "A stripped serialiser that fails on the first database read, after the store listing is already live.",
+        "Testing the release build only on a device that already has app data, hiding first-run failures."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-05",
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.07",
+      "substage": "10.7",
+      "position": "7 of 8",
+      "name": "Documentation for future maintenance",
+      "goal": "Write the documents that let someone extend this app in six months without archaeology.",
+      "why_it_matters": "That someone is often the same person with no memory of the details.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.6 (Code shrinking and release-build smoke test) is complete and ticked off."
+      ],
+      "inputs": [
+        "All documentation produced across Stages 1 to 9."
+      ],
+      "work": [
+        {
+          "step": "10.7.1",
+          "action": "Write README.md.",
+          "details": [
+            "What the app is, screenshots, feature summary.",
+            "Setup from a clean machine, how to run tests, how to run code generation.",
+            "Project structure and the architecture summary, linking to ARCHITECTURE.md, SCHEMA.md, ALLOCATION_ALGORITHM.md and SYNC.md.",
+            "A docs index so nothing written across ten stages is orphaned."
+          ]
+        },
+        {
+          "step": "10.7.2",
+          "action": "Write the guide to extending the category system.",
+          "details": [
+            "How to add a category type, what the engine assumes about types, which validations must be updated, which tests must be extended.",
+            "State explicitly that any change touching allocation requires new golden vectors and a re-run of the property tests."
+          ]
+        },
+        {
+          "step": "10.7.3",
+          "action": "Write docs/RELEASE_RUNBOOK.md.",
+          "details": [
+            "Version bump, changelog, full check run, reconciliation script, manual checklist, build, upload, staged rollout, post-release watch, rollback."
+          ]
+        },
+        {
+          "step": "10.7.4",
+          "action": "Write docs/TROUBLESHOOTING.md covering sign-in failures, sync stalls, migration problems and export or import issues.",
+          "details": []
+        },
+        {
+          "step": "10.7.5",
+          "action": "Write CONTRIBUTING.md.",
+          "details": [
+            "The invariants that must never be broken - the manifest INV list is the core of it.",
+            "Testing expectations per layer, and the commit and branch conventions."
+          ]
+        },
+        {
+          "step": "10.7.6",
+          "action": "Write CHANGELOG.md for version 1.0.0 with features and known limitations.",
+          "details": []
+        },
+        {
+          "step": "10.7.7",
+          "action": "Archive every stage report under docs/reports/ and finalise docs/TRACEABILITY.md.",
+          "details": []
+        },
+        {
+          "step": "10.7.8",
+          "action": "Verify README.md by following it literally on a clean machine, or as close to clean as available.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "A developer can go from a clean machine to a running app using README.md alone, verified by following it literally.",
+        "The extension guide is specific enough to add a category type without reading the engine source first.",
+        "CONTRIBUTING.md states the invariants explicitly, including integer money and the append-only ledger.",
+        "Every stage report is archived and TRACEABILITY.md is complete.",
+        "No document produced in Stages 1 to 9 is orphaned from the docs index."
+      ],
+      "outputs": [
+        "README.md",
+        "CONTRIBUTING.md",
+        "CHANGELOG.md",
+        "docs/RELEASE_RUNBOOK.md",
+        "docs/TROUBLESHOOTING.md"
+      ],
+      "must_not": [
+        "Do not write a README that assumes prior knowledge of the project."
+      ],
+      "common_pitfalls": [
+        "Setup instructions that work only because of local state on the author's machine.",
+        "An extension guide that describes the intended design rather than the implemented one."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_10_WORKLOG.md, then continue to substage 10.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S10.08",
+      "substage": "10.8",
+      "position": "8 of 8",
+      "name": "Release readiness review",
+      "goal": "Run the final check against the exact artefact that will be published, and decide honestly whether to ship.",
+      "why_it_matters": "The last chance to catch something that would be embarrassing, or harmful to someone's savings.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 10.7 (Documentation for future maintenance) is complete and ticked off."
+      ],
+      "inputs": [
+        "The release artefact from substage 10.6.",
+        "All documentation."
+      ],
+      "work": [
+        {
+          "step": "10.8.1",
+          "action": "Re-run the full automated suite and the Stage 9 manual checklist against the exact release artefact.",
+          "details": []
+        },
+        {
+          "step": "10.8.2",
+          "action": "Re-run the money correctness reconciliation against a fresh multi-year synthetic dataset.",
+          "details": []
+        },
+        {
+          "step": "10.8.3",
+          "action": "Confirm no debug logging, developer menu, test account or hardcoded fixture survives in the release build, by inspecting the artefact.",
+          "details": []
+        },
+        {
+          "step": "10.8.4",
+          "action": "Confirm the privacy policy URL in the app matches the published one and opens correctly.",
+          "details": []
+        },
+        {
+          "step": "10.8.5",
+          "action": "Confirm the app works fully offline on a device that has never had network access.",
+          "details": [
+            "This is the final proof of NFR-02, on the artefact that will actually ship."
+          ]
+        },
+        {
+          "step": "10.8.6",
+          "action": "Finalise release notes and the known limitations list from the Stage 9 findings.",
+          "details": []
+        },
+        {
+          "step": "10.8.7",
+          "action": "Plan the staged rollout and define what would trigger a halt or a rollback.",
+          "details": [
+            "Define the specific signals: crash rate, sign-in failure reports, any report of an incorrect balance."
+          ]
+        },
+        {
+          "step": "10.8.8",
+          "action": "Define post-release monitoring.",
+          "details": [
+            "With no analytics, the only feedback channel is user reports, so make contacting the developer easy from within the app.",
+            "State plainly that this is a deliberate trade-off of the privacy design, and what it means operationally."
+          ]
+        },
+        {
+          "step": "10.8.9",
+          "action": "Write docs/reports/STAGE_10_REPORT.md and prepare the final gate question.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The full suite passes against the release artefact, not a debug build.",
+        "The reconciliation script reports zero discrepancies.",
+        "A clean-device offline install completes the primary journey.",
+        "The in-app privacy policy link opens the published policy.",
+        "Release notes and known limitations are written and honest.",
+        "Rollback triggers are defined specifically, not vaguely."
+      ],
+      "outputs": [
+        "docs/reports/STAGE_10_REPORT.md",
+        "Release notes.",
+        "Rollout and rollback plan."
+      ],
+      "must_not": [
+        "Do not publish with a known Sev-1 or Sev-2 defect.",
+        "Do not add analytics at the last minute to monitor the launch."
+      ],
+      "common_pitfalls": [
+        "Final verification run against a build that is not the one uploaded.",
+        "No defined rollback trigger, so a bad release runs on judgement in the moment."
+      ],
+      "traceability": {
+        "covers": [
+          "All FR and NFR"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "Any discrepancy in the reconciliation run, or any Sev-1 or Sev-2 defect discovered during final review."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "Signed release App Bundle and APK",
+      "format": "binary"
+    },
+    {
+      "path": "README.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/PRIVACY_POLICY.md and its published URL",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/RELEASE_RUNBOOK.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/TROUBLESHOOTING.md",
+      "format": "markdown"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "format": "markdown"
+    },
+    {
+      "path": "CHANGELOG.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_10_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "A signed App Bundle exists, installs on a clean device, and completes the primary journey including sign-in and sync.",
+    "The privacy policy is published and accurate.",
+    "The Play data safety declaration matches verified behaviour.",
+    "README.md takes a developer from clean machine to running app.",
+    "No debug affordance, secret or placeholder survives in the release build.",
+    "The full automated suite and the manual checklist pass against the release artefact.",
+    "TRACEABILITY.md is complete and every stage report is archived."
+  ],
+  "stage_must_not": [
+    "Do not commit the keystore, its password, or any OAuth secret to the repository, in the working tree or in history.",
+    "Do not enable code shrinking without a full release-build smoke test.",
+    "Do not publish a privacy policy that describes behaviour the app does not have.",
+    "Do not add analytics or crash reporting at the last minute to monitor the launch.",
+    "Do not ship with a known Sev-1 or Sev-2 defect.",
+    "Do not leave the developer route menu, debug logging or test fixtures in the release build.",
+    "Do not present the drafted privacy policy as legal advice."
+  ],
+  "anti_patterns": [
+    "Treating the privacy policy as a formality to copy from a template, when it is the public statement of the product's core promise.",
+    "Testing only the debug build and discovering at upload time that release signing breaks sign-in.",
+    "Enabling shrinking on the last day and shipping a build that crashes on first database access.",
+    "A README that assumes the reader already knows the project."
+  ],
+  "open_questions_to_resolve": [],
+  "risks_in_focus": [
+    "R-04"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "There is no next stage. The release runbook and manual checklist become the process for every future version.",
+      "The open questions register and deferred features from Stage 1 become the version 1.1 backlog."
+    ],
+    "summary_to_write": "State what shipped, what was deferred, what the user should know before relying on the app for real money, and what the next release should contain."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_10_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 10 (Release prep) is complete. A signed App Bundle is built and verified on a clean device, the privacy policy is published, and documentation is complete. Known limitations: <list>. Deferred to v1.1: <list>. Ready to publish?"
+  }
+}

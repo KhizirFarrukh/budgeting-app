@@ -1,0 +1,907 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 8,
+  "stage_id": "S08",
+  "name": "Reports & Insights",
+  "one_line_goal": "Give the user a truthful, reconcilable view of where their money went, and a clean way to get it out of the app.",
+  "objective": "Build monthly and yearly summaries, ceiling progress visualisation, group ratio trends and CSV export, all derived from the ledger and reconciling to the minor unit.",
+  "rationale": "Reports are the first place inconsistencies become visible. Building them on a finished data and sync layer means a discrepancy indicates a real bug, not an unfinished feature.",
+  "depends_on": [
+    "S07"
+  ],
+  "blocks": [
+    "S09"
+  ],
+  "entry_criteria": [
+    "Sync is implemented and two-device convergence demonstrated.",
+    "The synthetic five-year dataset generator from Stage 4 is available."
+  ],
+  "traceability": {
+    "feature_requirements": [
+      "FR-13",
+      "FR-14"
+    ],
+    "non_functional_requirements": [
+      "NFR-03",
+      "NFR-06",
+      "NFR-07",
+      "NFR-08"
+    ],
+    "invariants": [
+      "INV-02",
+      "INV-04",
+      "INV-09"
+    ]
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 8,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_8_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "8.1 Aggregation query layer and period boundaries",
+      "8.2 Monthly and yearly summary reports",
+      "8.3 Ceiling progress visualisation",
+      "8.4 Trend and ratio charts with accessible alternatives",
+      "8.5 CSV export format and implementation",
+      "8.6 Full JSON backup and restore surface",
+      "8.7 Report test suite and reconciliation",
+      "8.8 Reports documentation and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S08.01",
+      "substage": "8.1",
+      "position": "1 of 8",
+      "name": "Aggregation query layer and period boundaries",
+      "goal": "Build ledger-derived aggregation with precisely defined period boundaries and the indexes to make it fast.",
+      "why_it_matters": "Every figure in every report comes from here. A parallel aggregation path is how a report starts disagreeing with the dashboard.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Sync is implemented and two-device convergence demonstrated.",
+        "The synthetic five-year dataset generator from Stage 4 is available."
+      ],
+      "inputs": [
+        "Stage 4 ledger and indexes.",
+        "PRD data volume assumptions."
+      ],
+      "work": [
+        {
+          "step": "8.1.1",
+          "action": "Implement aggregation queries by period, category, group and account, computed from ledger entries only.",
+          "details": [
+            "No aggregation may read a cached balance without a path back to the ledger."
+          ]
+        },
+        {
+          "step": "8.1.2",
+          "action": "Define period boundaries precisely.",
+          "details": [
+            "Calendar month and calendar year in the user's local timezone, converted from stored UTC epoch milliseconds.",
+            "Document the behaviour for an entry recorded near midnight at a boundary.",
+            "Document what happens when the user travels and the device timezone changes - entries must not silently move between months without an intentional, documented rule."
+          ]
+        },
+        {
+          "step": "8.1.3",
+          "action": "Support arbitrary custom date ranges in addition to month and year.",
+          "details": []
+        },
+        {
+          "step": "8.1.4",
+          "action": "Separate personal and business aggregates at the query level, so no report can accidentally combine them.",
+          "details": []
+        },
+        {
+          "step": "8.1.5",
+          "action": "Verify each query uses its designed index by inspecting the query plan, and add any index the design missed.",
+          "details": [
+            "An index added here must be added to SCHEMA.md too, with its justifying query."
+          ]
+        },
+        {
+          "step": "8.1.6",
+          "action": "Implement caching for expensive aggregates with explicit invalidation on any ledger change, plus a force-recompute path.",
+          "details": []
+        },
+        {
+          "step": "8.1.7",
+          "action": "Implement the reconciliation assertion used by tests: total category movements over a period equal total income plus spending entries in that period.",
+          "details": []
+        },
+        {
+          "step": "8.1.8",
+          "action": "Benchmark every aggregation against the five-year synthetic dataset and record the timings.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every report figure traces back to specific ledger entries, proven by a drill-down test for a sample period.",
+        "Reports over a five-year ledger complete within the NFR-06 budget, with timings recorded.",
+        "The reconciliation assertion passes for every seeded scenario, including months containing reversals.",
+        "A timezone change does not move an entry between months except by the documented rule.",
+        "Every query uses its intended index, verified by query plan."
+      ],
+      "outputs": [
+        "lib/data/reporting/queries.dart",
+        "Reconciliation assertion helper."
+      ],
+      "must_not": [
+        "Do not build a second aggregation path parallel to the dashboard's.",
+        "Do not aggregate in Dart what the database can aggregate correctly and faster."
+      ],
+      "common_pitfalls": [
+        "Period boundaries computed in UTC, so a user in a positive-offset timezone sees late-evening entries land in the wrong month.",
+        "A cache with no invalidation on sync-driven writes, which goes stale exactly when a second device is used."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-04",
+          "INV-09"
+        ],
+        "covers": [
+          "NFR-06"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.02",
+      "substage": "8.2",
+      "position": "2 of 8",
+      "name": "Monthly and yearly summary reports",
+      "goal": "Build the periodic review the user actually reads, including redirect activity and rule changes.",
+      "why_it_matters": "FR-14. This is where the user finds out whether the plan is working, so every figure must be defensible.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.1 (Aggregation query layer and period boundaries) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 8.1 aggregation layer."
+      ],
+      "work": [
+        {
+          "step": "8.2.1",
+          "action": "Build the monthly summary: total income, total allocated per group, total spent per category, net change per category, opening and closing balances.",
+          "details": []
+        },
+        {
+          "step": "8.2.2",
+          "action": "Build the yearly summary with the same structure plus month-over-month comparison.",
+          "details": []
+        },
+        {
+          "step": "8.2.3",
+          "action": "Show redirect activity explicitly.",
+          "details": [
+            "How much was redirected out of full categories during the period, and where it went.",
+            "This is the app's signature behaviour and users will look for it."
+          ]
+        },
+        {
+          "step": "8.2.4",
+          "action": "Show the rule version or versions in effect during the period.",
+          "details": [
+            "A user comparing two periods must be able to see that their percentages changed between them (INV-11)."
+          ]
+        },
+        {
+          "step": "8.2.5",
+          "action": "Handle sparse data honestly: a month with no income shows zero, never an interpolation or a hidden row.",
+          "details": []
+        },
+        {
+          "step": "8.2.6",
+          "action": "Allow switching scope between personal, business and, if explicitly labelled, combined.",
+          "details": []
+        },
+        {
+          "step": "8.2.7",
+          "action": "Implement drill-down from any figure to the underlying ledger entries.",
+          "details": [
+            "This is both a feature and the mechanism by which a user can check the app's arithmetic."
+          ]
+        },
+        {
+          "step": "8.2.8",
+          "action": "Write tests asserting opening balance plus period movements equals closing balance exactly, per category.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Opening balance plus movements equals closing balance exactly for every category, asserted by tests.",
+        "Per-category figures sum to the group total, which sums to the report total.",
+        "Redirect totals match the allocation reasons recorded in the ledger.",
+        "A month with no data renders a clear empty state rather than a broken chart.",
+        "Every figure drills down to its underlying ledger entries."
+      ],
+      "outputs": [
+        "Monthly and yearly report screens."
+      ],
+      "must_not": [
+        "Do not hide empty periods.",
+        "Do not present a figure that cannot be drilled down to its source."
+      ],
+      "common_pitfalls": [
+        "Opening balances computed from a different query than closing balances, so they disagree by a unit.",
+        "Redirect activity omitted, leaving the user unable to see why a category grew unexpectedly."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-14"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-11"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.03",
+      "substage": "8.3",
+      "position": "3 of 8",
+      "name": "Ceiling progress visualisation",
+      "goal": "Show goal progress accurately and accessibly, including the history of reaching and passing a ceiling.",
+      "why_it_matters": "FR-10's payoff. Watching goals fill is the app's main motivational surface.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.2 (Monthly and yearly summary reports) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 8.1 aggregation.",
+        "Stage 3 progress indicator primitive."
+      ],
+      "work": [
+        {
+          "step": "8.3.1",
+          "action": "Show progress per accumulating category: current balance against ceiling, with the percentage and the remaining amount.",
+          "details": [
+            "Compute the percentage from integer values and never let display rounding show 100 percent before a category is genuinely full."
+          ]
+        },
+        {
+          "step": "8.3.2",
+          "action": "Show the historical fill curve over time for a selected category.",
+          "details": []
+        },
+        {
+          "step": "8.3.3",
+          "action": "Mark the moment a ceiling was reached, and show where the overflow went afterwards.",
+          "details": []
+        },
+        {
+          "step": "8.3.4",
+          "action": "Handle uncapped categories gracefully: show the trend with no fake target.",
+          "details": []
+        },
+        {
+          "step": "8.3.5",
+          "action": "Handle the over-ceiling case, which can occur after a manual override, without a broken or clipped indicator.",
+          "details": []
+        },
+        {
+          "step": "8.3.6",
+          "action": "Convey progress without relying on colour alone: include a numeric label and a shape or pattern distinction.",
+          "details": []
+        },
+        {
+          "step": "8.3.7",
+          "action": "Provide a screen-reader-friendly description of each progress state.",
+          "details": []
+        },
+        {
+          "step": "8.3.8",
+          "action": "Write tests for a category that reached its ceiling, then dropped below it after spending, then refilled.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Progress never displays 100 percent before a category is genuinely full.",
+        "A category that reached, dropped below and refilled its ceiling shows that history accurately.",
+        "An over-ceiling category renders without clipping or breaking.",
+        "Indicators remain interpretable in greyscale and with a screen reader."
+      ],
+      "outputs": [
+        "Ceiling progress views and the fill history chart."
+      ],
+      "must_not": [
+        "Do not round a progress percentage upward to 100.",
+        "Do not convey fullness by colour alone."
+      ],
+      "common_pitfalls": [
+        "A progress bar that overflows its container when balance exceeds ceiling.",
+        "Percentage computed in a double, showing 100 percent at 99.7."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-10",
+          "FR-13",
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.04",
+      "substage": "8.4",
+      "position": "4 of 8",
+      "name": "Trend and ratio charts with accessible alternatives",
+      "goal": "Show how the spending, savings and business balance has actually shifted over time, based on real allocations.",
+      "why_it_matters": "FR-14. Configured percentages say what the user intended; actual allocations, including redirects, say what happened.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.3 (Ceiling progress visualisation) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 8.1 aggregation.",
+        "Charting library from Stage 3."
+      ],
+      "work": [
+        {
+          "step": "8.4.1",
+          "action": "Chart the spending versus savings versus business ratio over time, computed from actual allocations rather than configured percentages.",
+          "details": [
+            "This makes redirects visible in the long view, which is the interesting part."
+          ]
+        },
+        {
+          "step": "8.4.2",
+          "action": "Chart individual category trends over a selected range.",
+          "details": []
+        },
+        {
+          "step": "8.4.3",
+          "action": "Provide an accessible tabular equivalent for every chart, reachable from the UI.",
+          "details": []
+        },
+        {
+          "step": "8.4.4",
+          "action": "Make every chart readable at small sizes and at large font scales.",
+          "details": []
+        },
+        {
+          "step": "8.4.5",
+          "action": "Handle degenerate inputs: one data point, zero data points, and a very long range.",
+          "details": []
+        },
+        {
+          "step": "8.4.6",
+          "action": "Ensure charted ratios sum to 100 percent for every period, computed from integer amounts.",
+          "details": []
+        },
+        {
+          "step": "8.4.7",
+          "action": "Explicitly exclude projections, forecasts, advice or scoring - show what happened, not what will happen.",
+          "details": [
+            "Anything predictive is out of scope for version 1 and would need its own requirement."
+          ]
+        },
+        {
+          "step": "8.4.8",
+          "action": "Write tests asserting chart data matches the aggregation layer exactly.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Charted ratios sum to 100 percent for every period.",
+        "Every chart has an accessible tabular equivalent reachable from the UI.",
+        "Charts degrade sensibly with zero, one and very many data points.",
+        "No chart implies a forecast or recommendation.",
+        "Chart data matches the aggregation layer exactly, proven by tests."
+      ],
+      "outputs": [
+        "Ratio and trend charts.",
+        "Tabular alternatives."
+      ],
+      "must_not": [
+        "Do not add forecasting.",
+        "Do not chart configured percentages and present them as outcomes."
+      ],
+      "common_pitfalls": [
+        "Ratios computed as floating point percentages that sum to 99.9.",
+        "A chart with no accessible alternative, which excludes screen reader users from the whole feature."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-14",
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.05",
+      "substage": "8.5",
+      "position": "5 of 8",
+      "name": "CSV export format and implementation",
+      "goal": "Produce an unambiguous, correctly escaped CSV that reconciles exactly with the in-app figures.",
+      "why_it_matters": "FR-14 and NFR-07 - the user's data must be theirs to take elsewhere, and it must survive the trip.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.4 (Trend and ratio charts with accessible alternatives) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 8.1 aggregation.",
+        "OQ-10 resolution on business-scoped export."
+      ],
+      "work": [
+        {
+          "step": "8.5.1",
+          "action": "Define the CSV schema explicitly, with a documented header row.",
+          "details": [
+            "date, type, group, category, account, amount, reason, redirected_from, note, running_balance, rule_version.",
+            "Document every column's meaning in docs/EXPORT_FORMAT.md."
+          ]
+        },
+        {
+          "step": "8.5.2",
+          "action": "Write amounts as exact decimal strings derived from integer minor units.",
+          "details": [
+            "Never format via a floating point intermediate.",
+            "Respect the currency exponent: two decimals for most, zero for JPY-like, three for KWD-like."
+          ]
+        },
+        {
+          "step": "8.5.3",
+          "action": "Use ISO 8601 dates and state the timezone used in the file, so the export is unambiguous elsewhere.",
+          "details": []
+        },
+        {
+          "step": "8.5.4",
+          "action": "Quote and escape fields correctly per RFC 4180.",
+          "details": [
+            "Category names containing commas, double quotes and newlines must round-trip.",
+            "Test with a category name containing all three."
+          ]
+        },
+        {
+          "step": "8.5.5",
+          "action": "Write UTF-8 and decide deliberately whether to emit a byte order mark, documenting the choice with reference to spreadsheet compatibility.",
+          "details": []
+        },
+        {
+          "step": "8.5.6",
+          "action": "Implement export scopes: whole history, a date range, personal only, business only, and per-category.",
+          "details": []
+        },
+        {
+          "step": "8.5.7",
+          "action": "Implement export via the platform share sheet and to a user-chosen file location, working entirely offline.",
+          "details": []
+        },
+        {
+          "step": "8.5.8",
+          "action": "Handle adverse conditions: insufficient storage, a cancelled file picker, and a very large export.",
+          "details": [
+            "Stream the write rather than building the whole file in memory."
+          ]
+        },
+        {
+          "step": "8.5.9",
+          "action": "Write the reconciliation test: exported totals equal on-screen report totals for the same scope and period.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Exported CSV totals reconcile exactly with on-screen report totals for the same scope and period.",
+        "A category name containing a comma, a double quote and a newline round-trips correctly through a spreadsheet application.",
+        "No exported amount is written via a floating point intermediate.",
+        "Export works with no network connection.",
+        "A large export streams rather than exhausting memory.",
+        "The header row and column meanings are documented in EXPORT_FORMAT.md."
+      ],
+      "outputs": [
+        "CSV export implementation.",
+        "docs/EXPORT_FORMAT.md"
+      ],
+      "must_not": [
+        "Do not format amounts through a double.",
+        "Do not build the entire export in memory."
+      ],
+      "common_pitfalls": [
+        "Escaping that handles commas but not embedded newlines, which corrupts every subsequent row.",
+        "An export whose timezone is unstated, making the dates ambiguous to the recipient."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-14",
+          "NFR-07"
+        ],
+        "invariants": [
+          "INV-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.06",
+      "substage": "8.6",
+      "position": "6 of 8",
+      "name": "Full JSON backup and restore surface",
+      "goal": "Expose the Stage 4 backup as a user-facing action and make restore safe.",
+      "why_it_matters": "NFR-07 - CSV is for reading elsewhere; JSON is for getting the data back exactly.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.5 (CSV export format and implementation) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 export and import implementation."
+      ],
+      "work": [
+        {
+          "step": "8.6.1",
+          "action": "Expose full JSON export as a user action, with a clear explanation of how it differs from CSV.",
+          "details": [
+            "CSV is for spreadsheets and is lossy; JSON is complete and restorable."
+          ]
+        },
+        {
+          "step": "8.6.2",
+          "action": "Include the schema version, currency configuration and export timestamp in the file header.",
+          "details": []
+        },
+        {
+          "step": "8.6.3",
+          "action": "Expose restore, with explicit confirmation and a clear statement of what it will replace.",
+          "details": [
+            "Refuse a newer schema version and a mismatched currency, with plain-language explanations."
+          ]
+        },
+        {
+          "step": "8.6.4",
+          "action": "Warn clearly if restoring over an install that already has data, and state exactly what happens.",
+          "details": []
+        },
+        {
+          "step": "8.6.5",
+          "action": "Show export and restore progress for large datasets without blocking the UI.",
+          "details": []
+        },
+        {
+          "step": "8.6.6",
+          "action": "Write the round-trip test at the user-facing level: export, wipe, restore, and confirm every balance and ledger entry matches.",
+          "details": []
+        },
+        {
+          "step": "8.6.7",
+          "action": "Document the relationship between JSON backup, CSV export and cloud sync, so the user knows which to use when.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Export then wipe then restore reproduces identical balances and ledger contents.",
+        "Restore refuses a newer schema version and a mismatched currency with clear messages.",
+        "Restoring over existing data requires explicit confirmation and states the consequence.",
+        "Large exports and restores show progress without blocking the UI."
+      ],
+      "outputs": [
+        "Backup and restore screens."
+      ],
+      "must_not": [
+        "Do not allow a silent overwrite of existing data.",
+        "Do not present JSON backup as a replacement for cloud sync, or vice versa."
+      ],
+      "common_pitfalls": [
+        "Restore that partially applies and leaves a mixed state - it must be all or nothing.",
+        "No progress indication on a five-year export, which reads as a frozen app."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-07"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.07",
+      "substage": "8.7",
+      "position": "7 of 8",
+      "name": "Report test suite and reconciliation",
+      "goal": "Prove that dashboard, reports and export all agree, across every awkward scenario.",
+      "why_it_matters": "A report that disagrees with the dashboard destroys confidence in both, and the user will find it before you do.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.6 (Full JSON backup and restore surface) is complete and ticked off."
+      ],
+      "inputs": [
+        "Stage 4 synthetic dataset generator.",
+        "All report implementations from 8.1 to 8.6."
+      ],
+      "work": [
+        {
+          "step": "8.7.1",
+          "action": "Build deterministic fixture datasets covering the awkward cases.",
+          "details": [
+            "A normal month. A month containing redirects. A month containing reversals.",
+            "A month spanning a distribution rule change. An empty month. A leap-year February.",
+            "A month spanning a daylight-saving transition, if the target locale observes one.",
+            "A month with an over-ceiling category caused by a manual override."
+          ]
+        },
+        {
+          "step": "8.7.2",
+          "action": "Assert every report figure against hand-computed expected values, not against the implementation's output.",
+          "details": []
+        },
+        {
+          "step": "8.7.3",
+          "action": "Assert report totals match dashboard totals for the same period and scope.",
+          "details": []
+        },
+        {
+          "step": "8.7.4",
+          "action": "Assert CSV export totals match report totals for the same scope.",
+          "details": []
+        },
+        {
+          "step": "8.7.5",
+          "action": "Assert the reconciliation invariant across the full history: the sum of all category balances equals total income minus total spending.",
+          "details": []
+        },
+        {
+          "step": "8.7.6",
+          "action": "Run the performance suite over the five-year synthetic ledger and record every timing.",
+          "details": []
+        },
+        {
+          "step": "8.7.7",
+          "action": "Test report behaviour mid-sync, with a partially merged dataset, and confirm figures still reconcile internally.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All report tests pass with independently computed expectations.",
+        "Dashboard, report and CSV agree to the minor unit across every fixture.",
+        "The full-history reconciliation invariant holds.",
+        "Performance figures are recorded against NFR-06 targets.",
+        "Reports remain internally consistent when run against a partially merged dataset."
+      ],
+      "outputs": [
+        "test/reporting/** complete.",
+        "Fixture datasets."
+      ],
+      "must_not": [
+        "Do not derive an expected value from the implementation.",
+        "Do not skip the mid-sync case."
+      ],
+      "common_pitfalls": [
+        "Fixtures generated by the same code path the report uses, which makes the test tautological.",
+        "Testing only whole months, missing the boundary behaviour that users actually hit."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-13",
+          "FR-14",
+          "NFR-06"
+        ],
+        "invariants": [
+          "INV-02",
+          "INV-04"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_8_WORKLOG.md, then continue to substage 8.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S08.08",
+      "substage": "8.8",
+      "position": "8 of 8",
+      "name": "Reports documentation and gate preparation",
+      "goal": "Document the export format and reconciliation evidence, and prepare the stage gate.",
+      "why_it_matters": "The reconciliation evidence is what lets a reviewer trust the numbers without recomputing them.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 8.7 (Report test suite and reconciliation) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 8.1 to 8.7."
+      ],
+      "work": [
+        {
+          "step": "8.8.1",
+          "action": "Finalise docs/EXPORT_FORMAT.md.",
+          "details": [
+            "CSV schema and header definitions, amount and date formatting rules, escaping and encoding, export scopes, JSON backup format and how it differs."
+          ]
+        },
+        {
+          "step": "8.8.2",
+          "action": "Record the reconciliation evidence: which figures were compared, against what, and the result.",
+          "details": []
+        },
+        {
+          "step": "8.8.3",
+          "action": "Record any rounding or timezone behaviour a user could find surprising, in plain language, for the Stage 10 known-limitations list.",
+          "details": [
+            "For example: an entry recorded at 11:50pm on the last day of a month while travelling."
+          ]
+        },
+        {
+          "step": "8.8.4",
+          "action": "Update docs/TRACEABILITY.md for FR-13 and FR-14.",
+          "details": []
+        },
+        {
+          "step": "8.8.5",
+          "action": "Write docs/reports/STAGE_8_REPORT.md with test output, reconciliation evidence and performance timings.",
+          "details": []
+        },
+        {
+          "step": "8.8.6",
+          "action": "Prepare the gate question.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "EXPORT_FORMAT.md is complete enough for a third party to parse an export without asking questions.",
+        "Reconciliation evidence is recorded with specific figures, not assertions of correctness.",
+        "Surprising behaviours are documented in plain language for the release notes.",
+        "TRACEABILITY.md is updated."
+      ],
+      "outputs": [
+        "docs/EXPORT_FORMAT.md",
+        "docs/reports/STAGE_8_REPORT.md"
+      ],
+      "must_not": [
+        "Do not claim reconciliation without recording the figures compared."
+      ],
+      "common_pitfalls": [
+        "Documenting the intended export format rather than the emitted one."
+      ],
+      "traceability": {
+        "covers": [
+          "FR-14"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "lib/data/reporting/** and lib/presentation/reports/**",
+      "format": "code"
+    },
+    {
+      "path": "test/reporting/**",
+      "format": "code"
+    },
+    {
+      "path": "docs/EXPORT_FORMAT.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/reports/STAGE_8_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "Every report figure is derived from the ledger and reconciles with the dashboard to the minor unit.",
+    "CSV export round-trips through a spreadsheet application without corruption and reconciles with in-app totals.",
+    "Charts are accessible, including a tabular alternative.",
+    "Report performance meets NFR-06 over a five-year synthetic ledger.",
+    "TRACEABILITY.md updated for FR-14."
+  ],
+  "stage_must_not": [
+    "Do not compute report figures from cached balances without a verification path back to the ledger.",
+    "Do not use floating point in any aggregation or in the export.",
+    "Do not combine personal and business figures in any total that is not explicitly labelled as combined.",
+    "Do not add forecasting, advice or scoring features.",
+    "Do not send report data anywhere; export is local and user-initiated only.",
+    "Do not silently drop entries that fall outside a period boundary due to timezone conversion."
+  ],
+  "anti_patterns": [
+    "A report built on its own parallel aggregation logic that slowly diverges from the dashboard.",
+    "Formatting amounts by dividing by 100 in a double, introducing representation error at export time.",
+    "Charts that convey meaning by colour alone.",
+    "Hiding empty periods, so a user cannot distinguish no income from a bug."
+  ],
+  "open_questions_to_resolve": [
+    "OQ-10"
+  ],
+  "risks_in_focus": [
+    "R-01"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "Fixture datasets that Stage 9 reuses for end-to-end tests.",
+      "Reconciliation assertions that Stage 9 promotes into the release checklist.",
+      "The export path, which Stage 9 tests under adverse conditions such as full device storage."
+    ],
+    "summary_to_write": "Record the reconciliation evidence and any rounding or timezone behaviour a user could find surprising."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_8_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 8 (Reports) is complete. Monthly and yearly summaries, ceiling progress, ratio trends and CSV export all reconcile with the dashboard to the minor unit. Do you approve moving to Stage 9, the full QA pass?"
+  }
+}

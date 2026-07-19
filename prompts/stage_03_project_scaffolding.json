@@ -1,0 +1,971 @@
+{
+  "schema_version": "4.0.0",
+  "read_first": "00_project_manifest.json",
+  "stage": 3,
+  "stage_id": "S03",
+  "name": "Project Scaffolding",
+  "one_line_goal": "Stand up a buildable, lint-clean Flutter skeleton whose folder structure and stub screens exactly match the approved design.",
+  "objective": "Set up the Flutter project structure, dependencies, tooling and navigation shell without implementing any business logic or persistence.",
+  "rationale": "A scaffold that matches the architecture document is a cheap contract check. If the tree cannot be built as designed, the design was wrong, and finding that out now costs an hour instead of a refactor.",
+  "depends_on": [
+    "S02"
+  ],
+  "blocks": [
+    "S04",
+    "S05",
+    "S06"
+  ],
+  "entry_criteria": [
+    "ARCHITECTURE.md approved, including the directory tree and technology decisions.",
+    "NAVIGATION.md approved, including the screen inventory.",
+    "Flutter SDK installed and flutter doctor reports no blocking Android issues."
+  ],
+  "traceability": {
+    "non_functional_requirements": [
+      "NFR-06"
+    ],
+    "invariants": [
+      "INV-01",
+      "INV-09"
+    ],
+    "supports": "All later stages; this stage produces no user-facing behaviour of its own."
+  },
+  "how_to_work_this_stage": {
+    "unit_of_work": "One substage per working session. Work them strictly in listed order; do not parallelise or skip.",
+    "substage_count": 9,
+    "between_substages": "Tick the substage off, append evidence to docs/reports/STAGE_3_WORKLOG.md, then start the next. No user approval needed between substages.",
+    "at_stage_end": "The final substage assembles the stage report and stops for user approval before the next stage file is opened.",
+    "substage_list": [
+      "3.1 Project initialisation and Android configuration",
+      "3.2 Directory structure and layer boundaries",
+      "3.3 Dependencies and the code generation toolchain",
+      "3.4 Linting, formatting and invariant guard checks",
+      "3.5 Continuous integration pipeline",
+      "3.6 Theme, design tokens and the money formatter",
+      "3.7 Router and stub screens",
+      "3.8 Test harness, fakes and fixtures",
+      "3.9 Scaffold verification and gate preparation"
+    ]
+  },
+  "substages": [
+    {
+      "id": "S03.01",
+      "substage": "3.1",
+      "position": "1 of 9",
+      "name": "Project initialisation and Android configuration",
+      "goal": "Create the Flutter project with final identifiers and correct SDK levels, and prove it builds and launches.",
+      "why_it_matters": "The application id can never change after the first Play Store upload, and SDK levels chosen carelessly become plugin conflicts later.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "ARCHITECTURE.md approved, including the directory tree and technology decisions.",
+        "NAVIGATION.md approved, including the screen inventory.",
+        "Flutter SDK installed and flutter doctor reports no blocking Android issues."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md technology decisions.",
+        "Manifest platform section."
+      ],
+      "work": [
+        {
+          "step": "3.1.1",
+          "action": "Choose the application id and treat it as permanent.",
+          "details": [
+            "Reverse-domain form, based on a domain you actually control.",
+            "State it in docs/ENVIRONMENT.md and note that it is immutable after first upload.",
+            "Confirm it with the user if there is any doubt - this is cheap now and impossible later."
+          ]
+        },
+        {
+          "step": "3.1.2",
+          "action": "Create the project targeting Android only, and delete every trace of the counter template.",
+          "details": [
+            "No template widget, no template test, no template comment survives this substage."
+          ]
+        },
+        {
+          "step": "3.1.3",
+          "action": "Set minSdk provisionally, and record that it will be re-checked in substage 3.3 once plugins are added.",
+          "details": [
+            "Do not guess a number from memory; start from the Flutter SDK's current floor and raise only if a plugin demands it.",
+            "Record which plugin sets the floor once known."
+          ]
+        },
+        {
+          "step": "3.1.4",
+          "action": "Set compileSdk and targetSdk to the levels currently required by Play policy.",
+          "details": [
+            "Check the current requirement in official documentation rather than relying on remembered numbers; the required level rises annually."
+          ]
+        },
+        {
+          "step": "3.1.5",
+          "action": "Configure Gradle, Kotlin and Java versions consistent with the Flutter version in use, and resolve any warnings rather than suppressing them.",
+          "details": []
+        },
+        {
+          "step": "3.1.6",
+          "action": "Configure the Android manifest minimally.",
+          "details": [
+            "Application label, no unnecessary permissions, no cleartext traffic, no backup rules left to default - note that backup configuration is decided deliberately in Stage 9."
+          ]
+        },
+        {
+          "step": "3.1.7",
+          "action": "Build and launch on a physical device or emulator, and capture the command output verbatim for the stage report.",
+          "details": []
+        },
+        {
+          "step": "3.1.8",
+          "action": "Write docs/ENVIRONMENT.md.",
+          "details": [
+            "Flutter version, Dart version, Gradle, Kotlin, Java, minSdk, targetSdk, compileSdk, the reason for the minSdk floor, and the exact build commands."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "flutter build apk --debug succeeds with no warnings referencing the template.",
+        "The app installs and launches to its own first screen, not the Flutter demo.",
+        "docs/ENVIRONMENT.md records every version and the minSdk justification.",
+        "The application id is final and recorded."
+      ],
+      "outputs": [
+        "Flutter project skeleton.",
+        "docs/ENVIRONMENT.md"
+      ],
+      "must_not": [
+        "Do not leave template code in the repository.",
+        "Do not suppress a Gradle warning rather than resolving it."
+      ],
+      "common_pitfalls": [
+        "Picking a placeholder application id such as com.example.app and discovering it at upload time.",
+        "Hardcoding an SDK level from memory that Play no longer accepts."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.2. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.02",
+      "substage": "3.2",
+      "position": "2 of 9",
+      "name": "Directory structure and layer boundaries",
+      "goal": "Create the exact tree from ARCHITECTURE.md and make each layer's rules visible in the filesystem.",
+      "why_it_matters": "Layering only holds if it is visible; a boundary nobody can see is a boundary nobody keeps.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.1 (Project initialisation and Android configuration) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md section 4, the directory tree."
+      ],
+      "work": [
+        {
+          "step": "3.2.1",
+          "action": "Create the directory tree exactly as specified, with no undocumented additions.",
+          "details": [
+            "If you find yourself wanting a folder that is not in the design, that is a design gap - raise it and amend the document."
+          ]
+        },
+        {
+          "step": "3.2.2",
+          "action": "Add a short README.md inside each top-level layer folder.",
+          "details": [
+            "What belongs here, what does not, and which direction dependencies flow.",
+            "This is read by whoever adds a file six months from now."
+          ]
+        },
+        {
+          "step": "3.2.3",
+          "action": "Create the domain layer as pure Dart with no Flutter dependency.",
+          "details": [
+            "Add a placeholder type per layer so the tree is non-empty and the structure is testable.",
+            "Confirm the domain directory compiles without the Flutter SDK on the path."
+          ]
+        },
+        {
+          "step": "3.2.4",
+          "action": "Mirror the tree under test/ so a test's location is always predictable from the file it covers.",
+          "details": []
+        },
+        {
+          "step": "3.2.5",
+          "action": "Confirm the tree against the design document line by line and record any deviation with its reason.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "The created tree matches ARCHITECTURE.md with no undocumented additions.",
+        "A search for package:flutter under the domain directory returns nothing.",
+        "Each layer folder has its README.md.",
+        "test/ mirrors lib/."
+      ],
+      "outputs": [
+        "Project directory tree.",
+        "Per-layer README files."
+      ],
+      "must_not": [
+        "Do not add a folder that is absent from the design without amending the design."
+      ],
+      "common_pitfalls": [
+        "A utils or common folder that becomes the place where layering goes to die."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.3. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.03",
+      "substage": "3.3",
+      "position": "3 of 9",
+      "name": "Dependencies and the code generation toolchain",
+      "goal": "Add every dependency chosen in Stage 2, resolve current versions, and prove code generation runs end to end.",
+      "why_it_matters": "Dependency drift and a broken generator are the two things that silently block Stage 4.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.2 (Directory structure and layer boundaries) is complete and ticked off."
+      ],
+      "inputs": [
+        "ADR-003 and ADR-004.",
+        "docs/ENVIRONMENT.md."
+      ],
+      "work": [
+        {
+          "step": "3.3.1",
+          "action": "Add the packages named in the ADRs: state management, database plus its generator, Google Sign-In, the cloud client, charting, CSV, background scheduling, UUID, dependency injection, mocking, property-based testing.",
+          "details": [
+            "Resolve current versions from pub.dev at this moment; do not paste versions from memory."
+          ]
+        },
+        {
+          "step": "3.3.2",
+          "action": "Re-check the minSdk floor now that plugins are present, and raise it if a plugin requires it.",
+          "details": [
+            "Update docs/ENVIRONMENT.md with the plugin that sets the floor.",
+            "This is a common late-stage surprise, which is why it is re-checked here rather than assumed in 3.1."
+          ]
+        },
+        {
+          "step": "3.3.3",
+          "action": "Run the code generator once end to end against a trivial placeholder to prove the toolchain works before any real schema exists.",
+          "details": [
+            "A generator that fails on the first real table in Stage 4 costs a session to diagnose."
+          ]
+        },
+        {
+          "step": "3.3.4",
+          "action": "Decide whether generated files are committed or gitignored, and apply it consistently.",
+          "details": []
+        },
+        {
+          "step": "3.3.5",
+          "action": "Commit the lockfile so builds are reproducible.",
+          "details": []
+        },
+        {
+          "step": "3.3.6",
+          "action": "Write docs/DEPENDENCIES.md.",
+          "details": [
+            "Package, version, purpose, licence, the ADR that justified it, maintenance signal, exit plan.",
+            "Flag any dependency that is unmaintained or discontinued, and either replace it or record why it is acceptable."
+          ]
+        },
+        {
+          "step": "3.3.7",
+          "action": "Confirm no analytics, crash reporting, advertising or telemetry package has arrived transitively.",
+          "details": [
+            "Inspect the resolved dependency tree, not just the direct dependencies."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "flutter pub get resolves with no version conflicts and no unexplained discontinued-package warning.",
+        "The code generation command runs successfully against a placeholder.",
+        "DEPENDENCIES.md lists every direct dependency with purpose, licence and exit plan.",
+        "The resolved tree contains no telemetry, analytics or advertising package.",
+        "The minSdk floor is re-verified against the installed plugins and recorded."
+      ],
+      "outputs": [
+        "pubspec with dependencies and lockfile.",
+        "docs/DEPENDENCIES.md"
+      ],
+      "must_not": [
+        "Do not add a dependency that is absent from the ADRs without recording a new one.",
+        "Do not paste a version number from memory."
+      ],
+      "common_pitfalls": [
+        "Discovering in Stage 7 that the Google client raised minSdk above the level already advertised.",
+        "A generator misconfiguration that only surfaces when the first real table is written."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-01"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.4. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.04",
+      "substage": "3.4",
+      "position": "4 of 9",
+      "name": "Linting, formatting and invariant guard checks",
+      "goal": "Make the manifest invariants mechanically enforceable, and prove each guard fails on a deliberate violation.",
+      "why_it_matters": "An invariant that nothing checks is an intention. The guards are what make INV-01 and INV-08 real for the next seven stages.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.3 (Dependencies and the code generation toolchain) is complete and ticked off."
+      ],
+      "inputs": [
+        "Manifest global_invariants.",
+        "ARCHITECTURE.md dependency rule."
+      ],
+      "work": [
+        {
+          "step": "3.4.1",
+          "action": "Enable a strict analysis_options.yaml built on flutter_lints, with strict type checks and no implicit dynamic.",
+          "details": []
+        },
+        {
+          "step": "3.4.2",
+          "action": "Implement the money-type guard.",
+          "details": [
+            "Fail the build if double, float or num appears in domain or data money-path files.",
+            "A custom lint package or a scripted grep in CI both satisfy this; choose the simpler one that actually runs."
+          ]
+        },
+        {
+          "step": "3.4.3",
+          "action": "Implement the time guard: fail if DateTime.now() is called outside the Clock abstraction.",
+          "details": []
+        },
+        {
+          "step": "3.4.4",
+          "action": "Implement the layering guard: fail if domain imports package:flutter, dart:io, or any data, application or presentation path.",
+          "details": []
+        },
+        {
+          "step": "3.4.5",
+          "action": "Implement the telemetry guard: fail if a known analytics, crash reporting or advertising package appears in the resolved dependency tree.",
+          "details": []
+        },
+        {
+          "step": "3.4.6",
+          "action": "Demonstrate that every guard fails on a deliberate violation, then revert each one.",
+          "details": [
+            "Add a double in the domain layer, run the check, capture the failure, remove it.",
+            "Add a Flutter import in the domain layer, run the check, capture the failure, remove it.",
+            "Paste the captured failures into the stage report. A guard that has never failed has never been tested."
+          ]
+        },
+        {
+          "step": "3.4.7",
+          "action": "Configure formatting and add a format check.",
+          "details": []
+        },
+        {
+          "step": "3.4.8",
+          "action": "Write docs/DEVELOPMENT.md covering local setup, how to run every check, how to run code generation, and the branch and commit conventions from the manifest.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "flutter analyze returns zero issues on the scaffold.",
+        "Each of the four guards has been demonstrated failing on a deliberate violation, with output captured.",
+        "The formatting check runs and passes.",
+        "DEVELOPMENT.md documents how to run every check locally."
+      ],
+      "outputs": [
+        "analysis_options.yaml",
+        "Guard scripts or lint rules.",
+        "docs/DEVELOPMENT.md"
+      ],
+      "must_not": [
+        "Do not claim a guard works without demonstrating a failure.",
+        "Do not weaken a guard to make existing code pass - there is no existing code yet, so there is no excuse."
+      ],
+      "common_pitfalls": [
+        "A grep-based guard with a pattern so loose it fires on comments, which then gets disabled.",
+        "Guards that only run in CI, so nobody sees them locally until the pipeline is red."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-01",
+          "INV-08",
+          "INV-09"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.5. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.05",
+      "substage": "3.5",
+      "position": "5 of 9",
+      "name": "Continuous integration pipeline",
+      "goal": "Automate the full check sequence so every later stage is verified on every push.",
+      "why_it_matters": "It is cheap now and it is what keeps Stages 4 through 10 honest when they get busy.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.4 (Linting, formatting and invariant guard checks) is complete and ticked off."
+      ],
+      "inputs": [
+        "Substage 3.4 guards.",
+        "docs/DEVELOPMENT.md."
+      ],
+      "work": [
+        {
+          "step": "3.5.1",
+          "action": "Create a workflow that runs on every push: pub get, format check, analyze, all four guards, unit tests, and a debug build.",
+          "details": []
+        },
+        {
+          "step": "3.5.2",
+          "action": "Cache pub and Gradle directories so the pipeline stays fast enough that people wait for it.",
+          "details": []
+        },
+        {
+          "step": "3.5.3",
+          "action": "Fail the pipeline on any analyzer issue, not only on errors.",
+          "details": []
+        },
+        {
+          "step": "3.5.4",
+          "action": "Add a coverage report step now, while coverage is near zero, so the trend is visible from the first commit.",
+          "details": []
+        },
+        {
+          "step": "3.5.5",
+          "action": "Verify the pipeline runs green on the scaffold commit, and capture the run output.",
+          "details": []
+        },
+        {
+          "step": "3.5.6",
+          "action": "Deliberately break formatting, confirm the pipeline goes red, then revert.",
+          "details": []
+        },
+        {
+          "step": "3.5.7",
+          "action": "If no CI host is available, provide the identical sequence as a single local check script and say so explicitly in the stage report.",
+          "details": [
+            "The requirement is that one command runs every check, not that a particular host runs it."
+          ]
+        }
+      ],
+      "acceptance_criteria": [
+        "The pipeline, or the equivalent single local command, runs every check in one invocation.",
+        "It runs green on the scaffold commit, with output captured.",
+        "A deliberate formatting break turns it red, demonstrated and reverted.",
+        "A coverage figure is produced, even though it is near zero."
+      ],
+      "outputs": [
+        "CI workflow file or check script."
+      ],
+      "must_not": [
+        "Do not let the pipeline pass while the analyzer reports issues."
+      ],
+      "common_pitfalls": [
+        "A pipeline so slow that it gets bypassed.",
+        "Coverage reporting added later, so no trend exists when it matters."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.6. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.06",
+      "substage": "3.6",
+      "position": "6 of 9",
+      "name": "Theme, design tokens and the money formatter",
+      "goal": "Define light and dark themes, spacing and typography tokens, the business scope treatment, and a correct currency formatter.",
+      "why_it_matters": "Doing this once now is far cheaper than restyling twenty finished screens in Stage 10, and the formatter is on the money path.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.5 (Continuous integration pipeline) is complete and ticked off."
+      ],
+      "inputs": [
+        "NAVIGATION.md scope separation decision.",
+        "Manifest engineering_conventions money entry."
+      ],
+      "work": [
+        {
+          "step": "3.6.1",
+          "action": "Define the colour scheme, typography scale and spacing tokens in one place, for both light and dark.",
+          "details": []
+        },
+        {
+          "step": "3.6.2",
+          "action": "Define the business scope's visual treatment as a theme extension rather than scattered colour literals.",
+          "details": [
+            "It must not rely on colour alone, because NFR-08 requires meaning to survive greyscale."
+          ]
+        },
+        {
+          "step": "3.6.3",
+          "action": "Implement the currency formatter.",
+          "details": [
+            "Reads the configured ISO 4217 code and minor unit exponent from settings.",
+            "Handles exponent 0 such as JPY, exponent 2 such as USD and PKR, and exponent 3 such as KWD.",
+            "Formats from an integer minor-unit value and never accepts or produces a floating point number.",
+            "Handles negative amounts and very large amounts without overflow or truncation.",
+            "Applies locale-appropriate grouping separators."
+          ]
+        },
+        {
+          "step": "3.6.4",
+          "action": "Implement the shared presentation primitives Stage 6 will need, with no logic in them.",
+          "details": [
+            "Money text display, progress-toward-ceiling indicator, empty state, error state, loading state."
+          ]
+        },
+        {
+          "step": "3.6.5",
+          "action": "Write widget tests for the money formatter now.",
+          "details": [
+            "Exponent 0, 2 and 3; zero; one minor unit; negative; a value near the documented maximum; and a locale with a different grouping separator."
+          ]
+        },
+        {
+          "step": "3.6.6",
+          "action": "Verify every stub screen renders legibly in dark mode.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "No colour, spacing or font literal appears outside the theme definition.",
+        "Money formatter tests pass, covering exponents 0, 2 and 3, negatives, and extreme values.",
+        "The formatter has no code path that accepts or returns a floating point number.",
+        "The business scope treatment is legible in greyscale.",
+        "Dark mode renders every stub without unreadable text."
+      ],
+      "outputs": [
+        "Theme definition and tokens.",
+        "Money formatter and its tests.",
+        "Shared state widgets."
+      ],
+      "must_not": [
+        "Do not hardcode two decimal places anywhere.",
+        "Do not put any computation in the money text widget - it formats, it does not calculate."
+      ],
+      "common_pitfalls": [
+        "A formatter that divides by 100 in a double, reintroducing floating point on the display path.",
+        "A business colour that becomes invisible in dark mode."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-01"
+        ],
+        "covers": [
+          "NFR-03",
+          "NFR-08"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.7. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.07",
+      "substage": "3.7",
+      "position": "7 of 9",
+      "name": "Router and stub screens",
+      "goal": "Implement the navigation graph from NAVIGATION.md with one placeholder screen per route.",
+      "why_it_matters": "Stage 6 should be filling prepared rooms, not deciding where the walls go.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.6 (Theme, design tokens and the money formatter) is complete and ticked off."
+      ],
+      "inputs": [
+        "NAVIGATION.md screen inventory and graph.",
+        "ADR-001 for how navigation state is held."
+      ],
+      "work": [
+        {
+          "step": "3.7.1",
+          "action": "Implement the router chosen in Stage 2, with a route for every screen in the inventory.",
+          "details": []
+        },
+        {
+          "step": "3.7.2",
+          "action": "Create one stub widget per screen containing only its title and an explicit placeholder marker.",
+          "details": [
+            "No logic, no data, and nothing that could be mistaken for working functionality.",
+            "The placeholder should visibly say it is a placeholder."
+          ]
+        },
+        {
+          "step": "3.7.3",
+          "action": "Wire the bottom navigation or scope switch that separates personal and business, per the Stage 2 decision.",
+          "details": [
+            "Include the personal-only case: no business surface at all."
+          ]
+        },
+        {
+          "step": "3.7.4",
+          "action": "Implement Android back behaviour for every multi-step flow as designed, including the onboarding step chain.",
+          "details": []
+        },
+        {
+          "step": "3.7.5",
+          "action": "Add a temporary developer route menu listing every route so a reviewer can reach each stub in one tap.",
+          "details": [
+            "Mark it clearly for removal in Stage 10, and add it to the Stage 10 checklist now rather than trusting memory."
+          ]
+        },
+        {
+          "step": "3.7.6",
+          "action": "Walk every route manually and confirm reachability, then record the walk in the stage report.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "Every route in NAVIGATION.md is reachable from the running app.",
+        "There is no dead route and no route that is absent from the design document.",
+        "Placeholders visibly identify themselves as placeholders.",
+        "Android back behaviour matches the design for every multi-step flow.",
+        "The developer menu is present and is already listed on the Stage 10 removal checklist."
+      ],
+      "outputs": [
+        "Router configuration.",
+        "One stub screen per route.",
+        "Developer route menu."
+      ],
+      "must_not": [
+        "Do not add fake data to a stub.",
+        "Do not create a route that the design does not contain."
+      ],
+      "common_pitfalls": [
+        "A developer menu that survives to release because nobody wrote it down.",
+        "Stubs with realistic dummy figures that get screenshotted as progress."
+      ],
+      "traceability": {
+        "covers": [
+          "NFR-03"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.8. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.08",
+      "substage": "3.8",
+      "position": "8 of 9",
+      "name": "Test harness, fakes and fixtures",
+      "goal": "Build the testing foundations Stages 4 and 5 depend on, and prove they work.",
+      "why_it_matters": "Stages 4 and 5 are test-first. A harness invented under pressure is a harness that shapes tests around convenience.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.7 (Router and stub screens) is complete and ticked off."
+      ],
+      "inputs": [
+        "ARCHITECTURE.md injected abstractions: Clock, IdGenerator.",
+        "ADR-004 mocking and property-testing choices."
+      ],
+      "work": [
+        {
+          "step": "3.8.1",
+          "action": "Create the test directory structure mirroring lib/.",
+          "details": []
+        },
+        {
+          "step": "3.8.2",
+          "action": "Implement a fake Clock that returns a fixed or scripted time, so no test depends on wall-clock time.",
+          "details": []
+        },
+        {
+          "step": "3.8.3",
+          "action": "Implement a deterministic IdGenerator that produces predictable ids, so expected outputs are stable across runs.",
+          "details": []
+        },
+        {
+          "step": "3.8.4",
+          "action": "Implement test data builders for the domain entities, with sensible defaults and named overrides.",
+          "details": [
+            "A builder pattern keeps tests readable when an entity gains a field in Stage 4."
+          ]
+        },
+        {
+          "step": "3.8.5",
+          "action": "Implement the golden vector loader that reads JSON fixtures from a directory and yields cases.",
+          "details": [
+            "Stage 5 depends on this; adding a fixture must require no code change."
+          ]
+        },
+        {
+          "step": "3.8.6",
+          "action": "Add one trivial passing test per layer that actually uses the fake Clock and the deterministic IdGenerator.",
+          "details": [
+            "A fake nobody exercises is a fake nobody has tested."
+          ]
+        },
+        {
+          "step": "3.8.7",
+          "action": "Configure integration_test and verify with one trivial app-launch test on a device or emulator.",
+          "details": []
+        },
+        {
+          "step": "3.8.8",
+          "action": "Confirm the whole suite runs from the single CI command created in substage 3.5.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "flutter test passes.",
+        "flutter test integration_test launches the app and passes on a device or emulator.",
+        "The fake Clock and deterministic IdGenerator are exercised by the trivial tests.",
+        "The golden vector loader reads a sample fixture with no code change required to add another.",
+        "The full suite runs from the single CI command."
+      ],
+      "outputs": [
+        "test/ structure.",
+        "Fakes, builders and the fixture loader."
+      ],
+      "must_not": [
+        "Do not write a test that reads the system clock."
+      ],
+      "common_pitfalls": [
+        "A fixture loader hardcoded to a list of filenames, which then requires a code change per vector in Stage 5."
+      ],
+      "traceability": {
+        "invariants": [
+          "INV-08",
+          "INV-09"
+        ]
+      },
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": false,
+        "action": "Record evidence in docs/reports/STAGE_3_WORKLOG.md, then continue to substage 3.9. Do not skip ahead or work substages in parallel.",
+        "escalate_immediately_if": [
+          "An open question (OQ-xx) blocks the work in front of you.",
+          "A global invariant (INV-xx) cannot be satisfied as designed.",
+          "This substage reveals that an earlier approved stage is wrong."
+        ]
+      }
+    },
+    {
+      "id": "S03.09",
+      "substage": "3.9",
+      "position": "9 of 9",
+      "name": "Scaffold verification and gate preparation",
+      "goal": "Prove the scaffold matches the design, capture the evidence, and prepare the stage gate.",
+      "why_it_matters": "This is the contract check the whole stage exists for.",
+      "estimated_session": "One focused working session.",
+      "entry_criteria": [
+        "Substage 3.8 (Test harness, fakes and fixtures) is complete and ticked off."
+      ],
+      "inputs": [
+        "All artefacts from 3.1 to 3.8."
+      ],
+      "work": [
+        {
+          "step": "3.9.1",
+          "action": "Produce a design-versus-implementation comparison for the directory tree, route list and dependency list.",
+          "details": [
+            "Three tables, each with a design column, an implemented column and a difference column.",
+            "A non-empty difference column requires either a fix or a documented, justified deviation."
+          ]
+        },
+        {
+          "step": "3.9.2",
+          "action": "Run the full check command from a clean checkout and capture the output.",
+          "details": [
+            "Clean checkout matters: it catches anything that only works because of local state."
+          ]
+        },
+        {
+          "step": "3.9.3",
+          "action": "Build and run on a physical device, walk every route, and confirm dark mode and 200 percent font scale do not break any stub.",
+          "details": []
+        },
+        {
+          "step": "3.9.4",
+          "action": "Confirm the project contains no business logic, no persistence and no network code, by inspection and by search.",
+          "details": []
+        },
+        {
+          "step": "3.9.5",
+          "action": "Record every version actually used in docs/ENVIRONMENT.md, superseding any provisional entry.",
+          "details": []
+        },
+        {
+          "step": "3.9.6",
+          "action": "Write docs/reports/STAGE_3_REPORT.md with the comparison tables, the guard failure demonstrations, the CI output and the route walk.",
+          "details": []
+        },
+        {
+          "step": "3.9.7",
+          "action": "Update docs/TRACEABILITY.md where a requirement's implementing artefact now exists.",
+          "details": []
+        },
+        {
+          "step": "3.9.8",
+          "action": "Prepare the gate question, listing versions used and any deviation from the design.",
+          "details": []
+        }
+      ],
+      "acceptance_criteria": [
+        "All three comparison tables show either no differences or documented, justified deviations.",
+        "The full check command passes from a clean checkout, with output captured.",
+        "Every route was walked on a physical device and no stub breaks in dark mode or at 200 percent font scale.",
+        "A search confirms no business logic, persistence or network code exists.",
+        "The stage report contains the guard failure demonstrations from substage 3.4."
+      ],
+      "outputs": [
+        "docs/reports/STAGE_3_REPORT.md",
+        "docs/ENVIRONMENT.md finalised."
+      ],
+      "must_not": [
+        "Do not proceed to Stage 4 with an undocumented deviation from the approved design."
+      ],
+      "common_pitfalls": [
+        "Verifying from a working tree that has local files the repository does not contain.",
+        "Reporting the scaffold complete without walking the routes on a real device."
+      ],
+      "traceability": {},
+      "definition_of_done": [
+        "Every acceptance criterion above is demonstrably met, with evidence recorded."
+      ],
+      "checkpoint": {
+        "requires_user_approval": true,
+        "action": "Final substage. Assemble the stage report, then STOP and request approval using approval_gate.question_to_user below.",
+        "escalate_immediately_if": [
+          "A deviation from the design that you believe is correct - amend the design document and raise it rather than diverging silently."
+        ]
+      }
+    }
+  ],
+  "stage_deliverables": [
+    {
+      "path": "Flutter project root",
+      "format": "code"
+    },
+    {
+      "path": "docs/ENVIRONMENT.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/DEPENDENCIES.md",
+      "format": "markdown"
+    },
+    {
+      "path": "docs/DEVELOPMENT.md",
+      "format": "markdown"
+    },
+    {
+      "path": "CI workflow or equivalent check script",
+      "format": "config"
+    },
+    {
+      "path": "docs/reports/STAGE_3_REPORT.md",
+      "format": "markdown"
+    }
+  ],
+  "stage_definition_of_done": [
+    "The app builds and launches on a real device or emulator.",
+    "Every screen from NAVIGATION.md exists as a reachable stub.",
+    "flutter analyze is clean and every guard check demonstrably fails on a deliberate violation.",
+    "CI or the equivalent local script runs green and its output is pasted into the stage report.",
+    "No business logic, no database and no network code exists anywhere in the project."
+  ],
+  "stage_must_not": [
+    "Do not implement real data persistence, not even a temporary in-memory store.",
+    "Do not implement any business logic, including a quick percentage calculation.",
+    "Do not populate stub screens with hardcoded data that looks real.",
+    "Do not wire Google Sign-In or request any OAuth scope in this stage.",
+    "Do not deviate from the approved directory structure without amending ARCHITECTURE.md and saying so."
+  ],
+  "anti_patterns": [
+    "A scaffold that quietly diverges from the architecture doc, so the doc is wrong from day one.",
+    "Stub screens with plausible dummy numbers that get demoed as progress.",
+    "Skipping the lint guards because we will be careful - the guards are what make INV-01 real."
+  ],
+  "open_questions_to_resolve": [],
+  "risks_in_focus": [
+    "R-07"
+  ],
+  "handoff": {
+    "artifacts_next_stage_consumes": [
+      "Data layer folders and the code-generation toolchain are ready for Stage 4.",
+      "The test harness, fake Clock and deterministic IdGenerator are ready for Stages 4 and 5.",
+      "Stub screens are ready for Stage 6.",
+      "The theme and money formatter are ready for every UI stage."
+    ],
+    "summary_to_write": "Record exact versions used and every place the scaffold had to deviate from the design, with the reason."
+  },
+  "approval_gate": {
+    "report_file": "docs/reports/STAGE_3_REPORT.md",
+    "blocking": true,
+    "question_to_user": "Stage 3 (Scaffolding) is complete. The app builds and every designed screen is reachable as a stub. Versions used: <list>. Deviations from the design: <list or none>. Do you approve moving to Stage 4?"
+  }
+}
