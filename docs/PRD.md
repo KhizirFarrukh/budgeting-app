@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 1 |
 | **Source** | `prompts/00_project_manifest.json` (schema 4.0.0) |
-| **Sections assembled** | 2 (substage 1.2), Appendix A (substage 1.1) |
-| **Sections pending** | 1, 3–9, assembled across substages 1.3–1.8 |
+| **Sections assembled** | 2 (substage 1.2), 5 (substage 1.3), Appendix A (substage 1.1) |
+| **Sections pending** | 1, 3, 4, 6–9, assembled across substages 1.4–1.8 |
 
 > Sections are written across substages 1.2 to 1.8 and assembled in order in 1.8.
 > Appendix A was written first, in 1.1, so the finished document carries its own provenance.
@@ -311,6 +311,475 @@ percentages must total 100 and is a real data-model question for Stage 2.
 **F-12 (new ambiguity, to 1.7)** — FJ-4 step 3 requires that a new install detect existing cloud
 data *before* writing local configuration. No requirement states this ordering, and getting it
 wrong produces two divergent configurations that then have to be merged.
+
+---
+
+## 5. Functional requirements as user stories
+
+Written in substage 1.3. Every story: stable id, persona, MoSCoW priority, the inventory ids it
+satisfies, and Given/When/Then criteria **observable by a person holding a phone** — no criterion
+references an internal component, stored structure or code concept. Product language uses whole
+percentages; the design-level unit is reserved for Stage 2. Stories marked **CRITICAL** carry at
+least one failure criterion, per the §A.5 register.
+
+Priorities inherit the manifest FR priority (MUST except FR-14's SHOULD) unless a reason to differ
+is stated on the story.
+
+### 5.1 Setup and configuration
+
+---
+
+**US-001 — Choose the top-level split** · P1 · MUST · FR-06 · **CRITICAL**
+
+> As P1, I want to choose how each payment divides between Spending and Savings (and Business when
+> enabled), so that every future payment follows my plan without me deciding in the moment.
+
+- Given the Top-Level Split step, When I first see it, Then the percentages already total exactly 100 and one tap accepts them.
+- Given I edit a group's percentage, When the total is not 100, Then the shortfall or excess is shown next to the figures and I cannot continue until the total is exactly 100.
+- Given I change the split later in Settings, When I next log income, Then the preview follows the new split, and every previously recorded event still shows the split it was made with.
+- **Failure:** Given any input path (typing, sliders, restoring a backup), When a split not totalling exactly 100 would result, Then it is refused with the difference named — never silently adjusted.
+
+---
+
+**US-002 — Use the app without business features** · P1 · MUST · derived from FR-06/FR-07 and journey J1 · *flag → F-11*
+
+> As P1, I want to run the app personal-only, so that my home budget is not cluttered by a business
+> I do not have.
+
+- Given the scope step, When I choose personal only, Then no business group, category, figure or menu entry appears anywhere in the app afterwards.
+- Given personal-only was chosen, When I later enable business in Settings, Then the business categories are offered, and I am guided to rebalance the top-level split to include Business so it totals exactly 100 before the change takes effect.
+
+---
+
+**US-003 — See suggested categories** · P1 · MUST · FR-08a, IMP-01, IMP-02, IMP-03
+
+> As P1, I want ready-made category suggestions, so that I do not face an empty app on day one.
+
+- Given a fresh install, When I reach the category step, Then each group shows its suggested categories pre-selected, each with a visible suggested type.
+- Given the suggestions, When I simply accept them, Then setup continues with no further category work required.
+
+---
+
+**US-004 — Change or remove any suggestion** · P1 · MUST · FR-08b, IMP-01
+
+> As P1, I want to rename, retype or remove any suggested category, so that the suggestions are a
+> starting point and not a constraint.
+
+- Given a suggested category, When I rename it, change its type, or remove it — during onboarding or any time later — Then the change persists and nothing recreates the original.
+- Given I remove every category from a group that has a non-zero share of income, When I try to finish setup, Then the app tells me a group that receives money needs at least one category, and offers to add one or set that group's share to zero.
+
+---
+
+**US-005 — Add my own categories** · P1 · MUST · FR-08c
+
+> As P1, I want to add fully custom categories, so that my budget matches my life rather than a
+> template.
+
+- Given the category step or category management, When I add a category with my own name and type, Then it appears and behaves identically to a suggested one in every list, split, and report.
+
+---
+
+**US-006 — Create and manage multiple savings categories** · P1 · MUST · FR-01a, FR-01b
+
+> As P1, I want several separate savings categories, so that each goal is visible on its own.
+
+- Given setup is complete, When I add several savings categories, Then each shows its own balance and settings.
+- Given an existing category, When I rename it, Then the new name shows everywhere, including next to past entries.
+- Given a category I no longer use, When I archive it, Then it leaves the pickers and dashboard but its history remains readable, and the change survives an app restart.
+
+---
+
+**US-007 — Set each category's share** · P1 · MUST · FR-02 · **CRITICAL** · *flag → F-03*
+
+> As P1, I want each category to receive a fixed share of its group's money, so that the split
+> happens by rule and not by mood.
+
+- Given the percentage step for a group, When the group's percentages total exactly 100, Then I can save; when they do not, Then the difference is shown and saving is blocked.
+- Given saved percentages, When I log income, Then the preview shows each category receiving its share of its group's amount, before any ceiling effects.
+- **Failure:** Given I remove or archive a category with a non-zero share, When its share becomes unassigned, Then the app requires the group to be rebalanced to exactly 100 before the removal is final — it never leaves a group silently under-allocated.
+
+---
+
+**US-008 — Keep spending and savings visibly separate** · P1 · MUST · FR-05
+
+> As P1, I want spending money and savings kept apart, so that money set aside never looks
+> spendable.
+
+- Given any list, picker, dashboard section or report, When categories are shown, Then spending and savings appear as separate groups, and no total combines them without naming that it does.
+
+---
+
+**US-009 — Business categories exist and stay business** · P2 · MUST · FR-07a
+
+> As P2, I want a business group with its own categories — inventory restock and advertising among
+> the suggestions — so that business money has named destinations of its own.
+
+- Given business scope is enabled, When I reach the category step, Then the business group shows its own suggested categories, including inventory purchases and advertising.
+- Given the business group, When I add, rename or remove its categories, Then it behaves exactly as the personal groups do.
+
+---
+
+**US-010 — Business and personal can never cross** · P2 · MUST · FR-07b, NFR-03 · **failure-style by nature**
+
+> As P2, I want it to be impossible to file household activity against business categories or the
+> reverse, so that a distracted moment cannot mix the two.
+
+- Given a personal spending entry, When I open the category picker, Then no business category is offered through any path.
+- Given a business spending entry, When I open the category picker, Then no personal category is offered.
+- Given any screen showing personal totals, When business activity exists, Then the personal totals are identical to what they would be with no business activity at all.
+
+---
+
+**US-011 — Say which account holds what** · P1 · MUST · FR-03 · *flag → OQ-02, F-08*
+
+> As P1, I want to record which real account holds each category's money, so that I always know
+> where the money physically sits.
+
+- Given account management, When I create an account with a name, Then I can link categories to it.
+- Given linked categories, When I view the account, Then it shows the total of its linked categories' balances, and that total equals the sum of those balances as shown on the dashboard.
+- Given any account screen, When I read it, Then nothing suggests the app is connected to a real bank.
+
+---
+
+**US-012 — Keep the business float in its own account** · P2 · MUST · FR-03, NFR-03
+
+> As P2, I want business categories linked to my business account, so that the float is visibly not
+> household money.
+
+- Given a business account, When I link the business categories to it, Then its displayed total covers exactly those categories, and no personal category can be linked into a mixed total without the account showing both by name.
+
+### 5.2 Income and allocation
+
+---
+
+**US-013 — Log an income event** · P1 · MUST · FR-04a · **CRITICAL**
+
+> As P1, I want to record money the moment it arrives, so that it is captured before life moves on.
+
+- Given the dashboard, When I choose to add income, Then I can enter an amount, a source label and a date (defaulting to today), with nothing else required.
+- Given a valid amount, When I proceed, Then I see the full allocation preview before anything is recorded.
+- **Failure:** Given an amount of zero, a negative amount, or non-numeric input, When I try to proceed, Then the entry is refused with the reason stated, and nothing is recorded.
+
+---
+
+**US-014 — The split happens by itself, exactly** · P1 · MUST · FR-04b, NFR-05 · **CRITICAL**
+
+> As P1, I want each payment split across my categories by my rules, so that saving happens before
+> spending can eat it.
+
+- Given my configured percentages, When I enter an amount, Then the preview lists every receiving category and its amount, and the amounts visibly total exactly the amount I entered.
+- Given the preview, When I confirm, Then the dashboard shows every category increased by exactly the previewed amounts.
+- **Failure — smallest money:** Given an income of exactly one minor unit (one cent, one paisa), When previewed and confirmed, Then exactly one category receives it and the total still matches.
+- **Failure — awkward split:** Given an amount my percentages cannot divide evenly, When previewed, Then the amounts still total exactly what I entered, with no unit lost or invented.
+- **Failure — very large:** Given an amount at the app's stated maximum, When previewed and confirmed, Then the total still matches exactly; given an amount above the maximum, Then it is refused with the limit stated.
+- **Failure — stale rules:** Given I changed percentages after opening the income form, When I reach the preview, Then the preview reflects the rules that will actually be applied, and confirming records those same figures.
+
+---
+
+**US-015 — Business revenue lands in business buckets** · P2 · MUST · FR-04b, FR-06 · *flag → F-10*
+
+> As P2, I want sale proceeds split so the business share is set aside at the moment of the sale,
+> so that restock money exists before I can mistake revenue for profit.
+
+- Given business scope is enabled, When I log income, Then the preview shows the business group receiving its share, split across the business categories by their percentages.
+- Given the preview, When a business category is full, Then its overflow follows the same visible redirect rules as any other category.
+
+---
+
+**US-016 — Adjust one payment's split by hand** · P1 · MUST · FR-12 · **CRITICAL**
+
+> As P1, I want to override the suggested split for a single payment, so that a special situation
+> does not require changing my standing rules.
+
+- Given the allocation preview, When I change one category's amount, Then the remaining categories adjust so the total still equals the payment exactly, and it is visible which amounts I set and which the app computed.
+- Given an override, When I confirm, Then only this event is affected — the next income event previews by my standing rules, unchanged.
+- **Failure — does not total:** Given overridden amounts that total more or less than the payment, When I try to confirm, Then confirmation is impossible and the difference is shown in place.
+- **Failure — negative:** Given a negative amount for any category, When entered, Then it is refused on the spot.
+- **Failure — over-assignment:** Given overrides that alone exceed the payment, When entered, Then the excess is named and confirmation stays blocked until resolved.
+
+---
+
+**US-017 — Undo a mistaken income event** · P1 · MUST · OQ-09 default, INV-03 · *no parent FR — priority MUST because mis-entry is certain in a manual-entry app and journey FJ-3 depends on it* · *flag → OQ-09*
+
+> As P1, I want to undo an income event I got wrong, so that a typo does not poison my balances.
+
+- Given a confirmed income event, When I choose undo and confirm, Then every affected category returns to exactly its prior balance.
+- Given the undo completed, When I open history, Then both the original event and its reversal are visible, clearly paired — the original does not vanish.
+- **Failure:** Given an event already undone, When I try to undo it again, Then the app refuses and points at the existing reversal.
+
+### 5.3 Ceilings, types and redirects
+
+---
+
+**US-018 — Give a goal a ceiling** · P1 · MUST · FR-10a · **CRITICAL**
+
+> As P1, I want to set a target amount on a savings category, so that the app knows when that goal
+> is done.
+
+- Given an accumulating category, When I set a ceiling, Then the dashboard shows progress toward it.
+- Given ceiling setup, When I set one, Then I choose (or confirm) where money should go once this category is full.
+- **Failure:** Given a ceiling of zero or a negative amount, When I try to save it, Then it is refused with the reason stated.
+
+---
+
+**US-019 — Overflow goes where I said, visibly** · P1 · MUST · FR-10b · **CRITICAL**
+
+> As P1, I want money beyond a full category to flow to the category I named, so that finishing one
+> goal automatically accelerates the next.
+
+- Given a category near its ceiling, When income would push it past, Then the preview shows: the amount it would have received, the amount it accepts, the surplus, and the named category the surplus goes to — with the overall total still equal to the payment.
+- Given the confirmed event, When I open the receiving category, Then the redirected amount is attributed as coming from the full category by name.
+- **Failure — already full:** Given a category already at its ceiling before the income arrives, When previewed, Then it accepts nothing, its entire share moves on visibly, and nothing is silently withheld.
+- **Failure — target also full:** see interaction case I-3 in §5.6.
+
+---
+
+**US-020 — Fixed bills are their own kind of category** · P1 · MUST · FR-11a · **CRITICAL**
+
+> As P1, I want bill categories that only need their bill amount each period, so that bill money is
+> funded and never over-hoarded.
+
+- Given category setup, When I mark a category as a fixed recurring bill, Then I state its per-period amount and its day of the month, and the category displays as a bill, distinct from savings goals.
+- **Failure:** Given a bill category with no amount, or a day outside the month, When I try to save, Then it is refused with the field named.
+
+---
+
+**US-021 — Bills stop collecting once funded** · P1 · MUST · FR-11b · **CRITICAL**
+
+> As P1, I want a funded bill to pass further money along, so that my internet bill never
+> accumulates three months of money it does not need.
+
+- Given a bill category partly funded this period, When income arrives, Then it accepts only up to its remaining bill amount and the rest visibly moves on.
+- **Failure — already funded:** see interaction case I-2 in §5.6.
+
+---
+
+**US-022 — Spending from a goal reopens room** · P1 · MUST · IMP-07 · **CRITICAL** · *flag → F-09*
+
+> As P1, I want a reserve I have spent from to refill on later income, so that using a reserve for
+> its purpose is not punished.
+
+- Given a full category with a ceiling, When I record spending from it, Then its balance drops below the ceiling, and the next income event allocates to it again up to the ceiling.
+- **Failure:** Given the same category, When the next income arrives, Then it never refills past the ceiling — the surplus follows its redirect as always.
+
+### 5.4 Seeing and spending the money
+
+---
+
+**US-023 — A dashboard I can trust at a glance** · P1 · MUST · FR-13 · **CRITICAL** · *flag → F-05*
+
+> As P1, I want every category's current balance against its target on one screen, so that opening
+> the app answers "where am I?" in seconds.
+
+- Given recorded events, When I open the dashboard, Then every category shows its balance, and each figure equals what its own history adds up to — checkable by opening the category and summing its entries.
+- Given I confirm an income event or a spend, When I return to the dashboard, Then the figures already reflect it without restarting or refreshing the app.
+- Given a category with a ceiling, When shown, Then its progress toward the ceiling is visible, and it never reads as complete before the balance actually equals the ceiling.
+- **Failure:** Given an undo, When completed, Then the dashboard figures return to exactly their prior values.
+
+---
+
+**US-024 — Record spending quickly** · P1 · MUST · implied by FR-05 and journeys J1-C/J2 · *flag → F-13 (no explicit FR authorises spend recording)*
+
+> As P1, I want to log a spend in seconds, so that recording happens at the till and not from
+> memory at midnight.
+
+- Given the dashboard, When I add a spend with an amount and a category, Then the category's balance falls by exactly that amount, and the entry appears in history with its date and my note.
+- Given the category picker, When it opens, Then my most recently used categories are offered first.
+
+---
+
+**US-025 — Spending more than a category holds** · P1 · MUST · OQ-06 default · *flag → OQ-06*
+
+> As P1, I want to record what I truly spent even when the envelope is short, so that the app
+> reflects reality rather than blocking it.
+
+- Given a spend larger than the category's balance, When I record it, Then the app warns me plainly that the category goes negative, records it anyway on my confirmation, and shows the negative balance distinctly on the dashboard.
+
+---
+
+**US-026 — History that never lies** · P1 · MUST · FR-05, INV-03
+
+> As P1, I want every past movement inspectable, so that I can always reconstruct where money went.
+
+- Given history, When I filter by date range, category, group or account, Then the filtered totals match what the dashboard and reports say for the same selection.
+- Given a corrected entry, When I view history, Then the original and its correction are both visible and paired — nothing is ever edited in place or disappears.
+
+### 5.5 Sync, offline and data ownership
+
+---
+
+**US-027 — Works entirely without internet** · P1 · MUST · FR-15a, NFR-02
+
+> As P1, I want everything to work with no connection and no account, so that my budget never
+> depends on anyone's server.
+
+- Given a phone with no connectivity and no Google account linked, When I complete setup, log income, override, spend and read reports, Then every one of those completes normally.
+- Given no account is linked, When I use the app over weeks, Then nothing nags beyond a quiet indication that data lives on this device only, with a backup option attached.
+
+---
+
+**US-028 — My data goes only to my own Google account** · P1 · MUST · FR-09a, FR-09b, NFR-01
+
+> As P1, I want cloud backup that is mine alone, so that no company — including the developer — can
+> read my finances.
+
+- Given Settings, When I choose to enable sync, Then the only sign-in offered is my own Google account, and the app states in plain words where the data goes and that the developer cannot read it.
+- Given the whole app, When I look for one, Then there is no developer account, no registration, and no service of the developer's to subscribe to.
+
+---
+
+**US-029 — A second device just works** · P1 · MUST · FR-09c, FR-15b · **CRITICAL**
+
+> As P1, I want a new phone to receive everything, so that my history is never captive to one
+> device.
+
+- Given a new device and the same Google account, When I sign in during setup, Then the app finds my existing data and offers to restore it before asking me to configure anything.
+- Given the restore completes, When I compare devices, Then balances, categories, accounts and history match exactly.
+- **Failure:** Given each device recorded different events while offline, When both sync, Then every event from both devices is present on both, none lost and none doubled.
+
+---
+
+**US-030 — Conflicting edits resolve the same way everywhere** · P1 · MUST · IMP-11 · **CRITICAL**
+
+> As P1, I want simultaneous edits from two devices to settle consistently, so that my devices
+> never disagree.
+
+- Given the same category renamed differently on two offline devices, When both sync, Then both devices end up showing the same single winner, and no crash, duplicate or loss occurs.
+- **Failure:** Given a category deleted on one device and edited on the other, When both sync, Then both devices agree on the outcome and the recorded money movements of that category remain readable in history either way.
+
+---
+
+**US-031 — The cloud copy vanishing is not the end** · P1 · MUST · IMP-12
+
+> As P1, I want the app to survive its cloud data being wiped, so that one action in Google
+> settings cannot destroy my phone's records.
+
+- Given the app's cloud data was removed from my Google account, When the app next syncs, Then my local data is untouched, the situation is explained in plain words, and one action re-uploads.
+
+---
+
+**US-032 — A backup I hold in my hand** · P1 · MUST · NFR-07a · **CRITICAL**
+
+> As P1, I want to export a complete backup file and restore from it, so that my data survives even
+> with sync switched off.
+
+- Given Settings, When I export a backup, Then I get a single file, saved or shared wherever I choose, with no network needed.
+- Given a fresh install, When I restore that file, Then every balance, category, account and history entry matches the original exactly.
+- **Failure:** Given a backup made by a newer app version, or made with a different currency, When I try to restore it, Then the restore is refused with a plain explanation — never partially applied.
+
+### 5.6 The four interaction cases — explicit expected behaviour
+
+Required by 1.3.4: the interactions of FR-10, FR-11 and FR-12 are where defects live, so each has a
+stated behaviour no implementer may guess at.
+
+**I-1 — A manual override pushes a category past its ceiling.**
+Permitted. The preview shows a plain warning that this exceeds the target; the amount stays where
+the user put it and is **not** redirected away — the user's explicit instruction outranks the
+standing rule for this one event. The category then shows over-target on the dashboard, and at the
+next income event it accepts nothing and redirects its whole share until spending brings it back
+under. *(Story anchor: US-016, US-022.)*
+
+**I-2 — A fixed-recurring category is already funded when income arrives.**
+It accepts exactly zero. The preview lists it with "already funded for this period" as the stated
+reason, shows its whole share moving to its redirect target by name, and the total still equals the
+payment. It never quietly absorbs a partial amount. *(Story anchor: US-021.)*
+
+**I-3 — A redirect target is itself full.**
+The surplus continues along the target's own redirect, hop by hop, and the preview shows every hop:
+each category named, the amount it accepted, the amount passed on. The user never sees money leave
+category A and simply appear in category D unexplained. *(Story anchor: US-019.)*
+
+**I-4 — A chain ends at the sink.**
+When everything along the path is full, the remainder lands in the always-open catch-all category,
+and the preview says so in those terms: named category, stated reason ("everything else on the path
+was full"), exact amount. The sink is presented as part of the user's own configuration — visible,
+renameable, but always present. *(Story anchor: US-019, sink per OQ-07.)*
+
+### 5.7 Coverage table — FR to stories
+
+| FR | Stories | Covered |
+|---|---|---|
+| FR-01 | US-006 | ✅ |
+| FR-02 | US-007 | ✅ |
+| FR-03 | US-011, US-012 | ✅ |
+| FR-04 | US-013, US-014, US-015 | ✅ |
+| FR-05 | US-008, US-024, US-026 | ✅ |
+| FR-06 | US-001, US-015 | ✅ |
+| FR-07 | US-009, US-010 | ✅ |
+| FR-08 | US-003, US-004, US-005 | ✅ |
+| FR-09 | US-028, US-029 | ✅ |
+| FR-10 | US-018, US-019 (+ I-1, I-3, I-4) | ✅ |
+| FR-11 | US-020, US-021 (+ I-2) | ✅ |
+| FR-12 | US-016 (+ I-1) | ✅ |
+| FR-13 | US-023 | ✅ |
+| FR-14 | US-033…US-037 (§5.8) | ✅ |
+| FR-15 | US-027, US-029, US-030 | ✅ |
+
+Non-FR CRITICAL items: NFR-05 → US-014; NFR-07a → US-032; IMP-07 → US-022; IMP-11 → US-030.
+IMP-12 → US-031. No FR is uncovered.
+
+### 5.8 Reports and export stories
+
+---
+
+**US-033 — Monthly summary** · P1 · SHOULD · FR-14a · **CRITICAL**
+
+> As P1, I want a monthly review, so that I can see whether the plan worked last month.
+
+- Given a month with activity, When I open its summary, Then I see income, per-group allocation, per-category spend, and each category's opening and closing balance — and opening plus the month's movements equals closing, exactly, for every category.
+- Given redirects occurred, When I read the summary, Then it shows how much was redirected and where it went.
+- **Failure:** Given a month with no activity, When opened, Then it shows zeros plainly — never a hidden month and never an invented figure.
+
+---
+
+**US-034 — Yearly summary** · P1 · SHOULD · FR-14b · **CRITICAL**
+
+- Given a year of data, When I open the yearly summary, Then its totals equal the sum of its twelve monthly summaries, and month-to-month comparison is visible.
+- **Failure:** Given my percentages changed mid-year, When I compare months, Then the summary shows that the rules changed between them, and no past month's figures have shifted.
+
+---
+
+**US-035 — Category trends** · P1 · SHOULD · FR-14c
+
+- Given a category and a chosen period, When I view its trend, Then the chart reflects the same figures its history shows, and a readable table of the same numbers is available.
+
+---
+
+**US-036 — CSV export** · P1 · SHOULD · FR-14d · **CRITICAL**
+
+> As P1, I want my records out of the app in a spreadsheet-readable file, so that my data is mine.
+
+- Given any scope and date range, When I export CSV, Then opening it in a spreadsheet shows rows whose totals equal the in-app report for the same scope and range, exactly.
+- **Failure:** Given category names containing commas, quotation marks or line breaks, When exported and opened in a spreadsheet, Then every row survives intact with its columns aligned.
+- **Failure:** Given no network, When I export, Then it works identically.
+
+---
+
+**US-037 — Business records exportable on their own** · P2 · SHOULD · FR-14d, OQ-10 default · *flag → OQ-10*
+
+- Given business scope, When I export with the business-only scope, Then the file contains only business activity, suitable for handing to an accountant, and its totals match the business report for the same range.
+
+### 5.9 Flags raised while writing criteria (to 1.7)
+
+Stories whose criteria could not be written without leaning on an unresolved question:
+
+| Story | Rests on | Status |
+|---|---|---|
+| US-002 | F-11 — personal-only scope: hidden group vs zero share | flagged in 1.2 |
+| US-007 | F-03 — percentage of income vs percentage of group | flagged in 1.1 |
+| US-011 | OQ-02, F-08 — account semantics and cardinality | registered / flagged |
+| US-015 | F-10 — does business revenue follow the same three-way split | flagged in 1.1 |
+| US-017 | OQ-09 — reversal semantics | registered, default assumed |
+| US-022 | F-09 — spending reopens headroom | flagged in 1.1, seed notes imply yes |
+| US-023 | F-05 — meaning of "real-time" | flagged in 1.1 |
+| US-024 | **F-13 (new)** — no FR explicitly authorises recording a spend; implied by FR-05's "track" and by every journey | new flag |
+| US-025 | OQ-06 — negative balances | registered, default assumed |
+| US-037 | OQ-10 — business export shape | registered, default assumed |
+
+**F-13 is new from this substage:** the requirement inventory contains no explicit "log a spending
+transaction" statement — FR-04 covers income only. Spending entry is load-bearing for FR-05, FR-13
+(balances must fall), FR-14 and both primary journeys, so it is treated as MUST via FR-05, and 1.7
+must confirm that reading.
 
 ---
 

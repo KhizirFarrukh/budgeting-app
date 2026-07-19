@@ -6,7 +6,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 |---|---|---|
 | 1.1 | Intake and source reconciliation | ✅ Complete |
 | 1.2 | Personas and end-to-end journeys | ✅ Complete |
-| 1.3 | User stories and acceptance criteria | Not started |
+| 1.3 | User stories and acceptance criteria | ✅ Complete |
 | 1.4 | The money model in plain language | Not started |
 | 1.5 | Non-functional requirements with measurable targets | Not started |
 | 1.6 | Scope boundaries and the version 1 cut line | Not started |
@@ -155,3 +155,62 @@ Running ambiguity count carried to 1.7: **12** (F-01…F-12).
 
 No screens were designed — §2 names screens and describes what the user does, per the substage's
 `must_not`. No third persona was introduced; §2.2 records that NG-02 forecloses one.
+
+---
+
+## 1.3 — User stories and acceptance criteria (S01.03)
+
+**Output:** `docs/PRD.md` sections 5.1–5.9.
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.3.1 | One or more stories per inventoried requirement, US-001 onward, persona-split where personas differ | PRD §5.1–§5.5, §5.8 |
+| 1.3.2 | Given/When/Then criteria, observable from outside the app | every story |
+| 1.3.3 | Negative/failure criterion for every CRITICAL story | bolded **Failure** bullets |
+| 1.3.4 | The four FR-10 × FR-11 × FR-12 interaction cases, explicit | PRD §5.6 (I-1…I-4) |
+| 1.3.5 | MoSCoW per story, inherited unless reasoned | story headers; deviations stated inline |
+| 1.3.6 | Flag stories whose criteria required guessing | PRD §5.9 |
+| 1.3.7 | FR-to-story coverage table | PRD §5.7 |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every FR covered by at least one story, coverage table no gaps | §5.7: 15 rows, every row lists stories, none empty; non-FR CRITICAL items mapped below the table | ✅ |
+| No story contains "etc", "and so on", "appropriate", "as needed" | `grep -i "\betc\b|and so on|appropriate|as needed"` over PRD.md → **no matches** | ✅ |
+| Every story has at least one Given/When/Then criterion | 37 stories, each with ≥1 GWT bullet, most with 2–5 | ✅ |
+| Every CRITICAL story has at least one negative/failure criterion | 17 CRITICAL-marked stories covering all 18 §A.5 register entries (US-014 covers FR-04b + NFR-05); each carries ≥1 **Failure** bullet | ✅ |
+| The four interaction cases each have explicit expected behaviour | §5.6: I-1 override-past-ceiling (permitted, warned, not redirected), I-2 funded bill (accepts zero, reason shown), I-3 full target (chain continues, every hop visible), I-4 sink terminal (named, explained) | ✅ |
+
+### Counts
+
+- Stories: **37** (US-001…US-037).
+- CRITICAL stories: **17**, covering all **18** CRITICAL register entries from §A.5.
+- Persona-differentiated pairs: FR-03 (US-011 P1 / US-012 P2), FR-04b (US-014 P1 / US-015 P2),
+  FR-14d (US-036 P1 / US-037 P2); FR-07 written P2-first (US-009/US-010).
+- Priority deviations from inheritance: **2** — US-017 (undo) assigned MUST with no parent FR,
+  reason stated (mis-entry is certain; FJ-3 depends on it); US-037 inherits FR-14's SHOULD.
+- Flags carried to 1.7: **10** story-level dependencies (§5.9), of which **1 is new: F-13**.
+
+### New finding — F-13
+
+The inventory contains no FR that authorises recording a spending transaction. FR-04 covers income
+only; spending entry is implied by FR-05's word "track" and required by FR-13, FR-14 and both
+primary journeys. US-024 treats it as MUST via FR-05; 1.7 must confirm that reading rather than let
+it pass as an unexamined assumption. Running ambiguity count: **13** (F-01…F-13).
+
+### Deviations from the stage plan
+
+- Interaction cases written as a dedicated subsection (§5.6) with story anchors, rather than as four
+  standalone stories — each is a behaviour of existing stories, and a standalone story would have
+  duplicated criteria the anchored stories already carry.
+- §5.8 (reports stories) placed after the coverage table so the table sits with the main story body;
+  ordering only, no content effect.
+
+### Notes
+
+No criterion references an internal component, stored structure or code concept — checked by
+reading every criterion against the 1.3.2 rule. Product language kept to whole percentages
+throughout, anticipating 1.4's must_not.
