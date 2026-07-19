@@ -22,6 +22,7 @@
   ],
   "traceability": {
     "feature_requirements": [
+      "FR-01",
       "FR-02",
       "FR-03",
       "FR-05",
@@ -30,6 +31,7 @@
       "FR-09",
       "FR-10",
       "FR-11",
+      "FR-12",
       "FR-15"
     ],
     "non_functional_requirements": [
@@ -487,7 +489,7 @@
         "Tombstone retention has a stated window and a safe-purge condition."
       ],
       "outputs": [
-        "docs/SCHEMA.md sections 5, 6, 7."
+        "docs/SCHEMA.md sections 5 and 7. (Section 6 is reserved for the validation rules written in substage 2.10.)"
       ],
       "must_not": [
         "Do not specify an index without a query.",
@@ -731,11 +733,14 @@
           "step": "2.6.9",
           "action": "Work the reference chained example through by hand and record every intermediate value.",
           "details": [
-            "Savings group receives 300,000. Medical 4000bp gives 120,000, Emergency 3500bp gives 105,000, Trip 2500bp gives 75,000.",
-            "Medical: ceiling 500,000, balance 420,000, headroom 80,000, accepts 80,000, overflows 40,000 to Emergency.",
-            "Emergency: ceiling 1,000,000, balance 900,000, headroom 100,000, pending 105,000 + 40,000 = 145,000, accepts 100,000, overflows 45,000 to Trip.",
-            "Trip: uncapped, accepts 75,000 + 45,000 = 120,000.",
-            "Total accepted 80,000 + 100,000 + 120,000 = 300,000, conserved."
+            "Savings group receives 300,000. Medical 4000bp gives 120,000, Emergency 3500bp gives 105,000, Trip 2500bp gives 75,000. Queue seeded in that order per 2.6.3.",
+            "Pop Medical 120,000: ceiling 500,000, balance 420,000, headroom 80,000, accepts 80,000; overflow 40,000 pushed to the back of the queue as a parcel for Emergency, hop 1.",
+            "Pop Emergency base 105,000: ceiling 1,000,000, balance 900,000, headroom 100,000, accepts 100,000; overflow 5,000 pushed as a parcel for Trip, hop 1.",
+            "Pop Trip base 75,000: uncapped, accepts 75,000.",
+            "Pop the Emergency redirect parcel of 40,000: headroom is now 0 because accepted_so_far is 100,000, accepts 0; the full 40,000 is pushed as a parcel for Trip, hop 2.",
+            "Pop Trip 5,000: accepts. Pop Trip 40,000: accepts.",
+            "Per-category totals: Medical 80,000, Emergency 100,000, Trip 75,000 + 5,000 + 40,000 = 120,000. Total 300,000, conserved.",
+            "Note the parcel granularity: because the queue is FIFO and redirect parcels join the back, Emergency's base share is resolved before Medical's overflow arrives, so Trip receives three separate line items, not one combined 45,000. Line items, hop counts and the diagnostics trace must reflect this; the vector table in 2.8 asserts per-category totals, and the line-item shape must follow this worked flow."
           ]
         }
       ],
@@ -1455,7 +1460,7 @@
         "Substage 2.12 (Technology decision set) is complete and ticked off."
       ],
       "inputs": [
-        "All artefacts from substages 2.1 to 2.11."
+        "All artefacts from substages 2.1 to 2.12, including ADR-001 to ADR-004."
       ],
       "work": [
         {
@@ -1580,7 +1585,7 @@
     "SCHEMA.md covers every entity the PRD stories require, with no money column typed as floating point.",
     "ADRs exist for state management, sync target and database choice.",
     "TRACEABILITY.md updated: every FR names the design artefact that covers it.",
-    "OQ-03, OQ-05, OQ-06, OQ-07 and OQ-09 are resolved and reflected in the design."
+    "OQ-03, OQ-05, OQ-06, OQ-07, OQ-08 and OQ-09 are resolved and reflected in the design."
   ],
   "stage_must_not": [
     "Do not implement any code, including throwaway prototypes presented as deliverables.",

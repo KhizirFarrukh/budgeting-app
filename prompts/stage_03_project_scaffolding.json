@@ -576,8 +576,10 @@
         },
         {
           "step": "3.6.6",
-          "action": "Verify every stub screen renders legibly in dark mode.",
-          "details": []
+          "action": "Verify the theme and every shared presentation primitive render legibly in dark mode.",
+          "details": [
+            "Stub screens do not exist until substage 3.7; the per-stub dark mode walk happens there."
+          ]
         }
       ],
       "acceptance_criteria": [
@@ -585,7 +587,7 @@
         "Money formatter tests pass, covering exponents 0, 2 and 3, negatives, and extreme values.",
         "The formatter has no code path that accepts or returns a floating point number.",
         "The business scope treatment is legible in greyscale.",
-        "Dark mode renders every stub without unreadable text."
+        "The theme and shared primitives render legibly in dark mode."
       ],
       "outputs": [
         "Theme definition and tokens.",
@@ -672,8 +674,10 @@
         },
         {
           "step": "3.7.6",
-          "action": "Walk every route manually and confirm reachability, then record the walk in the stage report.",
-          "details": []
+          "action": "Walk every route manually and confirm reachability, verifying each stub renders legibly in dark mode as you go, then record the walk in the stage report.",
+          "details": [
+            "This is the per-stub dark mode check deferred from substage 3.6, now that the stubs exist."
+          ]
         }
       ],
       "acceptance_criteria": [
@@ -681,6 +685,7 @@
         "There is no dead route and no route that is absent from the design document.",
         "Placeholders visibly identify themselves as placeholders.",
         "Android back behaviour matches the design for every multi-step flow.",
+        "Every stub renders legibly in dark mode.",
         "The developer menu is present and is already listed on the Stage 10 removal checklist."
       ],
       "outputs": [

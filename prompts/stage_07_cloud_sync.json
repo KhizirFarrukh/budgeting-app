@@ -79,8 +79,10 @@
           "step": "7.1.1",
           "action": "Configure the OAuth client for Android.",
           "details": [
-            "Register the SHA-1 fingerprints for both debug and release signing configurations.",
-            "A release build with an unregistered fingerprint fails at sign-in and is a classic late-stage surprise, so register both now."
+            "Register the SHA-1 fingerprint for the debug signing configuration now.",
+            "For release: the upload keystore does not exist until substage 10.5. Either generate the upload keystore now, register its fingerprint, and hand it to 10.5 to reuse, or record release-fingerprint registration as an explicit pending item that 10.5 completes.",
+            "If Play App Signing is used, the Play-assigned app signing key has its own SHA-1 that only exists after enrolment; 10.5.4 must register that one too.",
+            "A release build with an unregistered fingerprint fails at sign-in and is a classic late-stage surprise, so whichever path is taken, it must appear on the release checklist."
           ]
         },
         {
@@ -127,7 +129,7 @@
         "The app is fully functional signed out, proven by running the Stage 6 flow tests with no account linked.",
         "Signing in with a second account never merges data; the choice is explicit and its consequence stated first.",
         "Revoking access from the Google account page produces a graceful local-only degradation, not a crash or retry storm.",
-        "Both debug and release SHA-1 fingerprints are registered, recorded in the stage report.",
+        "The debug SHA-1 fingerprint is registered, and release-fingerprint registration is either done (if the upload keystore was generated early) or recorded as a named pending item for substage 10.5, in the stage report.",
         "Every requested scope is listed with its justification in PRIVACY_SOURCE.md."
       ],
       "outputs": [

@@ -21,6 +21,7 @@
   "traceability": {
     "feature_requirements": [
       "FR-01",
+      "FR-02",
       "FR-03",
       "FR-04",
       "FR-05",
@@ -28,6 +29,7 @@
       "FR-07",
       "FR-08",
       "FR-10",
+      "FR-11",
       "FR-12",
       "FR-13",
       "FR-15"

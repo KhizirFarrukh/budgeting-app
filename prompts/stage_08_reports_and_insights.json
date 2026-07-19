@@ -19,6 +19,7 @@
   ],
   "traceability": {
     "feature_requirements": [
+      "FR-10",
       "FR-13",
       "FR-14"
     ],
