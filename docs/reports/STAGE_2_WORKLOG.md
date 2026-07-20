@@ -8,7 +8,7 @@ Evidence log, one entry per substage.
 | 2.2 | Layering, dependency rule and directory structure | ✅ Complete |
 | 2.3 | Data model: entities, tables and columns | ✅ Complete |
 | 2.4 | Data model: constraints, indexes, balances, migrations | ✅ Complete |
-| 2.5 | Allocation: contracts and phase A base split | Not started |
+| 2.5 | Allocation: contracts and phase A base split | ✅ Complete |
 | 2.6 | Allocation: phase B ceilings, redirects, termination | Not started |
 | 2.7 | Allocation: overrides, reversals, error taxonomy | Not started |
 | 2.8 | Allocation: pseudocode, worked examples, vector table | Not started |
@@ -216,3 +216,113 @@ OQ-02's Reading B without a migration, per PRD §3.4 D-14.
 
 **`balance_cache` is device-local and excluded from sync**, so a merge can never import a balance —
 balances are always recomputed locally from entries.
+
+---
+
+## 2.4 — Constraints, indexes, balances, migrations (S02.04)
+
+**Output:** `docs/SCHEMA.md` sections 5 and 7. (Section 6 is substage 2.10's, per the PR-04 fix.)
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every index names the specific query it serves | §5.5 — eleven indexes, each mapped to numbered queries Q1–Q14 in §5.6, which are themselves traced to PRD journeys and stories | ✅ |
+| Foreign key enforcement called out explicitly rather than assumed | §5.1 — `PRAGMA foreign_keys = ON` required on every connection open including tests and migrations, with substage 4.3.3's orphan-insert test named as the only real proof | ✅ |
+| The balance policy is chosen, with a verification procedure defined | §7.1 — Option B on measured grounds; two-tier verifier with what runs when | ✅ |
+| The migration strategy names the fixture-testing requirement | §7.2 — one fixture per prior version, v1 committed at 4.9.3, no schema change merges without a migration test | ✅ |
+| Tombstone retention has a stated window and a safe-purge condition | §7.3 — all-devices-acknowledged **and** a 180-day floor; 365-day stale-device eviction with its consequence stated | ✅ |
+
+### Decisions
+
+**All foreign keys are `ON DELETE RESTRICT`, never `CASCADE`.** A cascade would silently destroy
+ledger history when a category row was removed — exactly what INV-03 exists to prevent. Since
+deletion is soft everywhere, a hard delete of a referenced row should be impossible; `RESTRICT`
+makes that a database-level fact rather than a discipline.
+
+**Three constraints do real invariant work at database level**, giving each a second independent
+enforcement mechanism: **C-15** forbids tombstoning a ledger entry (INV-03, alongside the repository
+exposing no delete method); **C-19** forbids a capped sink (INV-07's termination guarantee cannot be
+broken by any path, including a sync merge); **C-21/C-22** pin the six reserved columns to their v1
+values, so a v1.1 client can trust that every v1.0 row carries defaults.
+
+**Balance policy — Option B, chosen on measured grounds.** A grouped ledger scan costs an estimated
+40–80 ms at the Heavy profile and 80–150 ms at Stress. Individually acceptable against the 400 ms
+P-03 budget, but paid on **every reactive emit** rather than every navigation, leaving no headroom
+once reports and per-account totals are also on screen. The cache is updated only inside the same
+transaction as the ledger write, is device-local so a merge can never import a balance, and is
+verified in two tiers: a cheap per-category count on every cold start, and a full recompute after
+**every** merge, before every export, on demand, and whenever the cheap check disagrees. A merge is
+never trusted.
+
+**One candidate index explicitly rejected**, per the rule that an index without a named query does
+not belong: a composite `ledger_entries (category_id, source_type, occurred_at_ms)` for Q9. IX-01
+already narrows to roughly 1,675 rows at Heavy, and `ledger_entries` is the highest-volume table, so
+every extra index is paid on every allocation write. Recorded so Stage 4 does not add it
+speculatively.
+
+**`ledger_entries.source_id` is deliberately not a foreign key** — it points at either an income
+event or a spending transaction depending on `source_type`, which SQLite cannot express. Integrity
+for it is enforced by the repository write path and checked by the Stage 9 reconciliation script.
+
+---
+
+## 2.5 — Allocation contracts and phase A (S02.05)
+
+**Output:** `docs/ALLOCATION_ALGORITHM.md` sections 1, 2, 5.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| The pseudocode for phase A contains no floating point operation | §5.1 — integer multiply, integer divide truncating toward zero, modulo, and integer addition only. Purity rule P-8 forbids `double`/`float`/`num` including intermediates; guard G3 enforces it | ✅ |
+| The tie-break is stated precisely enough to predict the winner by hand | §5.4 — remainder descending, then `sort_order` ascending, then `id` by **ordinal** string comparison, with locale-aware comparison explicitly forbidden. Worked through for V-03 showing A and B tying at 9,999 and being separated by `sort_order` | ✅ |
+| The documented maximum income is a specific number, derived and shown | §5.6 — derivation from `2^63 − 1` divided by 10000, giving **MAX_MONEY_MINOR = 922,337,203,685,477**, with the tightness proof that `+1` overflows | ✅ |
+| The purity contract forbids clock, I/O and randomness explicitly | §2.5 — eight numbered rules P-1…P-8, mechanically enforced by guard G2 | ✅ |
+| Phase A conservation assertions are named as engine-internal checks that fail loudly | §5.7 — assertions A-1 and A-2 throw rather than returning a typed failure, with the distinction between "inputs unacceptable" and "engine is wrong" spelled out | ✅ |
+
+### Arithmetic verified by script, not by eye
+
+Every figure in §5.6 and both worked examples were re-derived independently:
+
+```
+int64 max        : 9223372036854775807
+floor(max/10000) : 922337203685477
+bound   x 10000  : 9223372036854770000   fits: True
+bound+1 x 10000  : 9223372036854780000   fits: False
+3 x bound        : 2767011611056431
+
+V-03 (amount 3):    bp=3333 floor=0 rem=9999 | bp=3333 floor=0 rem=9999 | bp=3334 floor=1 rem=2
+V-02 (amount 100):  bp=3333 floor=33 rem=3300 | bp=3333 floor=33 rem=3300 | bp=3334 floor=33 rem=3400
+```
+
+The bound is **exact and tight** — one unit above it overflows int64. Both vectors reproduce the
+expectations stated in the Stage 2 plan (V-03 → 1/1/1 with floors 0/0/1 and remainders 9999/9999/2;
+V-02 → 33/33/34).
+
+### Decisions
+
+**A category that accepts nothing produces no line item, not a zero line.** A zero line would write
+a ledger row recording that no money moved, inflating the highest-volume table (PRD §7.3) with rows
+carrying no information. The fact is recorded in `diagnostics` instead, which is what the preview
+renders for PRD §5.6 case I-2.
+
+**Diagnostics are structured events, not strings.** The engine emits kinds, ids and amounts; the
+presentation layer resolves ids to names and builds sentences. The engine has no access to category
+names and no locale, so it cannot build a user-facing string even in principle — which is what keeps
+substage 6.4.3 possible.
+
+**`MAX_MONEY_MINOR` bounds every money value in the request, not only the income.** With all inputs
+bounded, the worst arithmetic case in the engine is three bounded values summed
+(`ceiling − balance − accepted_so_far`), giving ≈2.77 × 10¹⁵ against an int64 ceiling of
+≈9.22 × 10¹⁸ — a margin of roughly 3,300×. This is why no addition or subtraction elsewhere in the
+engine needs its own overflow guard, and it is stated so Stage 5 does not add redundant ones.
+
+**`carry_forward_policy` is a request field, not a constant** (substage 5.5.3), so OQ-05's answer can
+change without an engine change.
+
+### Note on section ordering
+
+Section numbers follow the references in the Stage 5 plan rather than reading order — phase A is §5
+while phase B is §3, because substage 5.2's inputs name "section 5" and 5.3/5.4 name "section 3". A
+reading-order note is placed at the top of the document so the ordering does not confuse a reader.
