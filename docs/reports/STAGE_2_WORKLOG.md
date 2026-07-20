@@ -16,7 +16,7 @@ Evidence log, one entry per substage.
 | 2.10 | Validation and configuration integrity rules | ✅ Complete |
 | 2.11 | Navigation, screen inventory, per-screen states | ✅ Complete |
 | 2.12 | Technology decision set | ✅ Complete |
-| 2.13 | Design review, assembly and gate preparation | Not started |
+| 2.13 | Design review, assembly and gate preparation | ✅ Complete — **stage gate reached** |
 
 ---
 
@@ -809,6 +809,72 @@ gives directly. Only shrinking is lost. The seven properties are defined in ALLO
 §9.2 independently of any library, so the choice cannot affect *what* is verified. `workmanager` →
 drop the periodic trigger, keeping foreground, connectivity and manual sync; **no correctness
 property depends on sync frequency**, since convergence comes from the merge design.
+
+---
+
+## 2.13 — Design review, assembly and gate preparation (S02.13)
+
+**Outputs:** `docs/reports/STAGE_2_REPORT.md`, `docs/TRACEABILITY.md` updated to `DESIGNED`.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every invariant names the design element that enforces it | Report §3 — all twelve walked; **no gaps**. Each names two or more concrete elements, most combining a database constraint with a code-level guard | ✅ |
+| Every PRD story maps to a design element | Report §4 — all 37 stories grouped by area, plus the four interaction cases mapped individually | ✅ |
+| All worked examples re-verified and conserving | Report §5 — four examples re-derived by script **at review time**, not carried forward | ✅ |
+| `TRACEABILITY.md` updated to `DESIGNED` | 23 of 23 rows, with a new per-requirement design-artefact table added at 2.13.6 | ✅ |
+| The frozen-decisions list is written | Report §7 — 14 decisions later stages may not change without a new ADR | ✅ |
+
+### The invariant walk found no gaps
+
+All twelve invariants have named enforcing elements. The pattern that emerged: **the strongest ones
+are enforced twice, by independent mechanisms.** INV-03 by both a check constraint (C-15) and the
+absence of any update or delete method on the repository. INV-07 by a check constraint (C-19), a
+save-time validator (V-12) and three runtime defences. INV-01 by a schema convention, a CI guard, a
+value type, and a runtime check that reads the *live* schema rather than trusting the definition
+source.
+
+### Re-verification output
+
+```
+5.4 tie-break, income 3:   floors 0/0/1  remainders 9999/9999/2  leftover 2 -> 1/1/1, sum 3
+5.5 rounding, income 100:  floors 33/33/33  remainders 3300/3300/3400  leftover 1 -> 33/33/34
+3.9 chained, 300000:       80000 + 100000 + (75000+5000+40000) = 300000  conserved=True
+4.7 override, 500000:      divisor 6000 -> 175000/125000, TOTAL 500000  conserved=True
+                           counterfactual divisor 10000 -> 180000, SHORT BY 120000
+5.6 bound:                 922337203685477; bound*10000 fits, (bound+1)*10000 does not
+```
+
+### Consistency pass
+
+Four checks, all passing. The one worth recording: **`Diagnostics` needs the repair log to be
+durable**, which SCHEMA §6.8 already requires but which no table currently holds. Noted in report §6
+as a Stage 4 obligation rather than left to be discovered — the repair log needs a home in the
+schema, and Stage 4 must add it or Stage 7 will have nowhere to write.
+
+### An encoding incident, and the lesson
+
+While fixing a typo in the report, a PowerShell `Get-Content -Raw` / `Set-Content -Encoding utf8`
+round-trip corrupted every non-ASCII character in the file — PS 5.1 read the UTF-8 bytes as ANSI
+before writing them back, turning em-dashes and section signs into mojibake. Caught immediately by a
+non-ASCII grep, and the file was rewritten with the Write tool.
+
+**Lesson recorded for later stages: do not round-trip UTF-8 documents through PowerShell 5.1's
+`Get-Content`/`Set-Content`.** Use the Read/Edit/Write tools, which handle encoding correctly. A
+verification grep over `docs/` confirms no mojibake remains anywhere.
+
+### Stage 2 totals
+
+- Substages: **13 of 13**.
+- Acceptance criteria: **62**, all met.
+- Deliverables: 4 design documents, 4 ADRs, 1 worklog, 1 report, 1 updated matrix.
+- Design documents: ARCHITECTURE (10 sections), SCHEMA (8), ALLOCATION_ALGORITHM (10),
+  NAVIGATION (8).
+- Golden vectors specified and verified by execution: **15**, in 16 fixture files.
+- Frozen decisions: **14**.
+- Defects caught in this stage's own work: **1** (the split divisor), recorded rather than silently
+  corrected.
 
 ### Performance design
 
