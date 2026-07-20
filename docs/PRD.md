@@ -2,13 +2,92 @@
 
 | | |
 |---|---|
-| **Status** | In progress — Stage 1 |
+| **Status** | **Complete — awaiting Stage 1 approval gate** |
 | **Source** | `prompts/00_project_manifest.json` (schema 4.0.0) |
-| **Sections assembled** | 2 (1.2), 3 (1.6), 4 (1.4), 5 (1.3), 6 and 7 (1.5), Appendix A (1.1) |
-| **Sections pending** | 1, 8, 9, assembled across substages 1.7–1.8 |
+| **Assembled** | Substages 1.1–1.8. All sections present; no placeholder text. |
+| **Companion documents** | `OPEN_QUESTIONS.md`, `ASSUMPTIONS.md`, `TRACEABILITY.md`, `PLAN_REVIEW.md` |
+| **Blocking questions** | **5** — see §8.1. Stage 2 may not begin until these are answered or the recommendations are explicitly authorised. |
 
-> Sections are written across substages 1.2 to 1.8 and assembled in order in 1.8.
-> Appendix A was written first, in 1.1, so the finished document carries its own provenance.
+**Contents.** §1 purpose and vision · §2 personas and journeys · §3 scope and the version 1 cut line
+· §4 the money model · §5 user stories and acceptance criteria · §6 non-functional requirements ·
+§7 data volume and growth · §8 open questions · §9 glossary · §10 traceability reference ·
+Appendix A source requirement inventory.
+
+**This document contains no implementation detail** — no class names, table definitions, column
+types or package choices. The one bounded exception is §3.4, where substage 1.6.4 requires each
+deferred feature's schema accommodation to be *named*; those are named as field concepts, never as
+definitions.
+
+---
+
+## 1. Purpose and vision
+
+### 1.1 The problem
+
+Money arrives, sits in one account, and is spent down before any of it is deliberately set aside.
+The intention to save exists; the mechanism does not. By the time a person thinks about saving,
+the money that was supposed to be saved has already been spent on things that felt urgent at the
+time.
+
+For someone who also runs a small business, the same failure has a sharper edge. Business revenue
+and household money land in the same place and look identical. The float that was supposed to
+restock inventory next month gets spent on groceries this month — not through carelessness, but
+because nothing marked it as already committed.
+
+### 1.2 What PookieBudget does
+
+It splits every payment the moment it arrives, automatically, across categories the user defined in
+advance.
+
+The user sets, once: how income divides between Spending, Savings and Business; which categories sit
+inside each; and what share each category takes. From then on, recording a payment shows exactly
+where every unit of it goes, before confirming. Goals fill toward targets the user set. When a goal
+is complete, further money flows onward to the next place the user named, visibly, rather than
+piling up somewhere it is no longer needed.
+
+The result is that saving happens *before* spending is possible, rather than from whatever survives
+the month.
+
+### 1.3 What makes it different
+
+- **The split is automatic and explained.** Not a report of what happened, but an allocation made at
+  the moment money arrives — with every redirect shown in words, so the user always knows why a
+  figure is what it is.
+- **Goals finish.** A category with a target stops filling and passes the surplus to the next goal.
+  Completing one goal accelerates the next, without the user rebalancing anything.
+- **Business money is structurally separate.** Not a tag or a filter — business figures never appear
+  in household totals anywhere in the app.
+- **The data belongs to the user, literally.** No developer server exists. Records live on the
+  device and, optionally, in a private folder inside the user's own Google account that the
+  developer cannot read. The app works completely without an account at all.
+- **Correctness over convenience.** Every unit of every payment lands in exactly one category. Not
+  approximately, not after rounding — exactly, provably, every time.
+
+### 1.4 Who it is for
+
+Two people, or more precisely one person in two situations (§2): a salaried individual with
+irregular side income who has never used a budgeting app, and that same person running a small
+retail or reselling business alongside their job.
+
+Both are assumed to be on a mid-range Android phone, often distracted, often recording money within
+minutes of receiving it, and unwilling to spend more than a couple of minutes on setup.
+
+### 1.5 What success looks like
+
+A first-time user completes setup by accepting sensible defaults in under two minutes, records their
+first payment, sees exactly where it went, and believes the number. Six months later their history
+still reconciles to the unit, their goals have filled and overflowed as designed, and they have
+never once wondered where money disappeared to.
+
+### 1.6 What this document is
+
+The complete, testable specification of version 1 — written before any code, so that every
+ambiguity surfaces as an explicit question (§8) rather than a silent assumption. Sections 2 to 7
+define the product; section 8 states what remains undecided; sections 9 and 10 make the document
+navigable and traceable.
+
+It contains no implementation detail. Architecture, data design and the allocation algorithm are
+Stage 2's work, derived from §4 and §5.
 
 ---
 
@@ -1621,6 +1700,100 @@ never became questions, so that the five blocking ones are not buried among triv
 
 ---
 
+## 9. Glossary
+
+The manifest's domain glossary is authoritative and is reproduced here unchanged in meaning. Stage 2
+onward uses these terms exactly.
+
+| Term | Definition |
+|---|---|
+| **Category group** | One of the three top-level buckets: Spending, Savings, Business. Income is split across groups first, then within each group. |
+| **Category** | A user-defined destination for money inside a group — Groceries, Emergency fund, Inventory purchases. |
+| **Category type** | Fixed-recurring (a known bill amount per period, which does not accumulate beyond it), accumulating reserve (grows toward a ceiling), or uncapped flow (a spending envelope with no cap — see OQ-03). |
+| **Ceiling** | The target amount at which an accumulating category is considered full. Contributions beyond it are redirected. |
+| **Headroom** | The amount a category can still accept. For an accumulating reserve: ceiling minus current balance. For fixed-recurring: the period's bill amount minus what has already been allocated this period. For uncapped flow: unbounded. |
+| **Overflow** | The portion of an allocation exceeding a category's headroom, which must be redirected. |
+| **Redirect target** | The category that receives a given category's overflow. |
+| **Sink category** | A mandatory, non-deletable, uncapped category terminating every redirect chain. Overflow that can be placed nowhere else lands here. |
+| **Distribution rule** | The effective-dated set of percentages: group-level ratios plus within-group category ratios. |
+| **Basis point** | One hundredth of one percent. The design stores percentages as integers in basis points so a group's shares total exactly 10000 and no floating-point representation is involved. *Product language uses whole percentages; basis points are a design-level concern.* |
+| **Income event** | A single inbound sum of money — salary, sale proceeds, gift — that triggers a distribution. |
+| **Allocation** | One line item of an income event: an amount assigned to one category, with a reason (base, redirect, manual override) and, where applicable, the category it was redirected from. |
+| **Ledger entry** | An immutable record of money moving into or out of a category. Allocations and spending transactions are both ledger entries. |
+| **Tombstone** | A soft-delete marker retained so peer devices converge on a deletion rather than resurrecting the record. |
+| **Outbox** | A local queue of changes waiting to be pushed to the user's cloud store, drained by a background worker with retry and backoff. |
+| **Hybrid logical clock** | A timestamp combining wall-clock milliseconds, a logical counter and a device id, used to order concurrent edits deterministically despite clock skew. |
+| **Largest remainder method** | The rounding technique that splits an integer amount by percentages without losing or inventing units: take each share's integer floor, then distribute the leftover units to the shares with the largest fractional remainders. |
+
+### 9.1 Product language and its glossary equivalents
+
+Section 4 deliberately speaks to a non-developer and therefore uses plain words where the glossary
+uses precise ones. **These are the same concepts, not synonyms introduced by accident** — this table
+is the binding mapping, and Stage 2 must use the right-hand column exclusively.
+
+| Product language (§4, and app UI) | Glossary term (Stage 2 onward) |
+|---|---|
+| A goal / a reserve you are building | Accumulating reserve category |
+| A bill you pay every period | Fixed-recurring category |
+| An open envelope | Uncapped flow category |
+| Target | Ceiling |
+| Room (as in "room to accept more") | Headroom |
+| Next in line | Redirect target |
+| The catch-all / Unallocated buffer | Sink category |
+| Money moving on / passing onward | Overflow being redirected |
+| A payment arriving | Income event |
+| Full | Balance has reached the ceiling; headroom is zero |
+| Funded for this period | Fixed-recurring headroom is zero for the current period |
+| Undo | Reversal by compensating ledger entries |
+| Where the money went | The allocation line items of an income event |
+
+Any term appearing in the left column of a Stage 2 or later design document is a defect — the
+right-hand column is the vocabulary from Stage 2 onward.
+
+---
+
+## 10. Traceability reference
+
+The living matrix is `docs/TRACEABILITY.md`, seeded in substage 1.8 with one row per manifest
+requirement and updated by every later stage rather than replaced. This section records what the
+matrix covers and how the inventory's derived items are accounted for.
+
+**Matrix contents:** 15 feature requirements and 8 non-functional requirements — 23 rows, each
+naming its stories, its implementing stages, its verifying artefact and its status. Every status is
+seeded `NOT_STARTED`; no row has an empty implementing-stage cell.
+
+**Requirements registered twice.** Three pairs state the same claim in both the FR and NFR
+registries: FR-15 with NFR-02 (offline), FR-09 with NFR-01 (data stays in the user's own Google
+account), and FR-07b with NFR-03 (business separation). The matrix keeps both rows, because both ids
+are referenced across the stage plan, but marks each pair as cross-referenced so coverage is counted
+once. Recorded as assumption A-14; without this, the matrix would report stronger coverage than
+exists.
+
+**Implied requirements (IMP-01…IMP-15).** These are inventory-local (§A.3) and are adjudicated here
+rather than carried into the matrix as separate rows, since the matrix's contract is one row per
+manifest requirement.
+
+| Implied requirement | Disposition |
+|---|---|
+| IMP-01, IMP-02, IMP-03 — seeded categories, their suggested types, editability | Promoted into FR-08's coverage via US-003, US-004, US-005 |
+| IMP-04 — a business sink candidate | Folded into OQ-07, blocking question 3 |
+| IMP-05 — a lunar-calendar date-anchored goal | Deferred with OQ-04; assumption A-02 |
+| IMP-06 — ceilings expressed as a formula | Deferred as D-02; assumption A-24 |
+| IMP-07 — spending reopens headroom | Promoted to a story, US-022; assumption A-19 records that it is emergent from the headroom definitions rather than a separate rule |
+| IMP-08 — the remote store is the user's own Google account, target justified by ADR | Folded into FR-09's coverage; the ADR is Stage 2's obligation |
+| IMP-09 — no third-party server | Promoted to a permanent non-goal, NG-08 |
+| IMP-10 — offline first | Duplicate of FR-15 / NFR-02; no separate row |
+| IMP-11 — multi-device conflict handling | Promoted to a story, US-030 |
+| IMP-12 — the remote store vanishing is handled | Promoted to a story, US-031 |
+| IMP-13 — remote payload consumes the user's own quota | Quantified in §7.4; single-digit megabytes at the heavy profile |
+| IMP-14 — the app-data scope needs verification before public release | Drives §3.2's decision that sync is in scope but not release-blocking |
+| **IMP-15 — all merging happens on the client** | **A design constraint with no user-facing behaviour of its own.** It follows necessarily from NG-08: with no developer infrastructure, there is nowhere else for merging to happen. Recorded here explicitly so Stage 2 treats it as a constraint rather than rediscovering it. |
+
+**Non-goals (NG-01…NG-09)** are in §3.1 and are not matrix rows; a non-goal has nothing to
+implement. NG-08 and NG-09 additionally act as permanent constraints on every later stage.
+
+---
+
 ## Appendix A — Source requirement inventory
 
 Built in substage 1.1 from `00_project_manifest.json`. Wording in the "verbatim source" columns is
@@ -1766,9 +1939,17 @@ decision to drop it; none may be left un-adjudicated.
 | NG-04 | "No third-party analytics, crash reporting containing financial data, or ad SDKs." | Constraint |
 | NG-05 | "No currency conversion or multi-currency portfolios (single currency per install)." | Constraint |
 | NG-06 | "do not introduce Android-only abstractions in the domain layer that would block a later iOS port" | Constraint (from `project.platform.ios_support`) |
+| NG-09 | "Out of scope." (`project.platform.web_support`) | Constraint |
 
-Six rows, of which five are the manifest's `explicit_non_goals_v1`; NG-06 is drawn from the platform
-block and is a constraint of the same kind.
+Seven rows, of which five are the manifest's `explicit_non_goals_v1`; NG-06 and NG-09 are drawn from
+the platform block and are constraints of the same kind.
+
+> **Correction applied in substage 1.8.** NG-09 was missed by this inventory when it was written in
+> 1.1 — the platform block's `web_support` entry was read but not carried across. The omission was
+> caught by 1.8's completeness pass and is recorded here rather than silently repaired, since an
+> inventory's value depends on its errors being visible. NG-07 (no forecasting) and NG-08 (no
+> developer backend) do not appear in this appendix because they are not in the manifest's source
+> text; they were derived during substages 1.5 and 1.6 and live in §3.1.
 
 ---
 

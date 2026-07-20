@@ -11,7 +11,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | 1.5 | Non-functional requirements with measurable targets | ✅ Complete |
 | 1.6 | Scope boundaries and the version 1 cut line | ✅ Complete |
 | 1.7 | Open questions and ambiguity register | ✅ Complete |
-| 1.8 | Traceability matrix and PRD assembly | Not started |
+| 1.8 | Traceability matrix and PRD assembly | ✅ Complete — **stage gate reached** |
 
 ---
 
@@ -508,3 +508,79 @@ default is applied to them, and Stage 2's entry criteria require the user's answ
 authorisation to proceed on the recommendations. The three highest-residual-risk assumptions are
 named explicitly at the foot of `ASSUMPTIONS.md` (A-11, A-12, A-13) rather than left equal among
 twenty-six.
+
+---
+
+## 1.8 — Traceability matrix and PRD assembly (S01.08)
+
+**Outputs:** `docs/TRACEABILITY.md`, `docs/PRD.md` complete (§1, §9, §10 added; assembled),
+`docs/reports/STAGE_1_REPORT.md`.
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.8.1 | Build the matrix; seed every status `NOT_STARTED` | `TRACEABILITY.md` — 23 rows |
+| 1.8.2 | Verify one row per FR and NFR, no empty implementing-stage cell | Integrity check table in the matrix — 6 checks, all pass |
+| 1.8.3 | Assemble the PRD in the required section order and read end to end | PRD §1…§10 plus Appendix A; §1, §9, §10 written here |
+| 1.8.4 | Consistency pass | 4 findings, all resolved — report §8 |
+| 1.8.5 | Completeness pass against the 1.1 inventory | Scripted; output below |
+| 1.8.6 | Write the stage report | `STAGE_1_REPORT.md` |
+| 1.8.7 | Prepare the gate message | Report §9 |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Exactly one row per manifest FR and NFR, none with an empty implementing stage | Matrix integrity table: 15 FR rows, 8 NFR rows, 23 of 23 implementing-stage cells populated, 23 of 23 verifying-artefact cells populated | ✅ |
+| The completeness pass shows every inventoried requirement present in the PRD | Scripted id sweep — output below | ✅ |
+| The consistency pass finds no contradictory statements or introduced synonyms | Read end to end; 4 findings raised and resolved, including the terminology conflict resolved via §9.1's binding mapping | ✅ |
+| The stage report is complete and the gate question drafted | `STAGE_1_REPORT.md` §§1–9, all seven manifest-required sections present | ✅ |
+
+### Mechanical output
+
+```
+COMPLETENESS PASS: all 15 FR, 8 NFR, 15 IMP, 9 NG and 37 US ids present in PRD.md
+REGISTER PASS: OQ-01..OQ-18 and A-01..A-26 all present
+```
+
+Placeholder sweep over `docs/` for TODO / TBD / placeholder / lorem returned a single hit: the PRD
+header line asserting that no placeholder text exists. No genuine placeholder remains.
+
+### Consistency pass — the finding worth recording
+
+**The terminology conflict was real, not pedantic.** Substage 1.4 required the money model in words
+a non-developer can act on; substage 1.8.4 requires terminology matching the manifest glossary with
+no synonyms introduced. Section 4 says "goal", "target", "room", "next in line" and "catch-all"
+where the glossary says accumulating reserve, ceiling, headroom, redirect target and sink.
+
+Both requirements are correct and neither should yield. Resolved by making the mapping **explicit and
+binding** (§9.1): the plain words are the product's vocabulary, the glossary words are the design's,
+and any appearance of a left-column term in a Stage 2 or later document is declared a defect. Without
+this table the two vocabularies would have drifted into genuine ambiguity by Stage 4.
+
+### Completeness pass — a gap in my own work
+
+The manifest's platform block declares web support out of scope. Appendix A, written in 1.1, carried
+across the iOS constraint but **missed the web one**. Caught here, added as NG-09, and recorded in
+§A.4 as a visible correction with a note explaining the omission rather than being silently
+repaired — an inventory whose errors are invisible cannot be trusted.
+
+This is the completeness pass doing exactly what it exists for, on the document that claimed to be
+complete.
+
+### Deviations from the stage plan
+
+- **§9.1 added** beyond the listed sections — the product-language mapping table. Not requested, but
+  1.4 and 1.8.4 are otherwise in direct conflict.
+- **No ADRs written.** Correct rather than a deviation, but worth stating: the decision log opens at
+  substage 2.1 with ADR-001, and Stage 1's `stage_must_not` forbids the technical choices an ADR
+  would record.
+
+### Stage 1 totals
+
+- Substages: **8 of 8** complete.
+- Acceptance criteria across the stage: **33** — 32 passed, 1 partial (1.2's failure-journey
+  criterion, ⚠️ 6-of-7, ESC-1.2-A).
+- Deliverables: 6 documents.
+- Commits on `v1.0`: 9, one per substage plus the plan audit and the initial plan import.
