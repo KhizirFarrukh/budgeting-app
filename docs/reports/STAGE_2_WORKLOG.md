@@ -13,7 +13,7 @@ Evidence log, one entry per substage.
 | 2.7 | Allocation: overrides, reversals, error taxonomy | ✅ Complete |
 | 2.8 | Allocation: pseudocode, worked examples, vector table | ✅ Complete |
 | 2.9 | Cloud sync data model and merge strategy | ✅ Complete |
-| 2.10 | Validation and configuration integrity rules | Not started |
+| 2.10 | Validation and configuration integrity rules | ✅ Complete |
 | 2.11 | Navigation, screen inventory, per-screen states | Not started |
 | 2.12 | Technology decision set | Not started |
 | 2.13 | Design review, assembly and gate preparation | Not started |
@@ -608,3 +608,65 @@ so this is bounded.
 
 **`balance_cache` is excluded from the payload** so a merge can never import a balance; balances are
 always recomputed locally (INV-04).
+
+---
+
+## 2.10 — Validation and configuration integrity rules (S02.10)
+
+**Output:** `docs/SCHEMA.md` section 6. The document is now complete.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every rule names its enforcement point | §6.2–§6.7 — **28 rules** V-01…V-28, each with an "Enforced at" column naming a database constraint, a domain validator, the repository write path, or a combination | ✅ |
+| No invariant-protecting rule is enforced only in the UI | §6.1 states the governing rule with its reason and lists what each enforcement point can and cannot do; no rule in the tables names UI alone | ✅ |
+| Cycle detection has a named method and a stated trigger | §6.3 — depth-first traversal with a visited set **over the whole reachable graph**, running on every save that touches a redirect target and on every post-merge pass | ✅ |
+| Every violation states block, warn or auto-repair, plus the recovery path | §6.9 — all 28 save-time rules **block**; auto-repair applies only to the six post-merge cases; nothing merely warns at save time | ✅ |
+| The auto-repair procedure is recorded and visible, never silent | §6.8 — durable repair log surfaced in plain language, with a worked example sentence a user would actually read | ✅ |
+
+### Decisions
+
+**The governing rule, stated once and applied everywhere:** no invariant-protecting rule is enforced
+only in the UI, **because Stage 7 writes through a completely different path**. A rule living on a
+screen is a rule a merge does not know about, and the merged state would persist invalid. This is
+why substage 4.8.4 wires validators into the repository rather than the call site, and why 4.8.6
+requires a test proving validation cannot be bypassed by writing directly through the repository.
+
+**Cycle detection traverses the whole reachable graph, not the immediate pair.** Checking only
+`A → B` and `B → A` misses `A → B → C → A` — the exact defect substage 4.8's pitfalls name.
+
+**The save-time check does not replace the runtime defence.** Recorded explicitly in §6.3: a merge
+can produce a cycle from two independently valid edits on different devices, so the configuration
+may genuinely be cyclic when allocation runs. The two mechanisms cover different situations and
+neither is redundant.
+
+**V-09's asymmetry is deliberate and now documented.** A missing redirect target **blocks** at save
+time but is a **warning routed to the sink** at allocation time. Save time can refuse because there
+is a user to tell; allocation time cannot, because money is moving and refusing would lose the whole
+event.
+
+**V-20 — the short-month anchor rule is clamp, not roll forward.** Rolling 31 February into 3 March
+would place the period boundary *after* the next month's anchor in some years, producing either a
+skipped period or two overlapping ones. Clamping keeps exactly twelve periods per year for every
+anchor value. A worked table covers anchors 29/30/31 across January, both Februaries and April, and
+§6.4 records that the rule is implemented once in the domain period module per ARCHITECTURE §8.4.
+
+**Nothing is auto-repaired at save time, and nothing merely warns.** A user editing their own
+configuration gets a clear refusal and an explanation. Repair exists only for merges, where there is
+no user to ask and no valid state to return to.
+
+**Every repair must be deterministic *and* non-silent** — §6.8 states both as properties with
+reasons. A repair that picks "the first surviving category" depends on iteration order and would
+make two devices diverge permanently, which is worse than the original invalidity because it is
+stable and invisible. Every repair breaks ties by HLC then device id, exactly as the merge does, and
+the percentage-redistribution repair reuses the largest-remainder split so it inherits that
+determinism by construction.
+
+### Repair catalogue
+
+Six post-merge invalid states enumerated with their repairs and the reason each is deterministic:
+deleted redirect target → reassign to the group's sink; percentages no longer totalling 10000 →
+proportional redistribution by largest remainder; sink deleted or archived → restore it; cycle formed
+by two valid edits → break at the newest-HLC edge; account deleted with categories still linked →
+unlink; a group whose categories were all deleted → zero its share and redistribute.

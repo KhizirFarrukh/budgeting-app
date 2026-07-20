@@ -4,8 +4,7 @@
 |---|---|
 | **Status** | In progress — Stage 2 |
 | **Derived from** | `docs/PRD.md` §4 (money model) and §5 (stories); `ARCHITECTURE.md` |
-| **Sections assembled** | 1, 2, 3, 4 (2.3); 5, 7 (2.4); 8 (2.9) |
-| **Sections pending** | 6 (2.10) |
+| **Sections assembled** | 1, 2, 3, 4 (2.3); 5, 7 (2.4); 6 (2.10); 8 (2.9) — **complete** |
 
 Stage 4 transcribes this document **exactly** and proves the transcription faithful with a
 comparison table. A divergence invalidates the Stage 2 design review silently, so any change here
@@ -722,6 +721,200 @@ used, rather than assuming.
 | Q12 | Categories linked to an account, for its derived total | US-011, US-012 | IX-09 |
 | Q13 | Rows changed since an HLC value, per table | S07.7 outbox push, S07.5 merge | IX-11 |
 | Q14 | Spending for a category in a date range | US-024, US-026 | IX-10 |
+
+---
+
+## 6. Validation and configuration integrity
+
+Written in substage 2.10. Stage 4 substage 4.8 implements these rules verbatim; Stage 7 substage 7.6
+calls the same entry point after every merge.
+
+**Most money bugs are configuration bugs**, and catching them at save time is far cheaper than at
+allocation time — when the user is standing there with money in hand.
+
+### 6.1 Enforcement points, and the rule that governs them
+
+| Point | What it can do | What it cannot do |
+|---|---|---|
+| **Database constraint** | Absolute; no code path can bypass it, including a sync merge | Cannot express rules needing cross-row knowledge (percentages totalling 10000, graph acyclicity) |
+| **Domain validator** | Expresses any rule; returns a typed failure | Only binds if something calls it |
+| **Repository write path** | Calls the validators, so a caller that forgets still cannot persist invalid state | — |
+| **UI** | Immediate, friendly, prevents the mistake being made | **Bypassed entirely by sync**, by restore, and by migration repair |
+
+> **The governing rule: no invariant-protecting rule is enforced only in the UI.**
+>
+> Stage 7 writes through a completely different path. A rule that lives only on a screen is a rule a
+> merge does not know about, and the merged state would be persisted invalid. Substage 4.8.4
+> requires validators wired into the **repository** write path for exactly this reason, and substage
+> 4.8.6 requires a test proving validation cannot be bypassed by writing directly through the
+> repository.
+
+The UI still enforces these rules — it must, for NFR-04 — but always **in addition to**, never
+instead of.
+
+### 6.2 Percentage rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-01 | Group basis points total **exactly 10000** across active groups | Domain validator + repository | **Block** the save; name the actual total and the difference |
+| V-02 | Within-group category basis points total **exactly 10000**, for every group with a non-zero share | Domain validator + repository | **Block**; name the group and the difference |
+| V-03 | A group with a **zero** share may have no categories | Domain validator | Permitted — this is the personal-only case (PRD A-20) |
+| V-04 | A group with a **non-zero** share must have at least one active category | Domain validator + repository | **Block**; offer to add a category or set the group's share to zero |
+| V-05 | Each `basis_points` value is within 0–10000 | Database (C-01) + value type | **Block** at construction — `BasisPoints` rejects out-of-range values |
+| V-06 | Rule lines belonging to a **sealed** rule version cannot be modified | Domain validator + repository | **Block**; editing percentages creates a new version instead (§3.4) |
+
+**V-01 and V-02 are the two rules the engine assumes** — failures E-03 and E-04 exist precisely for
+the case where an invalid configuration reaches the engine anyway, which should only be possible via
+a merge.
+
+### 6.3 Ceiling and redirect rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-07 | A ceiling, when set, is greater than zero | Database (C-03) + validator | **Block** |
+| V-08 | A ceiling is set **iff** the type is `ACCUMULATING_RESERVE` | Database (C-17) + validator | **Block** |
+| V-09 | A redirect target exists and is not deleted | Domain validator | **Block** at save. At allocation time a missing target is a *warning* routed to the sink (§3.6 of the algorithm) — the asymmetry is deliberate: save time can refuse, allocation time cannot |
+| V-10 | A redirect target is not the category itself | Database (C-20) + validator | **Block** |
+| V-11 | A redirect target is not archived | Domain validator | **Block** |
+| V-12 | **The redirect graph is acyclic** | Domain validator, on every save touching a redirect target | **Block**; name the cycle by listing the categories in it |
+| V-13 | The sink exists, is uncapped, and is not archived or deleted | Database (C-19) + validator | **Block**; INV-07's termination guarantee depends on it |
+| V-14 | A category that is another category's redirect target cannot be archived | Domain validator | **Block**, and **name the dependant** so the user knows what to change |
+| V-15 | The sink cannot be deleted or archived | Domain validator | **Block** |
+| V-16 | Exactly one sink per group that has one, at most (C-19, U-08) | Database | **Block** |
+
+#### V-12 — the cycle detection method, and when it runs
+
+**Method:** depth-first traversal from the category being saved, following
+`redirect_target_category_id`, carrying a visited set. If the traversal re-reaches any node already
+in the visited set, the graph is cyclic and the save is rejected.
+
+**Traversal is over the whole reachable graph, not just the immediate pair.** Checking only
+`A → B` and `B → A` misses `A → B → C → A`, which is the specific defect substage 4.8's
+`common_pitfalls` names. Substage 4.8.2 requires tests for two-node, three-node and longer cycles
+plus a self-reference.
+
+**When it runs:** on every save that sets or changes a `redirect_target_category_id`, and on every
+post-merge validation pass (§6.8). Cost is trivial — the graph has at most a few dozen nodes.
+
+**This does not remove the runtime defence.** A merge can produce a cycle from two independently
+valid edits made on different devices, so the configuration may genuinely be cyclic when allocation
+runs. ALLOCATION_ALGORITHM §3.5 keeps the visited set and hop limit for exactly that case; the two
+mechanisms cover different situations and neither is redundant.
+
+### 6.4 Fixed-recurring rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-17 | `bill_amount_minor` is greater than zero | Database (C-04) + validator | **Block** |
+| V-18 | `bill_amount_minor` and `period_anchor_day` are both set **iff** the type is `FIXED_RECURRING` | Database (C-18) + validator | **Block** |
+| V-19 | `period_anchor_day` is within 1–31 | Database (C-05) + validator | **Block** |
+
+#### V-20 — the anchor day that does not exist in a short month
+
+An anchor of 29, 30 or 31 has no corresponding date in some months. **Rule: clamp to the last day of
+the month.**
+
+| Anchor | January | February (common) | February (leap) | April |
+|---|---|---|---|---|
+| 31 | 31 Jan | **28 Feb** | **29 Feb** | **30 Apr** |
+| 30 | 30 Jan | **28 Feb** | **29 Feb** | 30 Apr |
+| 29 | 29 Jan | **28 Feb** | 29 Feb | 29 Apr |
+
+**Clamping, not rolling forward.** Rolling 31 February into 3 March would make the period boundary
+land *after* the next month's anchor in some years, producing either a skipped period or two
+overlapping ones — the defect substage 2.10's `common_pitfalls` names. Clamping keeps exactly twelve
+periods per year for every anchor value, always.
+
+**This rule is implemented once**, in `domain/allocation/period.dart` (ARCHITECTURE §8.4), and both
+the engine and the data layer call it. Substage 4.6.6 and 5.5.5 both require an anchor-31 test
+through a 28-day February and a leap February.
+
+### 6.5 Account rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-21 | An account with linked categories cannot be deleted without explicit reassignment or unlinking | Domain validator + repository | **Block**; list the linked categories |
+| V-22 | Account name is unique among live accounts | Database (U-02) | **Block** |
+| V-23 | A category links to at most one account | Schema shape (single column) | Structural (PRD A-08) |
+
+### 6.6 Currency rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-24 | `currency_code` and `currency_minor_exponent` are **immutable once any ledger entry exists** | Domain validator + repository | **Block**, with a plain explanation |
+| V-25 | `currency_minor_exponent` is 0, 2 or 3 | Database (C-12) | **Block** |
+| V-26 | A remote payload whose currency configuration differs is **refused, never converted** | Sync merge (ARCHITECTURE §5.7) | **Refuse** the merge; almost certainly a wrong-account sign-in |
+
+V-24 is what makes PRD A-01 safe: currency is changeable freely until the first ledger entry, and
+never afterwards, because every stored amount is interpreted through the exponent.
+
+### 6.7 Reserved-column rules
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-27 | `ceiling_kind` is `'ABSOLUTE'`; `rule_set` is `'DEFAULT'` | Database (C-21, C-22) | **Block** |
+| V-28 | `target_date_ms`, `ceiling_param`, `parent_category_id`, `soft_budget_minor`, `soft_budget_period` are all null | Database (C-21) | **Block** |
+
+These make the six deferral accommodations **provably unused in v1.0**, so a v1.1 client can trust
+that every v1.0 row carries defaults.
+
+### 6.8 Post-merge validation and deterministic repair
+
+The entry point Stage 7 substage 7.6 calls. Two independently valid states can merge into an invalid
+one — a category whose redirect target was deleted on the other device is the obvious case.
+
+**It runs before the merged state is committed, never after.** Committing first persists an invalid
+state briefly and lets it sync outward.
+
+**It returns a discrepancy list rather than throwing**, so it can also run as a user-facing
+diagnostic.
+
+#### The repair catalogue
+
+| Invalid state produced by a merge | Repair | Determinism |
+|---|---|---|
+| A category's redirect target was deleted elsewhere | Reassign to the **group's sink** | Sink id is a stable property of the group |
+| Category percentages no longer total 10000 because a category was deleted elsewhere | Redistribute the freed basis points **proportionally among the surviving categories**, using the largest-remainder split (ALLOCATION_ALGORITHM §5.1) with its `sort_order`/`id` tie-break | The split is deterministic by construction, including its tie-break |
+| The sink was deleted or archived elsewhere | **Restore it** — un-archive, clear the tombstone | INV-07 depends on it existing; there is no alternative |
+| A redirect cycle formed from two independently valid edits | Break the cycle at the edge with the **newest HLC**, pointing that category at the sink instead | HLC ordering is total (ARCHITECTURE §6.4), so both devices choose the same edge |
+| An account was deleted while categories still link to it | Unlink those categories | Deterministic, order-independent |
+| A group's share is non-zero but its categories were all deleted elsewhere | Set the group's share to **zero** and redistribute to the remaining groups by largest remainder | Deterministic |
+
+#### Two properties every repair must have
+
+**1. Deterministic.** Two devices performing the same merge must produce **identical** repairs. A
+repair that picks "the first surviving category" depends on iteration order and would make the two
+devices diverge permanently — worse than the original invalidity, because it is stable and invisible.
+Every repair above breaks ties by HLC then device id, exactly as the merge does.
+
+**2. Never silent.** Every repair is written to a durable repair log and surfaced to the user in
+plain language (substage 7.6.4, exposed at 7.9.5). The user's configuration changed without them
+asking; they are entitled to know what and why. *"Trip savings used to overflow into Holiday fund,
+which was deleted on your other device, so it now overflows into Unallocated buffer."*
+
+### 6.9 Violation dispositions, at a glance
+
+Substage 2.10.7 requires every violation to state block, warn or auto-repair, plus its recovery path.
+
+| Disposition | Applies to | Recovery |
+|---|---|---|
+| **Block** | Every rule V-01…V-28, at save time | The message names the offending value and what to change; the UI routes to the screen that fixes it |
+| **Warn** | Nothing at save time | — |
+| **Auto-repair** | Only the six post-merge cases in §6.8, and only after a merge | Recorded in the repair log and surfaced to the user |
+
+**Nothing is auto-repaired at save time**, and nothing is merely warned about. A user editing their
+own configuration gets a clear refusal and an explanation; only a merge — where there is no user to
+ask and no valid state to return to — triggers repair.
+
+### 6.10 Verification against substage 2.10's acceptance criteria
+
+| Criterion | Evidence |
+|---|---|
+| Every rule names its enforcement point | §6.2–§6.7 — 28 rules, each with an "Enforced at" column |
+| No invariant-protecting rule is enforced only in the UI | §6.1 states the governing rule and its reason (sync writes through a different path); every rule names a database or domain-validator enforcement point, never UI alone |
+| Cycle detection has a named method and a stated trigger | §6.3 — depth-first traversal with a visited set over the whole reachable graph; runs on every save touching a redirect target and on every post-merge pass |
+| Every violation states block, warn or auto-repair, plus the recovery path | §6.9 — all save-time violations block; auto-repair applies only to the six post-merge cases |
+| The auto-repair procedure is recorded and visible, never silent | §6.8 — durable repair log, surfaced in plain language, with a worked example sentence |
 
 ---
 
