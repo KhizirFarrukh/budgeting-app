@@ -8,7 +8,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | 1.2 | Personas and end-to-end journeys | ✅ Complete |
 | 1.3 | User stories and acceptance criteria | ✅ Complete |
 | 1.4 | The money model in plain language | ✅ Complete |
-| 1.5 | Non-functional requirements with measurable targets | Not started |
+| 1.5 | Non-functional requirements with measurable targets | ✅ Complete |
 | 1.6 | Scope boundaries and the version 1 cut line | Not started |
 | 1.7 | Open questions and ambiguity register | Not started |
 | 1.8 | Traceability matrix and PRD assembly | Not started |
@@ -268,3 +268,87 @@ a balance can legitimately exceed a ceiling, which §4.3 references.)*
 Amounts in §4 are written as plain figures with no currency, since the model is currency-neutral;
 the example uses the same category shape as the design reference chain so Stage 2's §2.6.9 and the
 PRD tell one story.
+
+---
+
+## 1.5 — Non-functional requirements with measurable targets (S01.05)
+
+**Outputs:** `docs/PRD.md` section 6 (NFRs) and section 7 (data volume and growth).
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.5.1 | Restate NFR-01…08, sharpen every target | §6.1–§6.8, sharpenings marked ↑ |
+| 1.5.2 | Offline behaviour in detail | §6.2, including the 11-flow enumeration and the three no-network UI states |
+| 1.5.3 | Sync expectations from the user's point of view | §6.9 |
+| 1.5.4 | Privacy in language reusable for the Stage 10 policy | §6.10 |
+| 1.5.5 | Performance budgets with numbers | §6.6 table P-01…P-14 |
+| 1.5.6 | Accessibility targets concretely | §6.8 |
+| 1.5.7 | Data volume assumptions and five-year ledger size | §7.1–§7.4 |
+| 1.5.8 | Verifying stage and artefact per NFR | stated per NFR, summarised §6.11 |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every NFR has a number or a binary observable condition | §6.11 table, "Target type" column: 4 binary, 4 numeric; no NFR left directional | ✅ |
+| Every NFR names its verifying stage and artefact | §6.11, "Verified in" and "Verifying artefact" columns — no empty cell across 8 rows | ✅ |
+| The data volume section produces concrete five-year row counts | §7.3: 2,600 / 7,700 / 67,000 / 141,000 ledger rows across four profiles, derived from stated inputs | ✅ |
+| The privacy section is complete enough to draft a policy from without further research | §6.10 covers collection, storage locations with who-can-read, the three egress paths, permissions with justification, developer visibility, third parties, retention, deletion, and the operational trade-off | ✅ |
+
+### Arithmetic check on §7.3
+
+Re-derived independently after writing:
+
+- Light: 60 events × 12 rows = 720 allocation; 30 × 60 = 1,800 spending; +2% ≈ 2,570 → **2,600**. Allocation share 720/2,570 = 28%.
+- Typical: 180 × 22 = 3,960; 3,600 spending; +2% ≈ 7,710 → **7,700**. Share 51%.
+- Heavy: 1,200 × 45 = 54,000; 12,000 spending; +2% ≈ 67,300 → **67,000**. Share 80%.
+- Stress: 1,200 × 105 = 126,000; 12,000 spending; +2% ≈ 140,800 → **141,000**. Share 89%.
+- Storage at 350 B/row × 1.35 for indexes: Typical 3.6 MB, Heavy 31 MB, Stress 66 MB.
+
+One correction applied during the check: the Heavy allocation share was first written as 81%; the
+true figure is 80.2%, corrected to 80%.
+
+### Findings
+
+**The N + H multiplier (§7.2).** One income event writes one ledger row per receiving category plus
+one per redirect hop — so the ledger grows with **categories × income events**, not income events
+alone. At the Heavy profile, allocation rows are 80% of the table and at Stress 89%. Stage 2's
+ledger indexes must be chosen against that shape, and a user who doubles their category count
+doubles their future row-growth rate. This was not obvious from the manifest's ranges and is the
+most consequential number produced by this substage.
+
+**IMP-13 quantified.** Estimated compressed remote payload at the Heavy profile is single-digit
+megabytes against a 15 GB free Drive allowance. The "app data counts against the user's quota"
+concern is real but negligible in magnitude; compaction exists to bound chunk count, not total size.
+
+**T-01 now has numbers.** Full-scan balance derivation is affordable at Typical (7,700 rows) but not
+on every dashboard render at Heavy (67,000). The balance cache is therefore a Stage 2 decision with
+quantitative backing rather than a preference.
+
+### Escalation raised
+
+**ESC-1.5-A — NFR-04 cannot be verified mechanically.** Every other NFR reduces to a script,
+capture, measurement or inspection. NFR-04 requires a person who has never seen the app and is not
+the developer; a developer-timed run measures mechanical duration only and cannot detect hesitation,
+misreading or abandonment — the exact failure modes NFR-04 exists to catch. Recorded in §7.5, not
+resolved: either naive observers are recruited before Stage 9, or the test report states plainly
+that NFR-04 rests on weaker evidence than every other NFR. Goes to the user at the Stage 1 gate.
+
+### Deviations from the stage plan
+
+- **NFR-02's "core flows" enumerated as 11 named flows.** The manifest says "100% of core flows"
+  without defining the set, which would have let Stage 9 choose its own scope. Enumerating here is a
+  sharpening, not a scope change — every flow listed is already required by an approved story.
+- **NFR-07's v1.0 caveat recorded.** "Fixtures from every prior schema version" is unfalsifiable at
+  version 1.0, where no prior version exists. The binding v1.0 condition is stated instead
+  (framework plus a committed v1 fixture), with the full rule binding from v1.1.
+- **A fourth data-volume profile (Stress) added** beyond the manifest's ranges, to give the design
+  headroom above the worst real case and to match the 100-category figure NFR-06 benchmarks against.
+
+### Notes
+
+No target was written that there is no intention of measuring — each of P-01…P-14 names the substage
+that measures it. The reference device is specified as a **class** with the exact model recorded at
+Stage 9, rather than a model named from memory, per the manifest's knowledge-freshness rule.

@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 1 |
 | **Source** | `prompts/00_project_manifest.json` (schema 4.0.0) |
-| **Sections assembled** | 2 (substage 1.2), 4 (substage 1.4), 5 (substage 1.3), Appendix A (substage 1.1) |
-| **Sections pending** | 1, 3, 6–9, assembled across substages 1.5–1.8 |
+| **Sections assembled** | 2 (1.2), 4 (1.4), 5 (1.3), 6 and 7 (1.5), Appendix A (1.1) |
+| **Sections pending** | 1, 3, 8, 9, assembled across substages 1.6–1.8 |
 
 > Sections are written across substages 1.2 to 1.8 and assembled in order in 1.8.
 > Appendix A was written first, in 1.1, so the finished document carries its own provenance.
@@ -955,6 +955,439 @@ Stories whose criteria could not be written without leaning on an unresolved que
 transaction" statement — FR-04 covers income only. Spending entry is load-bearing for FR-05, FR-13
 (balances must fall), FR-14 and both primary journeys, so it is treated as MUST via FR-05, and 1.7
 must confirm that reading.
+
+---
+
+## 6. Non-functional requirements
+
+Written in substage 1.5. Every requirement below carries either a **number** or a **binary
+observable condition**, plus the stage and artefact that verifies it. Where the manifest's target
+was directional, it is sharpened here and the sharpening is marked **↑**. No target is stated that
+there is no intention of measuring.
+
+### 6.1 NFR-01 — No user financial data leaves the user's own Google account
+
+**Manifest target:** zero outbound requests to any host not owned by Google as the user's storage
+provider; verified by network capture during QA.
+
+**↑ Sharpened:**
+
+- Outbound requests **originating from the app process** reach only Google authentication and Drive
+  endpoints. Requests made by the operating system, the launcher or the store are out of scope and
+  the capture must distinguish them.
+- The permitted destination set is enumerated at S07.10 and frozen; any host outside it is a defect,
+  not a judgement call.
+- The resolved dependency tree contains **zero** analytics, crash-reporting, advertising or
+  telemetry packages — checked transitively, not just among direct dependencies.
+- A full-session verbose log contains **zero** monetary amounts, category names or account labels.
+- **No developer-operated backend, proxy, relay or metrics endpoint exists.** This is binary and
+  permanent.
+
+**Verified in:** S07.10 (development build) and S09.7 (release build).
+**Artefacts:** traffic capture evidence, `docs/PRIVACY_SOURCE.md`, the CI telemetry guard, the
+log-content check.
+
+### 6.2 NFR-02 — Fully functional offline
+
+**Manifest target:** 100% of core flows completable with no network and with no Google account
+linked.
+
+**↑ Sharpened — "core flows" is enumerated here so Stage 9 does not get to decide what counts.**
+All eleven must complete with the device in airplane mode and no account ever linked:
+
+1. Complete onboarding from first launch to dashboard
+2. Add income and see the allocation preview
+3. Manually override a preview and confirm it
+4. Undo a confirmed income event
+5. Record a spend
+6. Correct a recorded spend
+7. Create, edit, archive a category
+8. Change percentages, ceilings and redirect targets
+9. Create and edit an account
+10. Read the dashboard, history and every report
+11. Export CSV and export a full backup
+
+**Additional binary conditions:**
+
+- No user-initiated action anywhere in the app awaits a network call. Verified with the network
+  stalled indefinitely, not merely disabled — a stalled connection is the case that exposes a
+  blocking await.
+- Launch never awaits authentication. A failed silent re-auth starts the app in local-only mode.
+- No modal, spinner or dialog related to sync ever blocks the UI.
+
+**Verified in:** S06.12 (offline run of every flow), S09.3 (manual checklist), S10.8.5 (clean device
+that has never had network access, on the shipping artefact).
+**Artefacts:** `STAGE_6_REPORT.md` offline evidence, `MANUAL_TEST_CHECKLIST.md`, `STAGE_10_REPORT.md`.
+
+#### What the user sees when there is no network or no account
+
+- **Never signed in:** a quiet, permanent indicator that data lives on this device only, with a
+  backup action attached to it. Stated as a fact with a remedy, never as an error, never in a
+  warning colour, and never as a repeating prompt. It is not a nag: it appears in one place and does
+  not interrupt.
+- **Signed in, currently offline:** the sync surface shows the last successful sync time and the
+  count of changes waiting. Nothing else changes; the app behaves identically.
+- **Signed in, sync failing repeatedly:** the surface changes to indicate attention is needed and
+  names the reason in plain language. It still does not block anything.
+
+### 6.3 NFR-03 — Personal and business separation
+
+**Manifest target:** business data never appears in personal totals; distinct visual treatment;
+separate report scopes.
+
+**↑ Sharpened:**
+
+- **Binary:** for any screen, the personal figures shown when business activity exists are
+  identical to the figures that would be shown if no business activity existed at all.
+- Any figure combining scopes is labelled as combined, in text, on the same screen.
+- The visual distinction survives greyscale and does not rely on colour alone (this is also an
+  NFR-08 condition).
+- Category pickers are scope-filtered: no business category is reachable from a personal spending
+  flow through any path, and the reverse.
+- A personal-only user sees zero business surface: no empty group, no disabled menu entry, no dead
+  navigation.
+
+**Verified in:** S06.10 (cross-screen scope test that walks every screen asserting no unlabelled
+mixed figure), S08.1 (scope separation at the query level), S08.2 (separate report scopes).
+**Artefacts:** the cross-screen scope test, `STAGE_6_REPORT.md`, `STAGE_8_REPORT.md`.
+
+### 6.4 NFR-04 — Usable by someone who has never budgeted
+
+**Manifest target:** a first-time user completes onboarding and their first income split unaided in
+under 5 minutes.
+
+**↑ Sharpened:**
+
+- Setup accepting every default: **≤ 120 s** (this is R-06's mitigation target).
+- Setup plus a first confirmed income event: **≤ 300 s**, the NFR-04 figure.
+- Every screen on the default-accepting path arrives already valid and requires **exactly one tap**
+  to accept. This is the structural condition that makes the timing achievable — §2.7 derives it.
+- No screen on the default path requires the user to perform arithmetic.
+- "Unaided" means: no explanation from the observer, no documentation, no prior exposure to the app.
+
+**Measurement, and an honesty problem — see ESC-1.5-A.** The primary evidence is at least three
+observed first-time users who have never used a budgeting app, median ≤ 300 s, none exceeding 480 s.
+If naive observers cannot be recruited, the fallback is the developer-timed default path (S06.3.7,
+S06.12.9), which measures *mechanical* duration only and is explicitly weaker evidence — it cannot
+detect hesitation, misreading or abandonment, which are the failure modes NFR-04 exists to catch.
+The fallback must be labelled as such in the test report rather than presented as satisfying the NFR.
+
+**Verified in:** S06.3.7 and S06.12.9 (timed path), S09.3 (usability observations during manual
+testing).
+**Artefacts:** `STAGE_6_REPORT.md` timing record, `TEST_REPORT.md` usability section.
+
+### 6.5 NFR-05 — Financial correctness over convenience
+
+**Manifest target:** no rounding drift; for every income event the sum of allocations equals the
+input exactly, proven by property-based tests over randomised inputs.
+
+**↑ Sharpened:**
+
+- **Zero** discrepancy is the only acceptable result. A one-minor-unit difference is a defect, never
+  "rounding".
+- Property P1 (conservation) holds over **≥ 3,000** generated cases per CI run, with the seed
+  recorded so any failure reproduces.
+- The global identity holds across an entire generated multi-year history: the sum of all category
+  balances equals total income minus total spending, exactly.
+- Per-event conservation holds for **every** event in that history, not a sample.
+- The audit is performed by a script written independently of the app's own aggregation code —
+  reusing it would only prove the code agrees with itself.
+- **Zero** unjustified `double`, `float` or `num` on the money path, enforced by a CI guard that has
+  been demonstrated failing on a deliberate violation.
+
+**Verified in:** S05.9 (property tests), S09.4 (independent reconciliation audit), S10.6.6 and
+S10.8.2 (re-run against release-build data).
+**Artefacts:** `tool/reconcile.dart`, property test seed record, the money-path CI guard.
+
+### 6.6 NFR-06 — Responsive on mid-tier Android hardware
+
+**Manifest target:** cold start under 2.5 s, dashboard scroll without dropped frames on roughly a
+4 GB-RAM mid-range phone, allocation across 100 categories under 50 ms.
+
+**↑ Sharpened into a full budget table.** Every figure is measured on the reference device with the
+five-year heavy dataset (§7) loaded — not on an empty database, and not on a flagship.
+
+| # | Operation | Budget | Measured at |
+|---|---|---|---|
+| P-01 | Cold start to interactive dashboard | p50 ≤ 1.8 s, **p95 ≤ 2.5 s** | S09.6 |
+| P-02 | Warm start (process alive) | ≤ 800 ms | S09.6 |
+| P-03 | Dashboard first meaningful paint | ≤ 400 ms | S09.6 |
+| P-04 | Dashboard and history scroll | **zero** frames over 16.7 ms across a 5-second scroll | S09.6 |
+| P-05 | Allocation engine, 100 categories | **≤ 50 ms** (manifest figure) | S05.10 |
+| P-06 | Allocation engine, pathological — 100 categories all at ceiling chaining to sink | ≤ 100 ms | S05.10 |
+| P-07 | Keystroke to updated preview, 40 categories | p95 ≤ 100 ms | S06.4, S09.6 |
+| P-08 | Monthly report generation | ≤ 1 s | S08.1, S09.6 |
+| P-09 | Yearly report generation | ≤ 2 s | S08.1, S09.6 |
+| P-10 | Full-history CSV export | ≤ 5 s | S08.5, S09.6 |
+| P-11 | Full JSON backup export | ≤ 5 s | S04.9, S09.6 |
+| P-12 | New-device sync bootstrap | ≤ 30 s | S07.8, S09.6 |
+| P-13 | Balance recompute-and-compare, all categories | ≤ 2 s | S04.6, S09.6 |
+| P-14 | Memory across 100 navigation cycles | no upward trend attributable to a leak | S09.6 |
+
+**Reference device class:** a phone with approximately 4 GB RAM and a mid-range SoC (Snapdragon
+6-series, Dimensity 700-series, Helio G-series or equivalent), released within roughly three years
+of the measurement date. Stage 9 records the exact device used. Measuring on a flagship and
+reporting it as representative is prohibited.
+
+**Verified in:** S05.10 (engine benchmarks), S08.1 (aggregation benchmarks), S09.6 (all figures on
+device).
+**Artefacts:** `STAGE_5_REPORT.md` benchmarks, `TEST_REPORT.md` performance section naming the device.
+
+### 6.7 NFR-07 — Durability and recoverability
+
+**Manifest target:** full JSON/CSV backup at any time; migrations tested against fixtures from every
+prior schema version.
+
+**↑ Sharpened:**
+
+- Export is available at any moment, works offline, and requires no account.
+- Export → wipe → restore reproduces **byte-identical** balances and ledger contents.
+- Export includes tombstones and sync metadata, so a restore does not resurrect deleted records.
+- Restore refuses a newer schema version and refuses a mismatched currency, each with a plain
+  explanation, and applies **all or nothing** — never partially.
+- An automatic pre-migration export is written before any migration runs.
+- **Migration fixtures — the v1.0 caveat:** at version 1.0 there are no prior schema versions, so
+  "fixtures from every prior version" is unfalsifiable at launch. The binding v1.0 condition is
+  therefore: the migration framework exists, and a version-1 fixture database containing a reversal,
+  a redirect and an archived category is committed. From v1.1 onward the fixture-per-prior-version
+  rule binds absolutely.
+
+**Verified in:** S04.9 (round-trip test, migration harness, v1 fixture), S08.6 (user-facing restore),
+S09.3 (restore onto a fresh install as a manual case).
+**Artefacts:** round-trip test, committed v1 fixture database, `EXPORT_FORMAT.md`.
+
+### 6.8 NFR-08 — Accessibility
+
+**Manifest target:** TalkBack labels on all interactive elements, minimum 48dp touch targets, 4.5:1
+text contrast, layout intact at 200% font scale.
+
+**↑ Sharpened:**
+
+- **Binary:** the full primary journey — onboarding, add income, read the preview, confirm, check a
+  balance — is completable with TalkBack and the screen covered. Evidenced by a step-by-step log.
+- Every interactive element has a label that reads sensibly aloud. Mechanical labels that produce
+  nonsense when spoken ("button button") count as failures.
+- Money is announced as an amount, not as a digit sequence.
+- Touch targets ≥ **48dp**, explicitly including the inline per-category edit controls in the
+  allocation preview, which are the most likely to be undersized.
+- Contrast ≥ **4.5:1** for body text and ≥ **3:1** for large text and UI component boundaries, in
+  both light and dark themes, **measured** rather than judged by eye.
+- Layout intact at **200%** font scale and maximum display size, on the smallest supported screen,
+  with no clipped or overlapping text.
+- **Zero** information conveyed by colour alone — specifically ceiling progress and the business
+  scope distinction, both of which must survive greyscale.
+- No focus traps in any dialog or multi-step flow; focus order follows reading order.
+- The reduced-motion system setting is respected and nothing becomes unintelligible when it is on.
+
+**Verified in:** S09.5 (accessibility pass on a physical device with TalkBack), S09.1 (golden tests
+at 200% font scale in both themes).
+**Artefacts:** `TEST_REPORT.md` accessibility section, golden images in four variants.
+
+### 6.9 Sync, from the user's point of view
+
+Not a separate NFR, but the user-facing half of NFR-02 and FR-09. Stated here because Stage 2 owes
+the user these guarantees, not merely a converging algorithm.
+
+**What the user should see:**
+
+- **Same category edited on two devices:** one edit wins, both devices show the same winner, and the
+  user is not asked to arbitrate. Silent divergence between devices is the failure being prevented.
+- **A device offline for a month:** on reconnect everything catches up without intervention. Nothing
+  the user recorded offline is lost, and nothing is duplicated.
+- **A merge that had to adjust configuration** — a redirect target deleted on the other device, say —
+  is recorded and shown in plain language. The user learns *that* their configuration changed and
+  *why*.
+
+**What the user must never see:**
+
+- A spinner or dialog blocking the app while sync runs.
+- Data changing with no explanation available anywhere.
+- A raw provider error, an error code, or a stack trace.
+- Any implication that sync is required for the app to work.
+
+**Verified in:** S07.5, S07.6, S07.9, S07.11.
+**Artefacts:** `SYNC.md` including the repair catalogue, convergence test results.
+
+### 6.10 Privacy — the source text for the published policy
+
+Written so Stage 10 can draft the published policy from this section without further research
+(S07.10 expands it into `PRIVACY_SOURCE.md`; S10.3 publishes from that).
+
+**What the app collects:** nothing beyond what the user types in. There is no account with the
+developer, no registration, no profile, no usage data collection of any kind.
+
+**What is stored, and where:**
+
+| Data | Location | Who can read it |
+|---|---|---|
+| All financial records — income, allocations, spending, categories, accounts, settings | The device | The user |
+| The same records, as a sync payload | A hidden application-data folder inside **the user's own Google Drive** | The user's Google account holder. Not the developer — the folder is not visible to or reachable by anyone else |
+| Files the user explicitly exports | Wherever the user chose to save or share them | Whoever the user gives them to |
+
+**What leaves the device, and only these:**
+
+1. The sync payload, sent to the user's own Google Drive, only after the user opts in by signing in.
+2. Authentication exchanges with Google's sign-in endpoints, needed to obtain permission to write to
+   that folder.
+3. Files the user deliberately exports, to the destination the user picks.
+
+Nothing else. There is no third destination because there is no developer infrastructure to send
+anything to.
+
+**Permissions requested and why:**
+
+- **Internet access** — solely to reach Google's authentication and Drive endpoints for sync. The
+  app functions fully with this permission never exercised.
+- **The narrowest Google Drive scope that permits app-private storage** — grants access only to the
+  app's own hidden folder, not to the user's documents, photos or other Drive contents. The exact
+  scope string and its current classification are recorded at S07.1.2.
+- No location, contacts, camera, microphone, SMS or general storage permission is requested. Exports
+  go through the system share sheet or a user-chosen destination.
+
+**What the developer can see:** nothing. There is no server, no database, no log collection, no
+crash reporting and no analytics on the developer's side. The developer cannot read a user's
+financial data, cannot enumerate users, and cannot tell whether the app is being used.
+
+**Third-party recipients:** none. Google is the user's chosen storage provider acting on the user's
+behalf, not a party the developer shares data with.
+
+**Retention and deletion:**
+
+- Local data persists until the user deletes it or uninstalls the app.
+- Remote data persists until the user deletes it. The user can wipe the app's hidden Drive data from
+  their own Google account settings without involving the app, and the app handles that gracefully
+  rather than treating it as deletion of their local records.
+- Revoking the app's access from the Google account page stops all sync; local data is untouched and
+  the app continues working.
+- The precise deletion behaviour on sign-out and on explicit deletion is verified and documented at
+  S09.7.6, because the published policy and the store declaration must both match it exactly.
+
+**The operational consequence of this design, stated honestly:** with no analytics and no crash
+reporting, the developer has no visibility into failures after release. The only feedback channel is
+users getting in touch. This is a deliberate trade of operational insight for privacy, and S10.8.8
+plans around it.
+
+**Verified in:** S07.10, S09.7.
+**Artefacts:** `PRIVACY_SOURCE.md`, `PRIVACY_POLICY.md`, traffic captures from both a development
+and a release build.
+
+### 6.11 NFR verification summary
+
+| NFR | Target type | Verified in | Verifying artefact |
+|---|---|---|---|
+| NFR-01 | Binary — zero non-Google hosts, zero telemetry packages | S07.10, S09.7 | Traffic capture, CI telemetry guard, `PRIVACY_SOURCE.md` |
+| NFR-02 | Binary — 11 named flows complete offline, unlinked | S06.12, S09.3, S10.8.5 | Offline test run, manual checklist |
+| NFR-03 | Binary — personal totals unchanged by business activity | S06.10, S08.1, S08.2 | Cross-screen scope test |
+| NFR-04 | ≤ 120 s setup, ≤ 300 s to first split | S06.3.7, S06.12.9, S09.3 | Timing record — see ESC-1.5-A |
+| NFR-05 | Zero discrepancy, ≥ 3,000 property cases | S05.9, S09.4, S10.6.6 | `tool/reconcile.dart`, property seed |
+| NFR-06 | 14 numeric budgets, P-01…P-14 | S05.10, S08.1, S09.6 | Benchmark table naming the device |
+| NFR-07 | Byte-identical round-trip; framework + v1 fixture | S04.9, S08.6, S09.3 | Round-trip test, v1 fixture database |
+| NFR-08 | TalkBack journey completable; 48dp / 4.5:1 / 200% | S09.5, S09.1 | Accessibility log, golden images |
+
+Every NFR has a number or a binary condition, and every NFR names a stage and an artefact. No row is
+empty.
+
+---
+
+## 7. Data volume and growth assumptions
+
+Written in substage 1.5. Stage 2 sizes its indexes from this section, Stage 4 builds its synthetic
+dataset generator from it, and Stages 8 and 9 reuse that generator. The figures are assumptions,
+labelled as such — but they are the assumptions the design is entitled to rely on.
+
+### 7.1 Per-user activity assumptions
+
+| Variable | Light | Typical | Heavy | Stress (design headroom) |
+|---|---|---|---|---|
+| Active categories | 10 | 20 | 40 | 100 |
+| Income events per month | 1 | 3 | 20 | 20 |
+| Spending transactions per month | 30 | 60 | 200 | 200 |
+| Profile | P1, single salary | P1 with side income | P2, business with frequent sales | Beyond any expected real user |
+
+The manifest's ranges are categories 10–40, income events 1–20 per month, spending 30–200 per month.
+Light/Typical/Heavy sit inside those ranges; **Stress** deliberately exceeds them, matching the
+100-category figure NFR-06 benchmarks against, so the design has headroom above the worst real case.
+
+### 7.2 The multiplier that actually drives growth
+
+One income event does not create one row. It creates **one ledger entry per receiving category**,
+plus one more for each redirect hop. A user with 40 categories generates 40-plus ledger rows from a
+single salary.
+
+**Ledger rows per income event ≈ N + H**, where N is the number of categories with a non-zero share
+and H is the number of redirect hops in that event (assumed 2 for Light/Typical, 5 for Heavy/Stress
+in steady state, when several categories sit at their ceilings).
+
+This is the single most important sizing fact in the section: **the ledger grows with categories ×
+income events, not with income events alone.** A user who doubles their category count doubles their
+future row growth rate. Every index Stage 2 defines on the ledger must be chosen with that in mind,
+and the allocation rows — not the spending rows — are the bulk of the table in every profile except
+Light.
+
+### 7.3 Five-year row counts
+
+Five years = 60 months. A 2% reversal allowance is added, since a reversal writes a mirroring set of
+entries.
+
+| | Light | Typical | Heavy | Stress |
+|---|---|---|---|---|
+| Income events | 60 | 180 | 1,200 | 1,200 |
+| Rows per income event (N + H) | 12 | 22 | 45 | 105 |
+| **Allocation ledger rows** | 720 | 3,960 | 54,000 | 126,000 |
+| Spending transactions | 1,800 | 3,600 | 12,000 | 12,000 |
+| Reversal allowance (~2%) | ~50 | ~150 | ~1,300 | ~2,800 |
+| **Total ledger rows at 5 years** | **≈ 2,600** | **≈ 7,700** | **≈ 67,000** | **≈ 141,000** |
+| Allocation rows as a share of the ledger | 28% | 51% | 80% | **89%** |
+| Configuration rows (categories, accounts, rule versions) | < 100 | < 200 | < 500 | < 1,000 |
+
+**Design headroom target: 250,000 ledger rows.** Stage 4's synthetic generator should be capable of
+producing that, and the Stage 9 performance figures should hold at the Heavy profile with the Stress
+profile as a documented stretch.
+
+### 7.4 What these counts mean for the design
+
+**This is a small database.** Even the Stress profile is under 150,000 rows — trivial for SQLite
+*provided the indexes match the queries*. The performance risk here is not data volume; it is a
+missing index turning a 5 ms query into a full scan of 141,000 rows on a mid-tier phone, executed on
+every dashboard render. That is why Stage 2 substage 2.4.3 requires every index to name the query it
+serves.
+
+**Storage estimates** — at roughly 350 bytes per ledger row including its identifiers, timestamps
+and sync columns, plus approximately 35% for indexes:
+
+| Profile | Ledger data | With indexes | Round figure |
+|---|---|---|---|
+| Typical | ~2.7 MB | ~3.6 MB | **< 5 MB** |
+| Heavy | ~23 MB | ~31 MB | **~35 MB** |
+| Stress | ~49 MB | ~66 MB | **~70 MB** |
+
+**Remote payload** — the sync payload is more verbose than the stored rows, but compresses well
+because identifiers and structure repeat. Estimated compressed size at the Heavy profile: **single-
+digit megabytes**. This settles the IMP-13 concern (app data counts against the user's own Drive
+quota) quantitatively: against a 15 GB free Drive allowance, the app's footprint is negligible even
+for a heavy five-year user. Compaction (S07.8) exists to bound chunk growth, not because total size
+is a threat.
+
+**Consequences to carry forward:**
+
+- Balance derivation by full scan is affordable at Typical but not at Heavy on every dashboard
+  render — this is the quantitative basis for tension T-01 in §A.6.2 and makes the balance cache a
+  Stage 2 decision with real numbers behind it, not a preference.
+- Report aggregation over five years touches the whole ledger; the P-08 and P-09 budgets are set
+  against the Heavy profile.
+- The synthetic generator built at S04.10.7 must produce all four profiles, since S08 and S09 both
+  reuse it.
+
+### 7.5 Escalation from this substage
+
+**ESC-1.5-A — NFR-04 is the only requirement that cannot be verified mechanically.**
+Every other NFR reduces to a script, a capture, a measurement or a binary inspection. NFR-04's
+target — "a first-time user completes onboarding and their first income split unaided in under 5
+minutes" — requires a person who has never seen the app and who is not the developer. A
+developer-timed run measures mechanical duration and cannot detect hesitation, misreading or
+abandonment, which are precisely the failure modes NFR-04 exists to catch. Recorded, not resolved:
+either naive observers are recruited before Stage 9, or the test report states plainly that NFR-04
+rests on weaker evidence than every other NFR. This is a question for the user at the gate.
 
 ---
 
