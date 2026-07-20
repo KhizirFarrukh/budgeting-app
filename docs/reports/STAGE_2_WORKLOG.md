@@ -9,7 +9,7 @@ Evidence log, one entry per substage.
 | 2.3 | Data model: entities, tables and columns | ✅ Complete |
 | 2.4 | Data model: constraints, indexes, balances, migrations | ✅ Complete |
 | 2.5 | Allocation: contracts and phase A base split | ✅ Complete |
-| 2.6 | Allocation: phase B ceilings, redirects, termination | Not started |
+| 2.6 | Allocation: phase B ceilings, redirects, termination | ✅ Complete |
 | 2.7 | Allocation: overrides, reversals, error taxonomy | Not started |
 | 2.8 | Allocation: pseudocode, worked examples, vector table | Not started |
 | 2.9 | Cloud sync data model and merge strategy | Not started |
@@ -326,3 +326,79 @@ change without an engine change.
 Section numbers follow the references in the Stage 5 plan rather than reading order — phase A is §5
 while phase B is §3, because substage 5.2's inputs name "section 5" and 5.3/5.4 name "section 3". A
 reading-order note is placed at the top of the document so the ordering does not confuse a reader.
+
+---
+
+## 2.6 — Phase B: ceilings, redirects and termination (S02.06)
+
+**Output:** `docs/ALLOCATION_ALGORITHM.md` section 3.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Headroom defined for every category type, including the `accepted_so_far` term | §3.1 — four rows covering all three types plus the sink, each carrying `accepted_so_far`; §3.2 explains why the term exists | ✅ |
+| The worklist algorithm written step by step with a deterministic ordering rule | §3.3 — full pseudocode; seeding sorted by `sort_order` then `id`; §3.4 fixes FIFO and states that new parcels join the back | ✅ |
+| Cycle defence, hop limit and degraded-target handling all specified, all ending at the sink | §3.5 (T-1 visited set, T-2 `MAX_HOPS = 32`, T-3 uncapped sink) and §3.6 (missing, archived, deleted or self-referencing target) — every path routes to the sink and none throws | ✅ |
+| The reference chained example worked through with every intermediate value, conserving exactly | §3.9 — six pops tabulated with headroom, accepted and overflow at each; verified by script below | ✅ |
+| The final conservation assertion specified as failing loudly rather than adjusting | §3.8 — throws with the diagnostics trace attached; adjusting a line item to balance the sum is named as the anti-pattern it is | ✅ |
+
+### Reference example verified by script
+
+```
+Phase A: split(300000, [4000,3500,2500]) -> 120000 / 105000 / 75000, leftover 0
+
+pop1 Medical   room=80000  accepted=80000  overflow=40000
+pop2 Emergency room=100000 accepted=100000 overflow=5000
+pop3 Trip      room=UNBOUNDED accepted=75000 overflow=0
+pop4 Emergency room=0      accepted=0      overflow=40000
+pop5 Trip      room=UNBOUNDED accepted=5000  overflow=0
+pop6 Trip      room=UNBOUNDED accepted=40000 overflow=0
+
+line items: 80000 + 100000 + 75000 + 5000 + 40000 = 300000
+per-category: Medical=80000 Emergency=100000 Trip=120000  total=300000
+conserved against 300000: True
+```
+
+**The counterfactual was checked too:** without `accepted_so_far`, pop 4 recomputes Emergency's
+headroom as `1,000,000 − 900,000 = 100,000`, accepts the full 40,000, and leaves Emergency at
+**1,040,000 against a 1,000,000 ceiling** — 40,000 over, silently. That single row is the entire
+justification for the tracker, and it is now demonstrated rather than asserted.
+
+### The PR-01 fix carried into the design
+
+The mid-stage plan audit found that the Stage 2 plan's own worked example used a merged-parcel flow
+its FIFO worklist never performs. §3.9 implements the corrected version: **five line items, not
+three**, because Emergency's base parcel is already queued ahead of Medical's overflow, so Trip
+receives 75,000 base plus 5,000 at hop 1 plus 40,000 at hop 2 rather than one combined 120,000.
+
+§3.4 states explicitly that this is observable rather than incidental — under LIFO or with parcels
+merged by destination, the user would lose the ability to see that part of the money arrived as
+overflow from a named category. Parcels are therefore never merged, never reordered after seeding,
+and always appended to the back. Vector V-05 will assert the line-item shape, not just the totals.
+
+### Decisions
+
+**Three termination defences kept, not one.** T-1 (per-parcel visited set), T-2 (`MAX_HOPS = 32`)
+and T-3 (uncapped sink) are each sufficient in isolation for most cases, but the design keeps all
+three. Recorded explicitly: **configuration-time cycle detection does not make the runtime defence
+redundant**, because a sync merge can produce a cycle from two independently valid edits made on
+different devices — so the configuration may genuinely be cyclic at the moment allocation runs. This
+is a case the save-time check structurally cannot cover.
+
+**The visited set is per parcel, not per run.** A run-wide set would wrongly block a category from
+being legitimately reached twice by two different chains — the failure mode substage 5.4's
+`common_pitfalls` names.
+
+**A missing sink is a typed failure; a missing redirect target is a warning.** The asymmetry is
+deliberate and is stated in §3.7: a degraded redirect target has a safe fallback (the sink), whereas
+a missing sink has none, so proceeding would risk losing money. The engine refuses rather than
+improvising.
+
+**Unbounded is a distinct value, never `int64.max`.** A very large sentinel overflows the moment
+anything is added to it, which is the specific defect substage 5.3.3's `must_not` warns about.
+
+**`max(0, …)` on headroom is load-bearing, not defensive decoration.** §3.1 records the three real
+ways a balance ends up above its ceiling — manual override, a lowered ceiling, a sync merge — so the
+already-over case is documented as common rather than exotic. Without the clamp, negative headroom
+propagates into a negative allocation and conservation breaks.

@@ -178,6 +178,283 @@ outcome.** No partial allocation is ever returned, and no failure path emits lin
 
 ---
 
+## 3. Phase B — headroom, the worklist, redirects and termination
+
+Phase A divided the income by percentage. Phase B resolves **capacity**: what each category can
+actually accept, and where the rest goes. FR-10 and FR-11 live here, and this is where naive
+implementations silently lose money.
+
+### 3.1 Headroom, per category type
+
+Headroom is how much a category can still accept **right now, in this run**.
+
+| Type | Headroom |
+|---|---|
+| `ACCUMULATING_RESERVE` | `max(0, ceiling_minor − current_balance_minor − accepted_so_far)` |
+| `FIXED_RECURRING` | `max(0, bill_amount_minor − allocated_in_current_period_minor − accepted_so_far)` |
+| `UNCAPPED_FLOW` | **Unbounded** |
+| Any category with `is_sink = true` | **Unbounded** — guaranteed by constraint C-19 |
+
+**`max(0, …)` is not decoration.** A balance may exceed its ceiling — after a manual override
+(§4), or after the user lowered a ceiling, or after a sync merge brought in entries from another
+device. In those cases the subtraction is negative and headroom must clamp to zero. Without the
+clamp, a negative headroom propagates into a negative allocation, `accepted = min(pending, headroom)`
+returns a negative number, and conservation breaks. This is the case substage 5.3.5 calls "already
+over ceiling"; it is common, not exotic.
+
+**Unbounded must be represented explicitly**, as a distinct value — not as `int64.max`. If unbounded
+were a very large number, `ceiling − balance − accepted_so_far` arithmetic against it would overflow
+the moment anything is added. Substage 5.3.3 requires this, and the `must_not` is explicit: *do not
+represent unbounded as int64 max, which then overflows when added to.*
+
+### 3.2 `accepted_so_far` — the within-run tracker
+
+**The single most commonly missed detail in this algorithm.**
+
+Within one allocation run, a category can be reached more than once: once by its own base share from
+phase A, and again by overflow redirected from another category. If headroom were computed once at
+the start of the run and reused, both parcels would see the same headroom and both would be
+accepted — putting the category above its ceiling and breaking FR-10.
+
+`accepted_so_far` is a map from category id to the total accepted **during this run only**. It
+starts empty, is added to on every acceptance, and is included in every headroom computation. It is
+never persisted; the next run starts from the freshly derived balances.
+
+> Substage 5.3.4 requires writing the test for the two-parcel case **before** writing the tracker.
+
+### 3.3 The worklist
+
+An **explicit FIFO queue**, not recursion. Recursion invites a stack overflow on a pathological
+chain and hides the hop count, which is needed both for the termination guard and for the
+diagnostics the user sees.
+
+```
+FUNCTION phase_b(parcels, categories, sink_id) -> list of AllocationLine
+
+    queue          := parcels sorted by (sort_order ASC, id ASC)      // deterministic seeding
+    accepted_so_far := empty map
+    lines          := []
+    diagnostics    := []
+
+    WHILE queue is not empty:
+        parcel := queue.removeFirst()                  // FIFO — front
+        dest   := lookup(parcel.category_id)
+
+        // --- degraded destination (§3.6) ---
+        IF dest is missing OR dest.is_archived:
+            redirect_to_sink(parcel, reason: DEGRADED_TARGET)
+            CONTINUE
+
+        room     := headroom(dest, accepted_so_far)     // §3.1
+        accepted := min(parcel.pending, room)           // room may be UNBOUNDED → accepted = pending
+
+        IF accepted > 0:
+            lines += AllocationLine(
+                category_id             : dest.id,
+                amount_minor            : accepted,
+                reason                  : parcel.reason,
+                redirected_from_category_id : parcel.from_id,
+                hop_count               : parcel.hops)
+            accepted_so_far[dest.id] += accepted
+            diagnostics += acceptance event
+
+        overflow := parcel.pending − accepted
+        IF overflow == 0:
+            CONTINUE
+
+        // --- the category is full; the surplus must go somewhere ---
+        diagnostics += CATEGORY_FILLED or PERIOD_FUNDED event
+
+        next_id := dest.redirect_target_category_id
+
+        IF next_id is null:
+            redirect_to_sink(overflow, reason: SINK_TERMINAL); CONTINUE
+        IF next_id IN parcel.visited:
+            redirect_to_sink(overflow, reason: SINK_TERMINAL, diag: CYCLE_DEFENDED); CONTINUE
+        IF parcel.hops + 1 > MAX_HOPS:
+            redirect_to_sink(overflow, reason: SINK_TERMINAL, diag: HOP_LIMIT_REACHED); CONTINUE
+
+        queue.addLast(Parcel(                            // FIFO — back
+            category_id : next_id,
+            pending     : overflow,
+            reason      : REDIRECT,
+            from_id     : dest.id,
+            hops        : parcel.hops + 1,
+            visited     : parcel.visited ∪ {dest.id}))
+
+    ASSERT sum(lines.amount_minor) == income_amount_minor      // §3.8
+    RETURN lines, diagnostics
+```
+
+**`redirect_to_sink`** appends a parcel addressed to the run's sink with `reason = SINK_TERMINAL` and
+an empty `visited` set. The sink is uncapped by construction (C-19), so that parcel always terminates
+on its next pop.
+
+### 3.4 The queue is FIFO, and that is observable
+
+New parcels join the **back** of the queue. This is not an arbitrary choice — it changes what the
+user sees, so it is fixed here rather than left to the implementer.
+
+Consider a category whose base share is still queued when overflow arrives for it from elsewhere.
+Under FIFO, the base share is processed first and the redirected parcel later, so the category
+produces **two line items** with different reasons and hop counts. Under LIFO, or if parcels were
+merged by destination, it would produce one combined line and the user would lose the ability to see
+that part of the money arrived as overflow from a named category.
+
+**Therefore:** parcels are never merged, never reordered after seeding, and always appended to the
+back. The reference example in §3.9 shows exactly this happening, and vector V-05 asserts it.
+
+### 3.5 Termination — three independent defences
+
+INV-07 requires that redirect chains always terminate. Three mechanisms guarantee it, and the design
+deliberately keeps all three rather than relying on any one:
+
+| # | Defence | Trigger | Outcome |
+|---|---|---|---|
+| T-1 | **Visited set, per parcel** | The next target is already in this parcel's visited set | Remainder to the sink; `CYCLE_DEFENDED` warning |
+| T-2 | **Hop limit** | `hops + 1 > MAX_HOPS` | Remainder to the sink; `HOP_LIMIT_REACHED` warning |
+| T-3 | **The sink is uncapped** | Always | The final destination can never refuse, so the chain ends |
+
+**`MAX_HOPS = 32`**, as recommended by substage 2.6.4. With at most 100 categories (PRD §7.1's Stress
+profile), a legitimate chain longer than 32 hops indicates a configuration the user did not intend,
+so terminating there and warning is more useful than following it.
+
+**The visited set is per parcel, not shared across the run.** A shared set would wrongly block a
+category from being reached twice by two legitimately different chains. Substage 5.4's
+`common_pitfalls` names this exact error.
+
+**Configuration-time cycle detection (§6, substage 2.10.3) does not remove the need for T-1.** A
+merge can produce a cycle from two independently valid edits made on different devices, so the
+configuration may be cyclic at the moment allocation runs. The runtime defence is not redundant with
+the save-time check; it covers a case the save-time check structurally cannot.
+
+### 3.6 Degraded redirect targets
+
+A redirect target may be missing, archived, soft-deleted, or point at itself. Each of these is
+possible after a sync merge even though validation forbids creating them locally.
+
+**In every case: route the remainder to the sink, record a `DEGRADED_TARGET` warning in diagnostics,
+and never throw.** Money is moving while the user watches; a crash here loses the whole event. A
+warning that says "the category this was meant to go to is no longer available, so it went to
+Unallocated buffer instead" is honest and recoverable.
+
+Self-reference is additionally prevented at rest by constraint C-20, so it should be unreachable —
+but it is handled anyway, because "should be unreachable" is not a guarantee across a merge.
+
+### 3.7 A missing sink is a typed failure, not a warning
+
+If `sink_category_id` names a category absent from the request, the engine returns `SinkMissing`
+(§6) and allocates nothing.
+
+This is deliberately different from a degraded redirect target. A missing redirect target has a safe
+fallback — the sink. A missing **sink** has none: there is nowhere guaranteed to accept the money,
+so proceeding would risk losing it. This is a configuration bug that validation (§6) should have
+caught, and INV-07's guarantee depends on the sink existing, so the engine refuses rather than
+improvising.
+
+Same for a sink that is capped — `SinkIsCapped`. Constraint C-19 makes this unreachable at rest, but
+the engine checks anyway, because the engine's termination proof depends on it.
+
+### 3.8 The final conservation assertion
+
+Before returning, and after every parcel has been resolved:
+
+```
+ASSERT sum(line.amount_minor for line in lines) == request.income_amount_minor
+```
+
+**On failure, throw with the full diagnostics trace attached.** Never adjust a line item to make the
+sum work — the stage plan names that as an anti-pattern and it is the mechanism by which a rounding
+bug becomes invisible and permanent. As in §5.7: a failed assertion means the engine is wrong, which
+is the most serious defect class this project admits (INV-02).
+
+Substage 5.4.8 requires demonstrating this assertion firing on a deliberately broken run, then
+reverting.
+
+### 3.9 The reference chained example, worked pop by pop
+
+Three savings categories using seeded names. **Every intermediate value is shown so the arithmetic
+can be checked by hand.**
+
+**Setup** — the Savings group receives **300,000**:
+
+| Category | sort | bp | Type | Ceiling | Balance before | Redirect target |
+|---|---|---|---|---|---|---|
+| Medical reserve | 1 | 4000 | ACCUMULATING_RESERVE | 500,000 | 420,000 | Emergency fund |
+| Emergency fund | 2 | 3500 | ACCUMULATING_RESERVE | 1,000,000 | 900,000 | Trip savings |
+| Trip savings | 3 | 2500 | UNCAPPED_FLOW | — | 12,500 | — |
+
+**Phase A** — `split(300000, [4000, 3500, 2500])`:
+
+| Category | product | floor | remainder |
+|---|---|---|---|
+| Medical | 300,000 × 4000 = 1,200,000,000 | 120,000 | 0 |
+| Emergency | 300,000 × 3500 = 1,050,000,000 | 105,000 | 0 |
+| Trip | 300,000 × 2500 = 750,000,000 | 75,000 | 0 |
+
+`floor_sum = 300,000`, `leftover = 0`. No tie-break needed.
+
+**Queue seeded** in `sort_order` order: `[Medical 120,000] [Emergency 105,000] [Trip 75,000]`.
+
+**Phase B, pop by pop:**
+
+| Pop | Parcel | Headroom at that moment | Accepted | Overflow | Queue action |
+|---|---|---|---|---|---|
+| 1 | Medical 120,000, hop 0 | `500,000 − 420,000 − 0 = 80,000` | **80,000** | 40,000 | Push `[Emergency 40,000, hop 1]` to **back** |
+| 2 | Emergency 105,000, hop 0 | `1,000,000 − 900,000 − 0 = 100,000` | **100,000** | 5,000 | Push `[Trip 5,000, hop 1]` to **back** |
+| 3 | Trip 75,000, hop 0 | unbounded | **75,000** | 0 | — |
+| 4 | Emergency 40,000, hop 1 | `1,000,000 − 900,000 − 100,000 = 0` | **0** | 40,000 | Push `[Trip 40,000, hop 2]` to **back** |
+| 5 | Trip 5,000, hop 1 | unbounded | **5,000** | 0 | — |
+| 6 | Trip 40,000, hop 2 | unbounded | **40,000** | 0 | — |
+
+**Line items produced — five, not three:**
+
+| # | Category | Amount | Reason | Redirected from | Hops |
+|---|---|---|---|---|---|
+| 1 | Medical reserve | 80,000 | BASE | — | 0 |
+| 2 | Emergency fund | 100,000 | BASE | — | 0 |
+| 3 | Trip savings | 75,000 | BASE | — | 0 |
+| 4 | Trip savings | 5,000 | REDIRECT | Emergency fund | 1 |
+| 5 | Trip savings | 40,000 | REDIRECT | Emergency fund | 2 |
+
+**Per-category totals:** Medical **80,000**, Emergency **100,000**, Trip 75,000 + 5,000 + 40,000 =
+**120,000**.
+
+**Conservation:** 80,000 + 100,000 + 120,000 = **300,000** ✓ — equals the group amount exactly.
+
+**What pop 4 demonstrates.** By the time Medical's overflow reaches Emergency, `accepted_so_far` for
+Emergency is already 100,000, so its headroom is exactly zero and it accepts nothing. Without
+`accepted_so_far` (§3.2), pop 4 would have recomputed headroom as `1,000,000 − 900,000 = 100,000`
+and accepted 40,000 — putting Emergency at 1,040,000, **40,000 above its ceiling**, and silently
+breaking FR-10. This single row is why the tracker exists.
+
+**Why Trip receives three separate lines rather than one of 120,000.** Because the queue is FIFO
+(§3.4): Emergency's base parcel was already queued ahead of Medical's overflow, so the two arrive at
+Trip separately and at different hop counts. The user therefore sees "75,000 by your rules, plus
+5,000 and 40,000 that overflowed from Emergency fund" rather than an unexplained 120,000.
+
+### 3.10 Diagnostics emitted by the reference example
+
+In order, as the user would see them:
+
+| # | Kind | Reads as |
+|---|---|---|
+| 1 | `BASE_ALLOCATION` | Medical reserve receives 80,000 |
+| 2 | `CATEGORY_FILLED` | Medical reserve is now full at its target of 500,000 |
+| 3 | `REDIRECTED` | 40,000 moves on to Emergency fund |
+| 4 | `BASE_ALLOCATION` | Emergency fund receives 100,000 |
+| 5 | `CATEGORY_FILLED` | Emergency fund is now full at its target of 1,000,000 |
+| 6 | `REDIRECTED` | 5,000 moves on to Trip savings |
+| 7 | `BASE_ALLOCATION` | Trip savings receives 75,000 |
+| 8 | `REDIRECTED` | Emergency fund is full, so its 40,000 moves on to Trip savings |
+| 9 | `REDIRECTED` | Trip savings receives 5,000 that overflowed |
+| 10 | `REDIRECTED` | Trip savings receives 40,000 that overflowed |
+
+Every hop is visible. PRD §5.6 case I-3 requires exactly this: *the user never sees money leave
+category A and simply appear in category D unexplained.*
+
+---
+
 ## 5. Phase A — the base split
 
 Phase A divides the income by percentage, using integer arithmetic only. Phase B (§3) then resolves
