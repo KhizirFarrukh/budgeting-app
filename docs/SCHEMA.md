@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 2 |
 | **Derived from** | `docs/PRD.md` §4 (money model) and §5 (stories); `ARCHITECTURE.md` |
-| **Sections assembled** | 1, 2, 3, 4 (2.3); 5, 7 (2.4) |
-| **Sections pending** | 6 (2.10); 8 (2.9) |
+| **Sections assembled** | 1, 2, 3, 4 (2.3); 5, 7 (2.4); 8 (2.9) |
+| **Sections pending** | 6 (2.10) |
 
 Stage 4 transcribes this document **exactly** and proves the transcription faithful with a
 comparison table. A divergence invalidates the Stage 2 design review silently, so any change here
@@ -384,7 +384,7 @@ are valid.
 
 ---
 
-## 4.1 Entity relationship diagram
+### 4.1 Entity relationship diagram
 
 Matches §3 exactly. Sync columns are omitted from the diagram for legibility — every synced entity
 carries all five per §2.1.
@@ -855,3 +855,98 @@ unknown format is how data gets silently corrupted.
 | The balance policy is chosen, with a verification procedure defined | §7.1 — Option B chosen with measured reasoning; two-tier verifier specified with what runs when; full recompute after every merge |
 | The migration strategy names the fixture-testing requirement | §7.2 — a fixture per prior version, the v1 fixture committed at 4.9.3, every schema change shipping with a test |
 | Tombstone retention has a stated window and a safe-purge condition | §7.3 — all-devices-acknowledged **and** a 180-day floor; 365-day stale-device eviction with its consequence stated |
+
+---
+
+## 8. The remote payload format
+
+Written in substage 2.9. The transport design, merge rules and HLC live in `ARCHITECTURE.md` §5
+and §6; this section specifies the **on-the-wire record shape** so Stage 7 serialises against a
+contract rather than improvising.
+
+### 8.1 Which tables travel
+
+| Table | Travels | Note |
+|---|---|---|
+| `category_groups`, `categories`, `accounts` | ✅ | Mutable configuration; LWW by HLC |
+| `distribution_rule_versions`, `rule_lines` | ✅ | Rule lines are immutable once their version is sealed |
+| `income_events`, `ledger_entries`, `spending_transactions` | ✅ | Immutable; union by UUID |
+| `app_settings` | ✅ | Single row; LWW |
+| `sync_metadata` | ❌ | Device-local by design — syncing a device's own clock state would be meaningless at best and corrupting at worst |
+| `outbox` | ❌ | Device-local queue |
+| `balance_cache` | ❌ | **Derived.** Excluded so a merge can never import a balance (INV-04) |
+
+### 8.2 Record envelope
+
+Every record in a chunk or snapshot carries the same envelope:
+
+```jsonc
+{
+  "table": "categories",
+  "id": "6f3c…",
+  "op": "UPSERT",              // or "TOMBSTONE"
+  "hlc": "0000019a7c3f1e40-0003-9b21…",   // fixed-width, lexicographically sortable
+  "updated_at_ms": 1753027200000,
+  "updated_by_device": "9b21…",
+  "fields": { /* every column of the row, including the reserved ones */ }
+}
+```
+
+**A `TOMBSTONE` op carries no `fields`.** The receiver sets `is_deleted = 1` and `deleted_at_ms`
+from the envelope, leaving all other columns as they are locally. Shipping the full row with a
+tombstone would let a stale device's field values overwrite fresher ones on the way out.
+
+### 8.3 Value encoding rules
+
+| Rule | Detail |
+|---|---|
+| **Money is an integer** | Minor units, as a JSON number. **No decimal point may appear in any monetary value anywhere in the payload** — INV-01 applies to the wire format exactly as it applies to the database |
+| **Timestamps are integers** | UTC epoch milliseconds; never ISO strings, never local time |
+| **Booleans are `0`/`1` integers** | Matching the database representation, so no conversion sits between the two |
+| **Enumerations are their stable strings** | Never ordinals (S-05) |
+| **Nulls are explicit `null`** | Never omitted. An absent key and a null value must not be ambiguous, because a receiver cannot tell "unset" from "not sent" |
+| **Reserved columns are always included** | `target_date_ms`, `ceiling_kind`, `ceiling_param`, `parent_category_id`, `soft_budget_minor`, `soft_budget_period`, `rule_set`. Present with their v1 values so a v1.1 client reading a v1.0 chunk finds them, and a v1.0 client reading a v1.1 chunk can preserve them |
+
+**Unknown fields are preserved, not dropped.** A v1.0 client receiving a record written by a newer
+minor version keeps unrecognised keys and writes them back unchanged. Dropping them would silently
+strip data every time an older device synced — the failure mode substage 4.9.5's *"do not allow an
+import that silently drops unknown fields"* names. This is only safe within a schema version; a
+**newer `schema_version` in the manifest is refused outright** (ARCHITECTURE §5.7).
+
+### 8.4 Snapshot format
+
+A snapshot is the same envelope format, containing the full current state of every travelling table,
+including tombstones that have not yet met the safe-purge condition (§7.3).
+
+```jsonc
+{
+  "snapshot_id": "…",
+  "schema_version": 1,
+  "created_at_ms": 1753027200000,
+  "created_by_device": "…",
+  "snapshot_hlc": "…",          // chunks at or below this are superseded
+  "currency_code": "PKR",
+  "currency_minor_exponent": 2,
+  "records": [ /* envelopes */ ]
+}
+```
+
+**Tombstones must be included in snapshots.** A snapshot that omitted them would resurrect every
+deleted record on the next device to bootstrap from it — the same defect as purging too early, at a
+different layer.
+
+### 8.5 Size, against the PRD's volume model
+
+PRD §7.4 estimates a compressed remote payload in the **single-digit megabytes** at the Heavy
+five-year profile, against a 15 GB free Drive allowance. Compaction (ARCHITECTURE §5.6) exists to
+bound the *number of chunks a bootstrap must fetch*, not because total size threatens the quota.
+
+### 8.6 Verification against substage 2.9's acceptance criteria
+
+| Criterion | Evidence |
+|---|---|
+| ADR-002 explicitly answers whether the choice puts financial data on developer-controlled infrastructure | ADR-002, "The control question, answered explicitly" — **no**, with the two locations named and the verification substages cited |
+| Merge rules stated per record class, not as one policy | ARCHITECTURE §6.1 — four classes with distinct rules; §6.2 records per-record vs per-field as a deliberate decision with its cost |
+| The design explains how a delete on device A survives a device B offline for a month | ARCHITECTURE §6.3 — five numbered steps, plus why the safe-purge condition is what makes it work |
+| A schema version field exists in the remote format with a newer-than-expected policy | §8.4 and ARCHITECTURE §5.2/§5.7 — refuse outright, never partially parse |
+| HLC advance rules specified for both local write and remote receive | ARCHITECTURE §6.4 — both rules given as pseudocode, plus serialisation, comparison, persistence and device-id sourcing |

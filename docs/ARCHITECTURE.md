@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 2 |
 | **Derived from** | `docs/PRD.md` (approved Stage 1), `00_project_manifest.json` |
-| **Sections assembled** | 1, 2, 4, 8, 10 (2.2); 3 (2.1) |
-| **Sections pending** | 5, 6 (2.9); 7, 9 (2.12) |
+| **Sections assembled** | 1, 2, 4, 8, 10 (2.2); 3 (2.1); 5, 6 (2.9) |
+| **Sections pending** | 7, 9 (2.12) |
 
 Companion documents: `SCHEMA.md` (data design), `ALLOCATION_ALGORITHM.md` (the engine),
 `NAVIGATION.md` (screens and flow), `decisions/ADR-*.md`.
@@ -432,6 +432,267 @@ is tested by `test/domain/allocation/split_test.dart`.
 | `presentation/formatting/money_formatter.dart` | Display formatting is presentation. Machine-readable serialisation is **not** here — see §8.5. |
 | `test/fixtures/databases/` | Migration fixtures, one per schema version, committed from v1.0 (NFR-07). |
 | `tool/guards/` | The guards are scripts in the repository, runnable locally, not CI-only configuration. |
+
+---
+
+## 5. Sync architecture
+
+Decided in substage 2.9. The storage target and its justification are **ADR-002**; this section is
+the design that follows from it.
+
+**The controlling constraint:** the client does all merging, because NG-08 means there is nowhere
+else for it to happen (IMP-15). Every design choice below follows from that plus INV-06 — the user
+never waits on the network.
+
+### 5.1 Remote file layout
+
+```
+appDataFolder/
+├── manifest.json                       # small, read first, written last
+├── snapshots/
+│   └── <snapshot-id>.json.gz           # full state at a point in time
+└── chunks/
+    └── <device-id>/
+        └── <hlc>.json.gz               # append-only change chunks, one writer each
+```
+
+**Per-device chunk directories are the single most important structural decision here.** Two devices
+never write the same file, so the majority of write conflicts are removed *by construction* rather
+than resolved after the fact. Writing all devices to one shared file would manufacture conflicts the
+merge engine would then have to untangle — named as a pitfall by substage 7.3.
+
+### 5.2 `manifest.json`
+
+Read before anything else on every sync; written last on every mutation of the store.
+
+| Field | Purpose |
+|---|---|
+| `schema_version` | The `kSchemaVersion` constant (SCHEMA §7.4). **Newer than the app understands → refuse, never partially parse** |
+| `encryption` | `{"scheme": "none"}` in v1.0. **The D-04 accommodation** — present from day one so a later encrypted version can be adopted without a client being unable to tell an unencrypted payload from a corrupt one |
+| `compression` | `"gzip"`. Recorded rather than assumed, so it can change without breaking older readers |
+| `latest_snapshot_id` | Which snapshot bootstraps a new device |
+| `snapshot_hlc` | The HLC the snapshot is current as of; chunks at or below this are superseded |
+| `devices[]` | The device registry: `device_id`, `last_seen_ms`, `last_acknowledged_snapshot_id`, `last_acknowledged_hlc` |
+| `currency_code`, `currency_minor_exponent` | Checked before any merge — a mismatch is refused, never converted (§5.7) |
+| `compaction_state` | `IDLE` \| `IN_PROGRESS`, with the in-progress snapshot id, so an interrupted compaction is recoverable |
+
+**The device registry is what makes safe tombstone purging possible** (SCHEMA §7.3): a tombstone may
+only be purged once every registered device has acknowledged a snapshot beyond it.
+
+### 5.3 What a chunk contains
+
+A chunk is an ordered list of record changes written by one device since its last chunk: table name,
+record id, operation (`UPSERT` / `TOMBSTONE`), the record's full field set for an upsert, and its
+HLC. Chunks are **append-only and immutable** once written — a device writes a new chunk rather than
+amending an old one, which is what makes them safe to read concurrently.
+
+### 5.4 The sync cycle
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant W as Sync worker
+    participant R as RemoteStore
+    participant M as Merge engine
+    participant V as Validators + repair
+    participant DB as Local database
+
+    W->>R: read manifest.json
+    R-->>W: manifest
+    Note over W: refuse if schema_version newer, or currency mismatches
+    W->>R: list chunks newer than our last applied HLC
+    W->>R: fetch those chunks
+    R-->>M: remote changes
+    M->>M: merge per record class (§6.1)
+    M->>V: validate merged state BEFORE commit
+    V->>V: repair deterministically if invalid; record every repair
+    V->>DB: commit merged + repaired state (one transaction)
+    V->>DB: mark balance cache stale, then full recompute-and-compare
+    W->>DB: drain outbox
+    W->>R: write our chunk
+    W->>R: update manifest (device registry, our acknowledgement)
+```
+
+**Validation runs before the commit, never after.** Committing first would persist an invalid state
+briefly and let it sync outward to other devices — substage 7.6's pitfall names exactly this.
+
+**A merge is never trusted with balances.** The full recompute-and-compare (SCHEMA §7.1) runs after
+every merge, without exception.
+
+### 5.5 The sync state machine
+
+| State | Meaning | User-visible treatment |
+|---|---|---|
+| `LOCAL_ONLY` | No account linked | A quiet, permanent "on this device only" indicator with a backup action attached. Not an error, not a warning colour, never repeated (PRD A-11) |
+| `IDLE` | Signed in, nothing pending | Last synced time |
+| `PENDING` | Local changes queued | Last synced time plus a pending count |
+| `SYNCING` | A cycle is running | A subtle indicator. **Never a modal, never a blocking spinner** |
+| `ERROR_RETRYING` | Transient failure; backoff in progress | Last synced time; no alarm. The app is unaffected |
+| `ERROR_NEEDS_USER` | Sign-in expired, access revoked, quota exceeded, remote schema newer, currency mismatch | The **only** state that surfaces an action, and it still blocks nothing |
+
+**No state blocks the UI. Ever.** INV-06 is not a preference, and substage 7.9's acceptance criteria
+require a test per state.
+
+### 5.6 Compaction and bootstrap
+
+**Compaction** replaces accumulated chunks with a fresh snapshot, in a strict order chosen so that
+interruption at any point leaves the store readable:
+
+1. Write the new snapshot to `snapshots/`.
+2. Update `manifest.json` to point at it.
+3. **Only then** delete superseded chunks.
+
+Interrupted after step 1: an orphan snapshot exists, nothing references it, readers are unaffected.
+Interrupted after step 2: the manifest points at a valid snapshot; superseded chunks still exist and
+are merely redundant. **Reversing steps 2 and 3 would lose data** on interruption — the manifest
+would reference a snapshot while its source chunks were already gone.
+
+**Bootstrap** for a device that has just signed in:
+
+1. Fetch the latest snapshot.
+2. Apply every chunk newer than `snapshot_hlc`.
+3. **Merge with existing local data** — never replace it.
+
+Step 3 is the case that matters: **the common path is a user who tried the app first and signed in
+afterwards**, so the local database is usually non-empty. Bootstrap that assumes an empty local
+database duplicates everything the user entered before signing in (substage 7.8's pitfall). Because
+merging is union-by-UUID for immutable records, a genuine re-bootstrap of the same device is
+idempotent.
+
+### 5.7 Adverse remote conditions
+
+| Condition | Behaviour |
+|---|---|
+| **Remote store missing entirely** — the user wiped the app's Drive data | Treat as a **fresh** remote. Push a first snapshot. **Never delete local data.** An absent remote is not evidence of deletion; only an explicit tombstone is (INV-10). US-031 |
+| **Remote `schema_version` newer than the app** | Refuse the whole sync, enter `ERROR_NEEDS_USER`, prompt to update. **Never partially parse an unknown format** |
+| **Currency configuration mismatch** | Refuse, explain plainly, **never convert**. Almost certainly a wrong-account sign-in |
+| **Corrupted or truncated chunk** | Skip that chunk, record it, continue with the others. One bad chunk must not block every other device's changes. Surfaced in the repair log |
+| **Quota exceeded** | `ERROR_NEEDS_USER` with a specific message. Realistic, because the data is on the user's own quota |
+| **Version conflict on write** (ETag mismatch) | Re-read, re-merge, retry with bounded exponential backoff and jitter. **Never blind-overwrite** |
+
+---
+
+## 6. Merge semantics and the hybrid logical clock
+
+### 6.1 Merge rules, per record class
+
+**Not one blanket policy.** A single last-write-wins rule across the whole database would discard a
+device's entire offline week of transactions — R-03, and the anti-pattern the Stage 2 plan names.
+
+| Record class | Tables | Rule |
+|---|---|---|
+| **Immutable** | `ledger_entries`, `income_events`, `spending_transactions` | **Union by UUID.** These are never edited, so they **cannot conflict**. A duplicate id is ignored, never overwritten |
+| **Mutable configuration** | `categories`, `accounts`, `category_groups`, `distribution_rule_versions`, `rule_lines`, `app_settings` | **Last-write-wins, ordered by HLC**, with `device_id` as the final deterministic tie-break |
+| **Tombstones** | any synced table except `ledger_entries` | A tombstone **beats an older edit**. A peer that was offline when the delete happened cannot resurrect the record |
+| **Device-local** | `sync_metadata`, `outbox`, `balance_cache` | **Never synced.** Balances are always recomputed locally, so a merge can never import one |
+
+**This is why the ledger is append-only.** INV-03 is usually justified as an audit requirement, but
+it is also what makes sync safe: because ledger entries are immutable, they merge by union and no
+money can ever be lost to a conflict resolution. The sync design depends on the invariant.
+
+### 6.2 Last-write-wins is per record, not per field — and why that is acceptable
+
+**Decision: per record.** Substage 2.9.4 requires this to be stated explicitly rather than left
+ambiguous.
+
+The cost is real: if device A renames a category while device B changes its ceiling, and both sync
+afterwards, **one of those edits is lost** — the losing record is replaced wholesale.
+
+Per-field resolution would avoid that, at the cost of an HLC per field. A category has roughly
+twenty fields, so per-field tracking multiplies the sync metadata on the most-edited table by twenty,
+permanently, in every chunk and every snapshot.
+
+**Per record is chosen because of what LWW can and cannot touch:**
+
+> **Last-write-wins never applies to money.** Every table it governs is configuration. Money lives in
+> `ledger_entries`, `income_events` and `spending_transactions`, which merge by union and are
+> immutable. The worst outcome of a per-record conflict is a lost category rename — annoying,
+> recoverable in seconds, and visible. It is never a lost transaction.
+
+Combined with the fact that this is a **single-user** app (NG-02), where simultaneous edits to the
+same category from two devices require the user to be in two places at once, the exposure is small
+and the saving is permanent.
+
+**Mitigation:** every LWW resolution that discarded a competing edit is recorded in the repair log
+and surfaced to the user (substage 7.6.4), so a lost rename is visible rather than mysterious.
+
+### 6.3 How a delete on device A survives device B being offline for a month
+
+The scenario substage 2.9's acceptance criteria call out explicitly.
+
+1. **Day 1** — Device A soft-deletes a category: `is_deleted = 1`, `deleted_at_ms` set, and a new HLC
+   assigned. The row **stays**; only its tombstone flag changes. A's chunk carries the tombstoned
+   record.
+2. **Days 1–30** — Device B is offline. It still holds the record with its older HLC, untombstoned,
+   and knows nothing of the delete.
+3. **Day 30** — B reconnects and syncs. It fetches A's chunk and finds the tombstoned record with a
+   **strictly greater HLC** than its own copy. The tombstone wins on ordering alone; no special case
+   is required.
+4. B applies the tombstone locally. If B had also edited that category offline, its edit carries a
+   **lower** HLC and loses — the tombstone rule states that a delete beats an older edit.
+5. B's own chunk still carries its (now superseded) version. A will fetch it, compare HLCs, and keep
+   the tombstone. **Convergence, and the record is not resurrected.**
+
+**What makes this work is that the tombstone is never purged too early.** SCHEMA §7.3's safe-purge
+condition requires that every registered device has acknowledged a snapshot beyond the tombstone,
+*and* that 180 days have passed. Had the tombstone been purged on a timer at, say, 7 days, B would
+have arrived at day 30 seeing no tombstone at all, treated its own copy as current, and pushed the
+record back to life. Purging on a timer alone is the defect; the registry is the fix.
+
+### 6.4 The hybrid logical clock
+
+Raw wall-clock comparison is unsafe: a device with a wrong clock — common, and users change clocks
+deliberately — would have its edits ordered wrongly, permanently and invisibly (R-08).
+
+**Format:** `physical_ms` (48-bit), `logical_counter` (16-bit), `device_id`.
+
+**Serialisation** is a fixed-width, lexicographically sortable string, so that string ordering and
+numeric ordering agree everywhere: zero-padded hex physical, zero-padded hex counter, device id.
+A serialisation that is not lexicographically sortable makes ordering differ between comparison
+paths — substage 7.4's pitfall.
+
+**Advance rule on local write:**
+
+```
+pt := wall_clock_now_ms
+IF pt > local.physical:
+    local.physical := pt
+    local.counter  := 0
+ELSE:
+    local.counter  := local.counter + 1     // physical unchanged; counter breaks the tie
+```
+
+The clock **never moves backwards**, even if the wall clock does — the `>` comparison guarantees it.
+
+**Advance rule on receiving a remote HLC:**
+
+```
+pt    := wall_clock_now_ms
+l_new := max(local.physical, remote.physical, pt)
+
+IF l_new == local.physical AND l_new == remote.physical:
+    counter := max(local.counter, remote.counter) + 1
+ELSE IF l_new == local.physical:
+    counter := local.counter + 1
+ELSE IF l_new == remote.physical:
+    counter := remote.counter + 1
+ELSE:
+    counter := 0                            // wall clock advanced past both
+
+local := (l_new, counter)
+```
+
+**Comparison** is lexicographic on `(physical, counter, device_id)`. Including `device_id` makes the
+ordering **total**: no two distinct HLCs ever compare equal, so every conflict has a deterministic
+winner and two devices performing the same merge reach the same result.
+
+**Persistence.** HLC state lives in `sync_metadata` and is written on every advance. An HLC that
+resets on app restart silently reorders history — substage 7.4's pitfall, and the reason the state is
+persisted rather than held in memory.
+
+**Device id** is generated once at install and persisted. It is **never derived from a hardware
+identifier** (substage 7.4.4): hardware ids are a privacy problem, they are restricted on modern
+Android anyway, and a random UUID serves the purpose completely.
 
 ---
 

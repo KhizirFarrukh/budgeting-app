@@ -12,7 +12,7 @@ Evidence log, one entry per substage.
 | 2.6 | Allocation: phase B ceilings, redirects, termination | ✅ Complete |
 | 2.7 | Allocation: overrides, reversals, error taxonomy | ✅ Complete |
 | 2.8 | Allocation: pseudocode, worked examples, vector table | ✅ Complete |
-| 2.9 | Cloud sync data model and merge strategy | Not started |
+| 2.9 | Cloud sync data model and merge strategy | ✅ Complete |
 | 2.10 | Validation and configuration integrity rules | Not started |
 | 2.11 | Navigation, screen inventory, per-screen states | Not started |
 | 2.12 | Technology decision set | Not started |
@@ -522,10 +522,89 @@ section and was invisible to inspection, because every example in §5 happens to
   categories, 37 receive 23,058,430,092,137 and 3 receive 23,058,430,092,136, summing to the input
   exactly.
 
-### Note on the harness
+### Harness note
 
 Two PowerShell-specific bugs in the scratch harness were fixed before the run was trusted: single-
 element arrays being unwrapped to scalars (so `.Count` on a lone hashtable returned its key count),
 and an `$_` scope collision in a nested `Where-Object`. Neither reflected a design problem, and both
 are noted only because the first masked the real defect for one run — the harness failed before it
 could disagree with the document.
+
+---
+
+## 2.9 — Cloud sync data model and merge strategy (S02.09)
+
+**Outputs:** `docs/decisions/ADR-002-sync-target.md`, `ARCHITECTURE.md` sections 5 and 6,
+`SCHEMA.md` section 8.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| ADR-002 explicitly answers whether the choice puts financial data on developer-controlled infrastructure | ADR-002 has a section headed "The control question, answered explicitly" answering **no**, naming the two places data exists, and citing S07.10 and S09.7 as the proofs | ✅ |
+| Merge rules stated per record class, not as one blanket policy | ARCHITECTURE §6.1 — four classes: immutable (union by UUID), mutable configuration (LWW by HLC), tombstones (delete beats older edit), device-local (never synced) | ✅ |
+| The design explains how a delete on device A survives device B offline for a month | ARCHITECTURE §6.3 — five numbered steps ending in convergence, plus why the safe-purge condition is what makes it work | ✅ |
+| A schema version field exists in the remote format with a newer-than-expected policy | ARCHITECTURE §5.2 (manifest field) and §5.7 (refuse outright, never partially parse); SCHEMA §8.4 repeats it in the snapshot header | ✅ |
+| HLC advance rules specified for both local write and remote receive | ARCHITECTURE §6.4 — both as pseudocode, plus serialisation, total-ordering comparison, persistence and device-id sourcing | ✅ |
+
+### The decision, and the argument that settles it
+
+Drive `appDataFolder`, not Firestore. ADR-002 turns on one question: **who controls the storage and
+who is capable of reading the data** — not who intends to, or is authorised to.
+
+A Firestore document lives in a **developer-owned Firebase project**. That makes the developer the
+data controller in the regulatory sense, gives them console access to every user's financial
+records, and hands them breach liability and lawful-demand obligations. Security rules restrict
+*client* access; they do not restrict the project owner. Firestore is materially better on
+engineering merits — server-side queries, indexes, real-time push, offline persistence — and **none
+of it matters**, because it fails the requirement the product exists to satisfy. Describing such a
+project as "the user's Google account" is the anti-pattern the Stage 2 plan names by name.
+
+The six honest costs of `appDataFolder` are tabulated in ADR-002 with mitigations, including the two
+that bite: the client must do all merging (a direct consequence of NG-08 — there is nowhere else),
+and the sensitive OAuth scope needs Google verification, which is why PRD §3.2 already made sync
+non-blocking for release.
+
+### Decisions with reasoning recorded
+
+**Per-device chunk directories.** Two devices never write the same file, so most write conflicts are
+removed *by construction* rather than resolved afterwards. Writing all devices to one shared file
+manufactures conflicts the merge engine would then have to untangle.
+
+**Last-write-wins is per record, not per field** — stated explicitly, as substage 2.9.4 requires.
+Per-field resolution needs an HLC per field; a category has ~20 fields, so that multiplies sync
+metadata on the most-edited table twentyfold, permanently, in every chunk and snapshot. Per record
+is chosen because of what LWW can and cannot touch:
+
+> **Last-write-wins never applies to money.** Every table it governs is configuration. Money lives in
+> the immutable tables, which merge by union. The worst outcome of a per-record conflict is a lost
+> category rename — recoverable in seconds and surfaced in the repair log. It is never a lost
+> transaction.
+
+Combined with this being a single-user app (NG-02), where simultaneous edits to one category from
+two devices need the user in two places at once, the exposure is small and the saving is permanent.
+
+**The append-only ledger is what makes sync safe**, not only what makes it auditable. Recorded in
+§6.1 because it reframes INV-03: because ledger entries are immutable they merge by union, so no
+money can ever be lost to conflict resolution. The sync design depends on the invariant.
+
+**Compaction order is fixed as snapshot → manifest → retire chunks**, with the interruption analysis
+for each step. Reversing the last two loses data on interruption: the manifest would reference a
+snapshot whose source chunks were already deleted.
+
+**Bootstrap merges with local data rather than replacing it**, because the common path is a user who
+tried the app first and signed in afterwards — so the local database is usually non-empty.
+
+**An absent remote is never evidence of deletion.** Only an explicit tombstone is. This is what makes
+US-031 (the user wipes the app's Drive data) safe.
+
+**A tombstone envelope carries no fields.** Shipping the full row with a tombstone would let a stale
+device's field values overwrite fresher ones on the way out.
+
+**Unknown fields are preserved, not dropped** — within a schema version. A v1.0 client receiving a
+record from a newer minor version writes unrecognised keys back unchanged; dropping them would
+silently strip data every time an older device synced. A newer `schema_version` is refused outright,
+so this is bounded.
+
+**`balance_cache` is excluded from the payload** so a merge can never import a balance; balances are
+always recomputed locally (INV-04).
