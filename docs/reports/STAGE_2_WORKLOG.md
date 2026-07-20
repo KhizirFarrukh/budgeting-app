@@ -10,7 +10,7 @@ Evidence log, one entry per substage.
 | 2.4 | Data model: constraints, indexes, balances, migrations | ✅ Complete |
 | 2.5 | Allocation: contracts and phase A base split | ✅ Complete |
 | 2.6 | Allocation: phase B ceilings, redirects, termination | ✅ Complete |
-| 2.7 | Allocation: overrides, reversals, error taxonomy | Not started |
+| 2.7 | Allocation: overrides, reversals, error taxonomy | ✅ Complete |
 | 2.8 | Allocation: pseudocode, worked examples, vector table | Not started |
 | 2.9 | Cloud sync data model and merge strategy | Not started |
 | 2.10 | Validation and configuration integrity rules | Not started |
@@ -402,3 +402,69 @@ anything is added to it, which is the specific defect substage 5.3.3's `must_not
 ways a balance ends up above its ceiling — manual override, a lowered ceiling, a sync merge — so the
 already-over case is documented as common rather than exotic. Without the clamp, negative headroom
 propagates into a negative allocation and conservation breaks.
+
+---
+
+## 2.7 — Overrides, reversals and the error taxonomy (S02.07)
+
+**Output:** `docs/ALLOCATION_ALGORITHM.md` sections 4 and 6.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| The override redistribution rule worked through with exact figures totalling the income | §4.7 — 200,000 + 175,000 + 125,000 = 500,000, every product and floor shown; verified by script below | ✅ |
+| Every override validation rule names its typed failure | §4.4 — five rules O-1…O-5, each mapped to a failure in §6 and classified user-input or configuration-bug | ✅ |
+| The ceiling-versus-override policy decided, with its alternative recorded | §4.5 — permitted, warned, not redirected; the rejected alternative and its consequence stated | ✅ |
+| Reversal specified as mirroring recorded allocations, not recomputing | §4.8 — pseudocode mirrors entries with opposite direction; the reason is given and tied to substage 5.7.5's test | ✅ |
+| The error taxonomy is complete, each entry saying configuration bug or user input error | §6 — twelve failures E-01…E-12, each with condition, class, carried context and UI intent; §6.1 separates the five warning conditions | ✅ |
+
+### V-09 verified by script
+
+```
+income=500000, Medical overridden to 200000
+remaining=300000  relative_total=6000
+  bp=3500 product=1050000000 floor=175000 remainder=0
+  bp=2500 product=750000000  floor=125000 remainder=0
+floor_sum=300000 leftover=0
+RESULT: Medical=200000 Emergency=175000 Trip=125000  total=500000  conserved: True
+```
+
+Matches the Stage 2 plan's stated expectation for V-09 exactly. **The divisor is the relative total
+(6000), not 10000** — noted in the document because using 10000 there is precisely how
+redistribution silently loses money.
+
+### Decisions
+
+**The I-1 policy is fixed: an override may exceed a ceiling and is not redirected away.** The
+rejected alternative is recorded with its consequence, as substage 2.7.3 requires. Redirecting the
+excess would make the override silently not do what the user typed — they enter 200,000, press
+confirm, and find 80,000 there. An explicit instruction the app quietly overrules is worse than a
+warning the user can act on. The accepted cost is that a category can sit above its ceiling, which
+the design already accommodates: §3.1 clamps headroom, no schema constraint forbids it, and
+substage 8.3.5 requires the progress indicator to render it without clipping.
+
+**A zero override is an explicit instruction, not an absence.** `{cat_A: 0}` means "A gets nothing
+this time"; omitting A means "A takes its normal share". The map's *keys* decide which categories are
+overridden. Conflating these is named in substage 5.6's pitfalls.
+
+**Two failures added beyond the stage plan's list.** The plan enumerates ten; §6 has twelve.
+`OverrideTargetUnknown` (E-11) covers an override naming a category absent from the request, which
+substage 5.6.3 requires as a validation rule but which had no failure to return. `PeriodDefinitionInvalid`
+(E-12) covers a malformed period window, which becomes reachable now that `PeriodDefinition` is a
+request field. Both are classified as configuration bugs.
+
+**Reversal mirrors rather than recomputes, and the reason is recorded as structural.** If rules
+changed between the event and its reversal, recomputing produces different amounts and subtracting
+them leaves every balance wrong; if a ceiling was involved the recomputed split differs
+*structurally*, because the categories were in different states then. Mirroring is the only method
+that restores exact pre-event balances regardless of what changed.
+
+**Reversing a reversal is forbidden** (guard R-2) rather than merely discouraged: it is
+indistinguishable from re-entering the money and makes history harder to read. The user records a
+new income event instead.
+
+**The warn-versus-fail boundary is stated as a rule, not left to judgement:** it is a failure when
+the engine cannot produce a conserved result, and a warning when it can but the user should know
+something unexpected happened. §6.1 lists the five warning conditions explicitly so Stage 5 does not
+have to decide.

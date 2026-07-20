@@ -455,6 +455,245 @@ category A and simply appear in category D unexplained.*
 
 ---
 
+## 4. Manual overrides and reversals
+
+### 4.1 What an override is
+
+FR-12 lets the user adjust the split for **one payment** without changing their standing rules. The
+override map arrives in the request (§1.1) as a verbatim record of user input: category id → amount
+in minor units.
+
+**An override is an input to the event, never an edit of its output.** This is assumption A-23 and
+closes escalation E-02, and it is why `income_events.overrides_json` exists (SCHEMA §3.6). INV-08
+requires identical inputs to produce byte-identical output; an override that modified results after
+the engine ran would make the event unreproducible, and INV-11's promise that history stays
+explainable would break at the next rule change.
+
+### 4.2 Override semantics, step by step
+
+```
+1. Validate the override map (§4.4). On any failure, return it — allocate nothing.
+
+2. overridden_total := sum of override amounts
+   remaining       := income_amount_minor − overridden_total
+
+3. Each overridden category takes its stated amount as a line item,
+   with reason = MANUAL_OVERRIDE and hop_count = 0.
+   These amounts BYPASS phase A entirely — they are not shares, they are instructions.
+
+4. IF remaining == 0:
+       No further distribution. Skip to phase B with only the override parcels.
+   IF remaining > 0:
+       Redistribute `remaining` across the NON-overridden categories,
+       in proportion to their RELATIVE basis points (§4.3).
+
+5. Feed all parcels — overridden and redistributed — into phase B (§3),
+   with one exception stated in §4.5.
+```
+
+### 4.3 Redistribution is by relative weight, not evenly
+
+The non-overridden categories rarely have basis points totalling 10000 between them, because the
+overridden ones took some of that weight. Their **relative** proportions are preserved:
+
+```
+relative_total := sum of basis_points over non-overridden categories
+share_i        := split(remaining, weights scaled to relative_total)
+```
+
+In practice the split primitive from §5.1 is reused directly, passing the non-overridden categories'
+raw basis points; the largest-remainder method needs only that the weights be consistent, and
+dividing by their own total is exactly what it does. **The primitive is called, never re-implemented**
+— substage 5.6.2 forbids a second rounding path, because two rounding paths eventually disagree.
+
+Redistributing **evenly** instead of by weight is named as a pitfall by the stage plan and would
+surprise the user: someone who set Emergency to 35% and Trip to 25% expects that ratio to survive
+overriding a third category.
+
+### 4.4 Override validation rules
+
+Each returns its own typed failure from §6, and none allocates anything.
+
+| # | Condition | Failure | Class |
+|---|---|---|---|
+| O-1 | `overridden_total > income_amount_minor` | `OverridesExceedIncome` | User input error |
+| O-2 | Any override amount `< 0` | `OverrideNegative` | User input error |
+| O-3 | Any override amount `> MAX_MONEY_MINOR` | `IncomeExceedsMaximum` | User input error |
+| O-4 | `remaining > 0` **and** there are no non-overridden categories to receive it | `NoCategoriesAvailableForRemainder` | User input error |
+| O-5 | An override names a category absent from the request | `OverrideTargetUnknown` | Configuration bug |
+
+**`overridden_total == income_amount_minor` is valid**, not an error — the user has assigned every
+unit explicitly and there is nothing to redistribute (substage 2.7.2 requires this to be stated).
+
+**A zero override is an explicit instruction, not an absence.** `{cat_A: 0}` means "category A gets
+nothing this time", which is different from omitting A (which means "A takes its normal share").
+Substage 5.6's `common_pitfalls` names conflating these; the map's *keys* determine which categories
+are overridden, and the values may legitimately be zero.
+
+### 4.5 An override may exceed a ceiling — the I-1 policy
+
+**Decision: permitted. The amount stays where the user put it and is not redirected away.**
+
+This implements PRD §5.6 case I-1 and §4.7. When an overridden amount exceeds the destination's
+headroom:
+
+- The line item is written at the full overridden amount, `reason = MANUAL_OVERRIDE`.
+- A `OVERRIDE_EXCEEDS_CEILING` diagnostic is emitted at `WARNING` severity.
+- **The excess is not redirected.** Override parcels skip the phase B capacity check entirely.
+- The category's balance may end above its ceiling. §3.1's `max(0, …)` then handles the
+  already-over case at the *next* income event, where the category accepts nothing and redirects its
+  whole share until spending brings it back under.
+
+**The alternative and its consequence, recorded so the choice is visible** (substage 2.7.3 requires
+this): the excess *could* be redirected like any other overflow. That was rejected because it makes
+the override silently not do what the user typed — they enter 200,000 for Medical, press confirm,
+and find 80,000 there. An explicit instruction that the app quietly overrules is worse than a
+warning the user can act on. The cost of the chosen policy is that a category can sit above its
+ceiling, which the design accommodates everywhere: §3.1 clamps headroom, SCHEMA has no constraint
+forbidding it, and substage 8.3.5 requires the progress indicator to render an over-ceiling category
+without clipping.
+
+### 4.6 An override never touches the rule version
+
+The rule version snapshot in the request is **read-only** to the engine. An override changes one
+event's outcome and nothing else; the next income event previews by the standing rules, unchanged
+(INV-11). Substage 5.6.5 requires a test asserting the snapshot is unmodified after an override.
+
+### 4.7 Worked override example
+
+Income of **500,000** to the Savings group. Medical is overridden to 200,000; Emergency (3500 bp) and
+Trip (2500 bp) are not overridden.
+
+```
+overridden_total = 200,000
+remaining        = 500,000 − 200,000 = 300,000
+relative_total   = 3500 + 2500 = 6000
+```
+
+Redistribute 300,000 across Emergency and Trip by relative weight:
+
+| Category | bp | `product = 300,000 × bp` | `product / 6000` | remainder |
+|---|---|---|---|---|
+| Emergency | 3500 | 1,050,000,000 | 175,000 | 0 |
+| Trip | 2500 | 750,000,000 | 125,000 | 0 |
+
+`floor_sum = 300,000`, `leftover = 0`.
+
+**Result:** Medical **200,000** (MANUAL_OVERRIDE), Emergency **175,000** (BASE), Trip **125,000**
+(BASE).
+
+**Conservation:** 200,000 + 175,000 + 125,000 = **500,000** ✓
+
+This is vector V-09. Note that the divisor here is the relative total (6000), not 10000 — that is
+what "relative basis points" means, and getting it wrong is how redistribution silently loses money.
+
+### 4.8 Reversal generation
+
+A reversal undoes a previously confirmed income event. OQ-09's answer: available for any event,
+however old, always leaving a visible pair.
+
+**A reversal mirrors the recorded allocations. It does not re-run the algorithm.**
+
+```
+FUNCTION generate_reversal(original_event, original_entries) -> list of LedgerEntry
+
+    GUARD original_event.is_reversal == false          → CannotReverseAReversal
+    GUARD original_event.reversed_by_event_id == null  → AlreadyReversed
+
+    reversal_entries := []
+    FOR EACH entry IN original_entries:
+        reversal_entries += LedgerEntry(
+            id                : new UUID v7,
+            category_id       : entry.category_id,
+            account_id        : entry.account_id,
+            direction         : OPPOSITE of entry.direction,
+            amount_minor      : entry.amount_minor,          // same magnitude
+            source_type       : REVERSAL,
+            source_id         : reversal_event.id,
+            reverses_entry_id : entry.id,
+            reason            : entry.reason,
+            hop_count         : entry.hop_count)
+
+    ASSERT sum(reversal_entries) == sum(original_entries)    // equal magnitude, opposite direction
+    RETURN reversal_entries
+```
+
+**Why mirroring rather than recomputing — the critical reason.** If the user changed their
+percentages between the event and the reversal, re-running the engine would produce *different*
+amounts, and subtracting those would leave every affected balance wrong. Worse, if a ceiling was
+involved, the recomputed split would differ structurally: the categories were in different states
+then. Mirroring is the only method that returns every balance to exactly its pre-event value
+regardless of what changed in between.
+
+Substage 5.7.5 requires exactly this test: change the distribution rules between the event and its
+reversal, then assert every affected balance returns exactly to its pre-event value.
+
+**Guards:**
+
+| # | Guard | Reason |
+|---|---|---|
+| R-1 | An event cannot be reversed twice | Silently doubles the correction |
+| R-2 | A reversal cannot itself be reversed | Use a new income event instead; reversing a reversal is indistinguishable from re-entering the money and makes history harder to read |
+
+**Nothing about the original is modified.** The link is recorded on the *new* rows
+(`reverses_entry_id`) and by setting `income_events.reversed_by_event_id` on the original — the one
+permitted mutation, on the event row, never on a ledger entry. Substage 4.5.6 specifies how
+"reversed" is represented without mutating an immutable ledger row: by lookup, not by flag.
+
+---
+
+## 6. The error taxonomy
+
+Every failure the engine can return. **Sealed** — Stage 5 implements exactly these and adds none.
+
+Each says whether it is a **configuration bug** (validation §6 of SCHEMA should have prevented it;
+if it reaches the engine, something upstream failed) or a **user input error** (the user can fix it
+directly, and the UI should say how).
+
+| # | Failure | Condition | Class | Carries | UI intent |
+|---|---|---|---|---|---|
+| E-01 | `IncomeNotPositive` | `income_amount_minor <= 0` | User input | the amount | "Enter an amount greater than zero" |
+| E-02 | `IncomeExceedsMaximum` | `income_amount_minor > MAX_MONEY_MINOR`, or any override above it | User input | the amount, the maximum | State the limit; this is effectively unreachable in real use |
+| E-03 | `GroupBasisPointsInvalid` | Group shares do not total exactly 10000, or one is outside 0–10000 | Configuration bug | the actual total, the offending group | Route the user to the group percentage screen |
+| E-04 | `CategoryBasisPointsInvalid` | Within some group, category shares do not total exactly 10000 | Configuration bug | the group, the actual total | Route to that group's category percentages |
+| E-05 | `EmptyGroupWithNonZeroShare` | A group has a non-zero share but no active categories | Configuration bug | the group | "This group receives money but has nowhere to put it" — offer to add a category or zero the group |
+| E-06 | `SinkMissing` | `sink_category_id` names no category in the request | Configuration bug | the id sought | Serious; route to a repair path. §3.7 explains why this is fatal rather than a warning |
+| E-07 | `SinkIsCapped` | The named sink has a ceiling or a bill amount | Configuration bug | the sink id | Serious; INV-07's termination proof depends on the sink being uncapped |
+| E-08 | `OverridesExceedIncome` | Override amounts total more than the income | User input | the total, the income, the difference | Show the difference in place; confirmation stays blocked (US-016) |
+| E-09 | `OverrideNegative` | Any override amount is below zero | User input | the category, the amount | Reject on the spot |
+| E-10 | `NoCategoriesAvailableForRemainder` | Money remains after overrides but no non-overridden category can take it | User input | the remaining amount | "Assign the remaining X, or leave a category un-overridden" |
+| E-11 | `OverrideTargetUnknown` | An override names a category absent from the request | Configuration bug | the unknown id | Indicates a stale UI; reload the configuration |
+| E-12 | `PeriodDefinitionInvalid` | `period.start_ms >= period.end_ms`, or the anchor day is outside 1–31 | Configuration bug | the period | Should be unreachable; C-05 constrains the anchor at rest |
+
+### 6.1 Warnings are not failures
+
+These conditions are **recorded in diagnostics and do not stop the allocation.** They are listed
+here so the boundary between "warn" and "fail" is explicit rather than a judgement call at
+implementation time:
+
+| Condition | Diagnostic | Why not a failure |
+|---|---|---|
+| A redirect target is missing, archived or deleted | `DEGRADED_TARGET` | The sink is a safe fallback (§3.6) |
+| A redirect chain contains a cycle | `CYCLE_DEFENDED` | T-1 handles it; the money still lands (§3.5) |
+| A chain exceeds `MAX_HOPS` | `HOP_LIMIT_REACHED` | T-2 handles it; the money still lands |
+| An override pushes a category past its ceiling | `OVERRIDE_EXCEEDS_CEILING` | The user asked for it explicitly (§4.5) |
+| A fixed-recurring category is already funded | `PERIOD_FUNDED` | Correct behaviour, not an error (PRD I-2) |
+
+**The distinguishing rule:** it is a failure when the engine cannot produce a conserved result, and a
+warning when it can but the user should know something unexpected happened.
+
+### 6.2 No partial results, ever
+
+**On any failure the engine returns the failure alone — no line items, no partial allocation, no
+"best effort".** Substage 2.7.7 requires this and substage 5.1 implements it.
+
+The reason is that a partial allocation is worse than no allocation: the caller would have to decide
+whether to write it, and a partially written income event breaks conservation permanently in the
+ledger, which INV-03 then makes unfixable by editing. A failure the user can act on is recoverable;
+a half-allocated event is not.
+
+---
+
 ## 5. Phase A — the base split
 
 Phase A divides the income by percentage, using integer arithmetic only. Phase B (§3) then resolves
