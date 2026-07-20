@@ -11,7 +11,7 @@ Evidence log, one entry per substage.
 | 2.5 | Allocation: contracts and phase A base split | ✅ Complete |
 | 2.6 | Allocation: phase B ceilings, redirects, termination | ✅ Complete |
 | 2.7 | Allocation: overrides, reversals, error taxonomy | ✅ Complete |
-| 2.8 | Allocation: pseudocode, worked examples, vector table | Not started |
+| 2.8 | Allocation: pseudocode, worked examples, vector table | ✅ Complete |
 | 2.9 | Cloud sync data model and merge strategy | Not started |
 | 2.10 | Validation and configuration integrity rules | Not started |
 | 2.11 | Navigation, screen inventory, per-screen states | Not started |
@@ -468,3 +468,64 @@ new income event instead.
 the engine cannot produce a conserved result, and a warning when it can but the user should know
 something unexpected happened. §6.1 lists the five warning conditions explicitly so Stage 5 does not
 have to decide.
+
+---
+
+## 2.8 — Pseudocode, worked examples and the vector table (S02.08)
+
+**Output:** `docs/ALLOCATION_ALGORITHM.md` sections 7, 8, 9, 10 — the document is now complete.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| The pseudocode is complete, integer-only and includes its assertions inline | §7 — `allocate`, `build_base_parcels`, `build_override_parcels` end to end, with A-1, A-2 and the final conservation assertion written where they run; `split` (§5.1) and `phase_b` (§3.3) reproduced in full at their own sections; a loop-bound argument for termination | ✅ |
+| All fifteen vectors tabulated with exact inputs and expected outputs | §10 — V-01…V-15 with configuration and expected line items; §10.1 maps them to the concerns they cover | ✅ |
+| Every expected value verified independently of any implementation | §10.2 — the algorithm was **executed**, not inspected; §10.4 records the run output | ✅ |
+| The fixture JSON format is defined | §9.1 — full example plus four format rules, including that exactly one of `expected_allocations` / `expected_failure` is non-null and that no decimal point may appear in a fixture | ✅ |
+| The seven required properties are listed as design requirements | §9.2 — P1…P7 with statements and notes; §9.3 states what the generator must produce | ✅ |
+
+### The verification method, and the defect it caught
+
+Substage 2.8.4 forbids carrying an unverified expected value into Stage 5. Rather than hand-check
+fifteen vectors, **the algorithm as specified was implemented in a scratch script and all fifteen
+were executed through it**, then compared against independently reasoned expectations.
+
+**This caught a genuine defect in the design document.** The split primitive in §5.1 divided by the
+constant **10000**. That is correct for both phase A applications, where weights total exactly 10000
+by validation — and wrong for override redistribution (§4.3), where the non-overridden categories'
+weights total 6000.
+
+Under the constant divisor, V-09 produces Emergency 105,000 and Trip 75,000: **180,000 against a
+`remaining` of 300,000, leaving 120,000 undistributed**, and driving `leftover` to 120,000 against a
+two-item weight list.
+
+The fix: the primitive derives its divisor from the weights it is given. §5.1 and §5.2 now say so,
+§4.3 no longer claims a scaling step happens implicitly, and §5.2 carries an explicit note that an
+implementation hardcoding 10000 **passes every phase A vector and fails only under override**.
+
+Recorded rather than silently corrected, per the manifest's `sdlc_discipline` rule. What it
+demonstrates is the concrete justification for 2.8.4: the defect survived two readings of the
+section and was invisible to inspection, because every example in §5 happens to use weights totalling
+10000.
+
+### Vector notes
+
+- **Sixteen fixture files for fifteen vectors.** V-11 covers "zero and negative income rejected",
+  but the fixture format holds one request per file, so it splits into `v11a` and `v11b`.
+- **V-05's assertion is the line-item shape, not only per-category totals.** Per §3.4, FIFO ordering
+  makes Trip receive three separate lines; a merged-parcel implementation would produce the same
+  totals and the wrong trace. Asserting only totals would let that pass.
+- **V-13 asserts a single line item**, proving the no-zero-lines rule of §2.2: A and B compute to
+  zero and must produce no ledger row at all.
+- **V-15 confirms the bound is usable, not just derived.** At exactly `MAX_MONEY_MINOR` across 40
+  categories, 37 receive 23,058,430,092,137 and 3 receive 23,058,430,092,136, summing to the input
+  exactly.
+
+### Note on the harness
+
+Two PowerShell-specific bugs in the scratch harness were fixed before the run was trusted: single-
+element arrays being unwrapped to scalars (so `.Count` on a lone hashtable returned its key count),
+and an `$_` scope collision in a nested `Where-Object`. Neither reflected a design problem, and both
+are noted only because the first masked the real defect for one run — the harness failed before it
+could disagree with the document.

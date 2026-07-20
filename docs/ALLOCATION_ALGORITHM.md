@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 2 |
 | **Derived from** | `docs/PRD.md` §4 (money model), §5.6 (interaction cases); manifest INV-01, INV-02, INV-07, INV-08 |
-| **Sections assembled** | 1, 2, 5 (substage 2.5) |
-| **Sections pending** | 3 (2.6); 4, 6 (2.7); 7, 8, 9, 10 (2.8) |
+| **Sections assembled** | 1, 2, 5 (2.5); 3 (2.6); 4, 6 (2.7); 7, 8, 9, 10 (2.8) — **complete** |
+| **Vectors** | 15 vectors in 16 fixtures, every expected value produced by executing the algorithm (§10.2) |
 
 **Stage 5 implements this document verbatim.** It is written so that implementation is a
 transcription exercise, not an invention exercise: every rule is stated, every tie is broken, every
@@ -497,14 +497,18 @@ The non-overridden categories rarely have basis points totalling 10000 between t
 overridden ones took some of that weight. Their **relative** proportions are preserved:
 
 ```
-relative_total := sum of basis_points over non-overridden categories
-share_i        := split(remaining, weights scaled to relative_total)
+share_i := split(remaining, non_overridden_categories_with_their_raw_basis_points)
 ```
 
-In practice the split primitive from §5.1 is reused directly, passing the non-overridden categories'
-raw basis points; the largest-remainder method needs only that the weights be consistent, and
-dividing by their own total is exactly what it does. **The primitive is called, never re-implemented**
-— substage 5.6.2 forbids a second rounding path, because two rounding paths eventually disagree.
+The split primitive from §5.1 is called **directly, with the non-overridden categories' raw basis
+points**. No scaling step is needed, because the primitive derives its divisor from the weights it
+is given (§5.2) — passing weights totalling 6000 makes 6000 the divisor, which is exactly the
+relative-weight semantics required here.
+
+**The primitive is called, never re-implemented** — substage 5.6.2 forbids a second rounding path,
+because two rounding paths eventually disagree. That instruction is only safe given §5.2's rule
+that the divisor comes from the inputs; an implementation that hardcodes 10000 satisfies every
+phase A vector and silently under-distributes here.
 
 Redistributing **evenly** instead of by weight is named as a pitfall by the stage plan and would
 surprise the user: someone who set Emergency to 35% and Trip to 25% expects that ratio to survive
@@ -572,6 +576,8 @@ relative_total   = 3500 + 2500 = 6000
 
 Redistribute 300,000 across Emergency and Trip by relative weight:
 
+`weight_total = 6000` — derived from the weights passed in, per §5.2.
+
 | Category | bp | `product = 300,000 × bp` | `product / 6000` | remainder |
 |---|---|---|---|---|
 | Emergency | 3500 | 1,050,000,000 | 175,000 | 0 |
@@ -584,8 +590,10 @@ Redistribute 300,000 across Emergency and Trip by relative weight:
 
 **Conservation:** 200,000 + 175,000 + 125,000 = **500,000** ✓
 
-This is vector V-09. Note that the divisor here is the relative total (6000), not 10000 — that is
-what "relative basis points" means, and getting it wrong is how redistribution silently loses money.
+This is vector V-09. **The divisor is 6000, not 10000** — see §5.2. Dividing by 10000 here yields
+105,000 and 75,000, totalling 180,000 against a `remaining` of 300,000: 120,000 would vanish. This
+is the single most likely way an implementer reusing the primitive gets redistribution wrong, and
+V-09 exists to catch it.
 
 ### 4.8 Reversal generation
 
@@ -709,18 +717,18 @@ shares summing to exactly `amount`.
 ```
 FUNCTION split(amount, weights) -> list of int64
     // weights: list of (key, basis_points, sort_order, id)
-    // PRECONDITION: sum of basis_points == 10000 exactly
+    // PRECONDITION: sum of basis_points > 0
     // PRECONDITION: 0 < amount <= MAX_MONEY_MINOR
 
-    products   := []          // exact int64, no rounding yet
+    weight_total := sum of w.basis_points over weights    // 10000 in the normal case;
+                                                          // the RELATIVE total under override (§4.3)
     floors     := []
     remainders := []
 
     FOR EACH w IN weights:                       // in given order; sorting happens later
         product   := amount * w.basis_points     // int64; bounded by §5.6
-        floors    += product / 10000             // integer division, truncates toward zero
-        remainders += product % 10000            // exact remainder, 0..9999
-        products  += product
+        floors    += product / weight_total      // integer division, truncates toward zero
+        remainders += product % weight_total     // exact remainder, 0 .. weight_total-1
 
     floor_sum := sum(floors)
     leftover  := amount - floor_sum              // ALWAYS 0 <= leftover < count(weights)
@@ -744,11 +752,29 @@ strictly less than one minor unit, so the total discarded is strictly less than 
 weights. Distributing one unit to each of the first `leftover` entries is therefore always possible
 and never exhausts the list.
 
-### 5.2 Integer division, precisely
+### 5.2 Integer division, and why the divisor is `weight_total` rather than 10000
 
-`product / 10000` is **integer division truncating toward zero**, and `product % 10000` is the
-matching non-negative remainder. Since `amount > 0` and `basis_points ≥ 0`, `product` is never
+`product / weight_total` is **integer division truncating toward zero**, and `product % weight_total`
+is the matching non-negative remainder. Since `amount > 0` and `basis_points ≥ 0`, `product` is never
 negative and the two are unambiguous. Stage 5 must not use any operation that rounds.
+
+**The divisor is the sum of the weights actually passed in, never the constant 10000.** In the two
+phase A applications (§5.3) the weights total exactly 10000, so the two are identical. But override
+redistribution (§4.3) passes only the *non-overridden* categories, whose basis points total less than
+10000 — 6000 in the worked example. Dividing those by 10000 would produce shares summing to 60% of
+the amount, leaving 40% undistributed and `leftover` enormously larger than the number of weights.
+
+> **This was a real defect in an earlier draft of this section**, caught by executing the algorithm
+> against vector V-09 rather than checking it by eye. It is recorded here rather than quietly
+> corrected, because "reuse the split primitive for redistribution" (§4.3, and substage 5.6.2's
+> instruction not to write a second rounding path) is only safe if the primitive derives its divisor
+> from its inputs. An implementation that hardcodes 10000 will pass every phase A vector and fail
+> only under override.
+
+The invariant that makes the method correct is therefore: **`sum(result) == amount` for any weight
+list whose basis points sum to a positive value** — not "whose basis points sum to 10000". The
+10000 requirement is a *configuration* rule enforced by validation (failures E-03 and E-04), not a
+precondition of this function.
 
 ### 5.3 The two applications
 
@@ -886,3 +912,313 @@ reverting. An assertion that has never fired has never been tested.
 Phase A produces, for each category with a non-zero base amount, a **parcel**: a category id and a
 pending amount. These become the initial worklist for phase B (§3) in deterministic order —
 `sort_order` then `id` — which is what makes the whole allocation reproducible.
+
+---
+
+## 7. Complete pseudocode
+
+End to end, integer-only, every loop bounded, assertions inline where they run.
+
+```
+CONSTANT MAX_MONEY_MINOR = 922_337_203_685_477      // §5.6, derived
+CONSTANT MAX_HOPS        = 32                        // §3.5
+
+FUNCTION allocate(req) -> Result<AllocationResult, AllocationFailure>
+
+    // ---------- 1. VALIDATION — return before computing anything (§6) ----------
+    IF req.income_amount_minor <= 0                 RETURN Fail(IncomeNotPositive)
+    IF req.income_amount_minor > MAX_MONEY_MINOR    RETURN Fail(IncomeExceedsMaximum)
+    IF req.period.start_ms >= req.period.end_ms     RETURN Fail(PeriodDefinitionInvalid)
+    IF req.period.anchor_day NOT IN 1..31           RETURN Fail(PeriodDefinitionInvalid)
+
+    IF sum(g.basis_points for g in req.group_shares) != 10000
+                                                    RETURN Fail(GroupBasisPointsInvalid)
+    FOR EACH g IN req.group_shares:
+        cats_in_g := [c in req.categories WHERE c.group_id == g.group_id]
+        IF g.basis_points > 0 AND cats_in_g is empty
+                                                    RETURN Fail(EmptyGroupWithNonZeroShare(g))
+        IF cats_in_g not empty AND sum(c.basis_points for c in cats_in_g) != 10000
+                                                    RETURN Fail(CategoryBasisPointsInvalid(g))
+
+    sink := lookup(req.categories, active_sink_id(req))     // business sink when scope==BUSINESS
+    IF sink is null                                 RETURN Fail(SinkMissing)
+    IF sink.ceiling_minor != null OR sink.bill_amount_minor != null
+                                                    RETURN Fail(SinkIsCapped)
+
+    FOR EACH c IN req.categories:
+        IF |c.current_balance_minor| > MAX_MONEY_MINOR   RETURN Fail(IncomeExceedsMaximum)
+        IF c.ceiling_minor    > MAX_MONEY_MINOR          RETURN Fail(IncomeExceedsMaximum)
+        IF c.bill_amount_minor > MAX_MONEY_MINOR         RETURN Fail(IncomeExceedsMaximum)
+
+    // ---------- 2. PARCEL CONSTRUCTION ----------
+    IF req.overrides is not empty:
+        parcels := build_override_parcels(req)      // §4.2; may return a failure
+        IF parcels is a failure RETURN it
+    ELSE:
+        parcels := build_base_parcels(req)          // phase A, §5
+
+    // ---------- 3. PHASE B — capacity resolution (§3.3) ----------
+    lines, diagnostics := phase_b(parcels, req, sink)
+
+    // ---------- 4. FINAL CONSERVATION ASSERTION (§3.8) ----------
+    ASSERT sum(l.amount_minor for l in lines) == req.income_amount_minor
+           ELSE THROW ConservationViolation(lines, diagnostics)   // a bug, not a failure
+
+    RETURN Ok(AllocationResult(lines, diagnostics, req.rule_version_id, summarise(lines)))
+
+
+FUNCTION build_base_parcels(req) -> list of Parcel
+    group_amounts := split(req.income_amount_minor, req.group_shares)      // §5.1
+    ASSERT sum(group_amounts) == req.income_amount_minor                    // A-1, §5.7
+
+    parcels := []
+    FOR EACH (g, amount) IN zip(req.group_shares, group_amounts):
+        IF amount == 0: CONTINUE                                            // §5.3
+        cats := [c in req.categories WHERE c.group_id == g.group_id]
+               SORTED BY (sort_order ASC, id ASC)
+        shares := split(amount, cats)                                       // §5.1, same function
+        ASSERT sum(shares) == amount                                        // A-2, §5.7
+        FOR EACH (c, share) IN zip(cats, shares):
+            IF share > 0:                                                   // no zero lines, §2.2
+                parcels += Parcel(c.id, share, reason: BASE, from: null,
+                                  hops: 0, visited: {}, bypass_capacity: false)
+    RETURN parcels
+
+
+FUNCTION build_override_parcels(req) -> list of Parcel | failure
+    // §4.2 and §4.4
+    overridden_total := 0
+    FOR EACH (cat_id, amount) IN req.overrides:
+        IF amount < 0                      RETURN Fail(OverrideNegative(cat_id))
+        IF amount > MAX_MONEY_MINOR        RETURN Fail(IncomeExceedsMaximum)
+        IF lookup(req.categories, cat_id) is null
+                                           RETURN Fail(OverrideTargetUnknown(cat_id))
+        overridden_total += amount
+    IF overridden_total > req.income_amount_minor
+                                           RETURN Fail(OverridesExceedIncome)
+
+    parcels := []
+    FOR EACH (cat_id, amount) IN req.overrides SORTED BY cat_id:
+        IF amount > 0:
+            parcels += Parcel(cat_id, amount, reason: MANUAL_OVERRIDE, from: null,
+                              hops: 0, visited: {}, bypass_capacity: TRUE)   // §4.5
+
+    remaining := req.income_amount_minor - overridden_total
+    IF remaining > 0:
+        others := [c in req.categories WHERE c.id NOT IN req.overrides.keys]
+                  SORTED BY (sort_order ASC, id ASC)
+        IF others is empty                 RETURN Fail(NoCategoriesAvailableForRemainder)
+        shares := split(remaining, others)      // divisor = their OWN total, §5.2
+        FOR EACH (c, share) IN zip(others, shares):
+            IF share > 0:
+                parcels += Parcel(c.id, share, reason: BASE, from: null,
+                                  hops: 0, visited: {}, bypass_capacity: false)
+    RETURN parcels
+```
+
+`split` is §5.1 and `phase_b` is §3.3; both are reproduced there in full and not repeated here.
+
+**Loop bounds, for the termination argument.** `build_base_parcels` is bounded by the category
+count. `phase_b`'s queue is bounded because every parcel either terminates or advances: it gains a
+hop and a visited entry, and both `MAX_HOPS` and the finite category set cap that growth, with the
+uncapped sink absorbing anything that hits either limit. No loop in this algorithm is unbounded.
+
+---
+
+## 8. Worked examples
+
+Four examples, each already worked through in full with every intermediate value shown. They are
+cross-referenced rather than repeated:
+
+| Example | Where | Demonstrates |
+|---|---|---|
+| Tie-break at equal remainders | §5.4 | Why the tie-break exists; without it the output varies by platform |
+| Ordinary rounding | §5.5 | The largest-remainder method on a simple case |
+| The chained multi-hop redirect | §3.9 | `accepted_so_far`, FIFO ordering, five line items from three categories |
+| Override with redistribution | §4.7 | The relative-total divisor, and the 120,000 that vanishes if it is 10000 |
+
+**Every figure in all four was verified by executing the algorithm**, not by inspection — see §10.2.
+
+---
+
+## 9. Golden vector fixtures and the required properties
+
+### 9.1 Fixture format
+
+Vectors are stored one per file under `test/fixtures/allocation/`. Stage 3 substage 3.8.5 builds a
+loader that reads the directory and yields cases, so **adding a vector requires no code change**.
+
+```jsonc
+{
+  "id": "V-05",
+  "description": "chained multi-hop redirect ending in an uncapped category",
+  "request": {
+    "income_amount_minor": 300000,
+    "evaluated_at_ms": 1750000000000,
+    "rule_version_id": "rv-test-001",
+    "scope": "PERSONAL",
+    "sink_category_id": "trip",
+    "business_sink_category_id": null,
+    "overrides": null,
+    "period": { "start_ms": 1748736000000, "end_ms": 1751328000000, "anchor_day": 1 },
+    "group_shares": [
+      { "group_id": "SAVINGS", "kind": "SAVINGS", "basis_points": 10000, "sort_order": 1 }
+    ],
+    "categories": [
+      { "id": "medical",   "group_id": "SAVINGS", "type": "ACCUMULATING_RESERVE",
+        "basis_points": 4000, "sort_order": 1,
+        "current_balance_minor": 420000, "ceiling_minor": 500000,
+        "bill_amount_minor": null, "allocated_in_current_period_minor": 0,
+        "redirect_target_category_id": "emergency", "is_sink": false,
+        "carry_forward_policy": "CARRY_FORWARD" }
+      // … emergency, trip
+    ]
+  },
+  "expected_allocations": [
+    { "category_id": "medical",   "amount_minor":  80000, "reason": "BASE",     "redirected_from_category_id": null,        "hop_count": 0 },
+    { "category_id": "emergency", "amount_minor": 100000, "reason": "BASE",     "redirected_from_category_id": null,        "hop_count": 0 },
+    { "category_id": "trip",      "amount_minor":  75000, "reason": "BASE",     "redirected_from_category_id": null,        "hop_count": 0 },
+    { "category_id": "trip",      "amount_minor":   5000, "reason": "REDIRECT", "redirected_from_category_id": "emergency", "hop_count": 1 },
+    { "category_id": "trip",      "amount_minor":  40000, "reason": "REDIRECT", "redirected_from_category_id": "emergency", "hop_count": 2 }
+  ],
+  "expected_total_minor": 300000,
+  "expected_failure": null,
+  "notes": "Line-item shape is part of the assertion, not just per-category totals — see §3.4."
+}
+```
+
+**Rules for the format:**
+
+- Exactly one of `expected_allocations` and `expected_failure` is non-null. A fixture format that
+  cannot express an expected failure causes the rejection cases to be quietly omitted, which is
+  named as a pitfall by substage 5.8.
+- `expected_total_minor` is asserted **in addition to** the per-item amounts, so conservation is
+  checked even if a future edit changes the line-item shape.
+- All monetary values are integers. **No decimal point may appear anywhere in a fixture** — this is
+  part of INV-01 and applies to test data as strictly as to production code.
+- `expected_allocations` is **ordered**, and the order is asserted. Determinism (P4) is otherwise
+  untested.
+
+### 9.2 The seven properties Stage 5 must verify
+
+Design requirements, not an implementer's idea. Substage 5.9 implements these over thousands of
+generated configurations.
+
+| # | Property | Statement | Note |
+|---|---|---|---|
+| **P1** | Conservation | `sum(line.amount_minor) == income_amount_minor`, exactly, for every generated case | The central property; INV-02 |
+| **P2** | Non-negativity | No line item has a negative amount, and no line has amount zero | Zero lines are suppressed (§2.2), so their absence is also asserted |
+| **P3** | Ceiling respect | No `ACCUMULATING_RESERVE` ends above its ceiling **unless** a `MANUAL_OVERRIDE` line caused it, in which case that line is marked accordingly | The exception is the I-1 policy (§4.5), so the property must encode it rather than forbid it |
+| **P4** | Determinism | Running the same request twice produces byte-identical output, including the order of `line_items` and `diagnostics` | INV-08 |
+| **P5** | Termination | Every case completes within `MAX_HOPS`, with no stack overflow and no unbounded loop | Generated configurations include deliberate cycles |
+| **P6** | Input-order independence | Shuffling the order of `categories` and `group_shares` in the request does not change the result | This is what proves the sort keys are doing the work rather than incidental input order |
+| **P7** | Scaling | With no ceilings in play, doubling the income changes each allocation by its doubled share to within at most one minor unit | Bounds rounding drift; the one-unit tolerance is inherent to largest-remainder |
+
+**P6 is the property most likely to fail on a first implementation**, because it catches any
+reliance on map iteration order — the exact defect purity rule P-7's consequence note warns about.
+
+### 9.3 Generator requirements
+
+Substage 5.9.1's generator must produce, over its case space: 1 to 60 categories across the three
+groups; valid basis-point splits totalling exactly 10000 at both levels; ceilings and balances
+including **already-over-ceiling** states; redirect graphs with long chains and deliberate cycles;
+fixed-recurring categories in varied period states; and always a valid uncapped sink.
+
+A generator that never produces the interesting cases makes every property pass vacuously — named
+as a pitfall by substage 5.9. Substage 5.9.4 requires the seed to be recorded so any failure
+reproduces.
+
+---
+
+## 10. The golden vector table
+
+Fifteen vectors. **Every expected value below was produced by executing the algorithm specified in
+this document, not by inspection** — see §10.2 for the method and §10.3 for what that caught.
+
+Configurations use a single `SAVINGS` group at 10000 basis points unless stated otherwise.
+
+| # | Case | Input | Expected result |
+|---|---|---|---|
+| **V-01** | Plain three-group split | 1,000,000 across groups 5000 / 3000 / 2000, one uncapped category each | spend **500,000**, save **300,000**, biz **200,000** · total 1,000,000 |
+| **V-02** | Largest-remainder rounding | 100 across 3333 / 3333 / 3334 | **33 / 33 / 34** · total 100 |
+| **V-03** | Rounding tie-break | 3 across 3333 / 3333 / 3334 | **1 / 1 / 1** · floors 0/0/1, remainders 9999/9999/2, leftover 2 to A and B by `sort_order` |
+| **V-04** | Single ceiling redirect | 300,000; Medical 4000bp ceiling 500,000 balance 420,000 → Buffer 6000bp uncapped | Medical **80,000** BASE; Buffer **180,000** BASE; Buffer **40,000** REDIRECT from Medical hop 1 · total 300,000 |
+| **V-05** | Chained multi-hop redirect | 300,000; the §3.9 configuration | Medical **80,000**; Emergency **100,000**; Trip **75,000** BASE + **5,000** hop 1 + **40,000** hop 2 — **five line items** · totals 80,000 / 100,000 / 120,000 = 300,000 |
+| **V-06** | Everything full lands in the sink | 100,000; A and B both at ceiling, A→B→sink | Sink **50,000** hop 1 + **50,000** hop 2 · sink total 100,000 |
+| **V-07** | Redirect cycle defended at runtime | 100,000; A→B and B→A, both full, sink present | Sink **50,000** SINK_TERMINAL from B hop 2 + **50,000** from A hop 2 · total 100,000 · two `CYCLE_DEFENDED` diagnostics · terminates |
+| **V-08** | Fixed-recurring overflow | 300,000; Internet bill 250,000 with 200,000 already allocated this period, 4000bp → Buffer | Internet **50,000** BASE; Buffer **180,000** BASE; Buffer **70,000** REDIRECT hop 1 · total 300,000 |
+| **V-09** | Override with redistribution | 500,000; Medical overridden to 200,000; Emergency 3500bp, Trip 2500bp | Medical **200,000** MANUAL_OVERRIDE; Emergency **175,000**; Trip **125,000** · total 500,000 · divisor 6000 |
+| **V-10** | Override exceeding income | 100,000 with Medical overridden to 150,000 | **Fail: `OverridesExceedIncome`** · no line items |
+| **V-11a** | Zero income | 0 | **Fail: `IncomeNotPositive`** |
+| **V-11b** | Negative income | −500 | **Fail: `IncomeNotPositive`** |
+| **V-12** | Group with share but no categories | Groups 5000 / 5000; SAVINGS has no active categories | **Fail: `EmptyGroupWithNonZeroShare`** |
+| **V-13** | Smallest indivisible income | 1 across 3333 / 3333 / 3334 | **C = 1**, a **single** line item — A and B produce no line, per §2.2 |
+| **V-14** | Simultaneous ceiling hits to one target | 100,000; A, B, C all full at 3000bp each → Buffer 1000bp | Buffer **10,000** BASE + **30,000** from A + **30,000** from B + **30,000** from C, all hop 1 · buffer total 100,000 |
+| **V-15** | Very large income near the maximum | `MAX_MONEY_MINOR` = 922,337,203,685,477 across 40 uncapped categories at 250bp each | **37 categories at 23,058,430,092,137** and **3 at 23,058,430,092,136** · total 922,337,203,685,477 exactly |
+
+**Sixteen fixture files for fifteen vectors** — V-11 is split into `v11a` and `v11b` because the
+fixture format holds one request per file.
+
+### 10.1 Coverage of this table
+
+| Concern | Vectors |
+|---|---|
+| Percentage split and rounding | V-01, V-02, V-03, V-13, V-15 |
+| Determinism and tie-breaking | V-03, V-15 |
+| Ceilings and redirects | V-04, V-05, V-06, V-14 |
+| Termination defences | V-06, V-07 |
+| Fixed-recurring period logic | V-08 |
+| Manual override | V-09, V-10 |
+| Input rejection | V-10, V-11a, V-11b, V-12 |
+| Boundary values | V-13 (smallest), V-15 (largest) |
+
+### 10.2 How these values were produced
+
+Substage 2.8.4 requires every expected value to be verified independently and forbids carrying an
+unverified value into Stage 5, where it would become "a test that enshrines a bug".
+
+The method used was stronger than hand-checking: **the algorithm as specified in §5.1, §5.2, §3.1,
+§3.3 and §4.2 was implemented in a scratch script and all fifteen vectors were executed through it.**
+Each result was then compared against the independently reasoned expectation. Where the two
+disagreed, the disagreement was investigated rather than resolved in favour of either side.
+
+### 10.3 What that caught — a genuine defect in this document
+
+Executing V-09 revealed that the split primitive, as originally written in §5.1, divided by the
+constant **10000**. That is correct for both phase A applications, where weights total exactly 10000
+— and wrong for override redistribution, where the non-overridden categories' weights total 6000.
+
+With the constant divisor, V-09 would have produced Emergency 105,000 and Trip 75,000: a total of
+180,000 against a `remaining` of 300,000, **leaving 120,000 undistributed** and driving `leftover`
+to 120,000 against a two-item weight list.
+
+The defect is now fixed in §5.1 and §5.2, with the reasoning recorded rather than silently
+corrected. It is worth stating plainly what it demonstrates: **the design would have passed every
+phase A vector and failed only under override**, and inspection had not caught it across two
+readings. This is the concrete justification for substage 2.8.4's rule.
+
+### 10.4 Verified output
+
+All fifteen vectors, executed against the corrected algorithm:
+
+```
+V-01  spend 500000 / save 300000 / biz 200000                       sum=1000000  conserved
+V-02  A 33 / B 33 / C 34                                            sum=100      conserved
+V-03  A 1 / B 1 / C 1                                               sum=3        conserved
+V-04  medical 80000 | buffer 180000 + 40000 REDIRECT hop1           sum=300000   conserved
+V-05  medical 80000 | emergency 100000 | trip 75000+5000+40000      sum=300000   conserved
+V-06  sink 50000 hop1 + 50000 hop2                                  sum=100000   conserved
+V-07  sink 50000 SINK_TERMINAL from b hop2 + 50000 from a hop2      sum=100000   conserved
+V-08  internet 50000 | buffer 180000 + 70000 REDIRECT hop1          sum=300000   conserved
+V-09  medical 200000 OVERRIDE | emergency 175000 | trip 125000      sum=500000   conserved
+V-10  FAILURE -> OverridesExceedIncome
+V-11a FAILURE -> IncomeNotPositive
+V-11b FAILURE -> IncomeNotPositive
+V-12  FAILURE -> EmptyGroupWithNonZeroShare
+V-13  C 1  (single line item; A and B suppressed)                   sum=1        conserved
+V-14  buffer 10000 BASE + 30000 from a + 30000 from b + 30000 from c sum=100000  conserved
+V-15  40 lines: 37 at 23058430092137, 3 at 23058430092136           sum=922337203685477  conserved
+```
+
+Stage 5 substage 5.8.5 must confirm these trace to this document or to a recorded hand calculation —
+they trace here, and the execution method is recorded above.
