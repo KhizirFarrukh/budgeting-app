@@ -10,7 +10,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | 1.4 | The money model in plain language | ✅ Complete |
 | 1.5 | Non-functional requirements with measurable targets | ✅ Complete |
 | 1.6 | Scope boundaries and the version 1 cut line | ✅ Complete |
-| 1.7 | Open questions and ambiguity register | Not started |
+| 1.7 | Open questions and ambiguity register | ✅ Complete |
 | 1.8 | Traceability matrix and PRD assembly | Not started |
 
 ---
@@ -428,3 +428,83 @@ FR-03 (accounts, informational-only under OQ-02's default, the least load-bearin
 - **A third disposition category introduced** — "in scope but not release-blocking" — because the
   binary in/deferred split the plan assumes produces no useful information against a brief that is
   14/15 MUST.
+
+---
+
+## 1.7 — Open questions and ambiguity register (S01.07)
+
+**Outputs:** `docs/OPEN_QUESTIONS.md`, `docs/ASSUMPTIONS.md`, `docs/PRD.md` section 8.
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.7.1 | Carry all ten manifest questions across unchanged in substance | `OPEN_QUESTIONS.md` — OQ-01…OQ-10 |
+| 1.7.2 | Add ambiguities raised in 1.1–1.6, numbered from OQ-11 | OQ-11…OQ-18 (8 new) |
+| 1.7.3 | Per question: plain-language statement, why it matters, blocking stage, options with consequences, recommended default | every entry |
+| 1.7.4 | Split BLOCKING / NON-BLOCKING, ruthlessly | Parts 1 and 2 — **5 blocking**, 13 not |
+| 1.7.5 | The blocking list as short plain numbered questions for the gate | Part 3 |
+| 1.7.6 | Every non-blocking default recorded as A-xx with impact-if-wrong and a review point | `ASSUMPTIONS.md` — 26 entries |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every open question states a recommended default | Register summary: 18 of 18 carry a default; each entry ends with a bolded recommendation | ✅ |
+| The blocking list is short enough to answer in a few minutes | 5 questions, each ~40 words in Part 3, each with a recommendation to accept or reject | ✅ |
+| No question requires understanding Flutter, databases or sync | Read every entry for jargon; the words database, schema, column, sync protocol, merge and API appear nowhere in a question body. B-1 explains its cost as "roughly twice the bookkeeping", not in storage terms | ✅ |
+| Every non-blocking default appears as a numbered assumption with impact-if-wrong | `ASSUMPTIONS.md`: 13 Part A entries map one-to-one to the 13 non-blocking questions; every row has a populated "If it is wrong" and "Review at" cell | ✅ |
+
+### The ruthlessness pass — five blocking, not ten
+
+The manifest marks OQ-01, OQ-02, OQ-03, OQ-04, OQ-05, OQ-06, OQ-07 and OQ-09 as blocking Stage 1 or
+Stage 2 — eight questions. Step 1.7.4 requires that a question block **only if design cannot
+proceed**. Re-examined against that test, five of the eight do not block, each for a specific reason
+recorded in the register:
+
+- **OQ-01 currency** — data is stored identically under either answer; only the change-later policy differs.
+- **OQ-04 target dates** — deferred with the accommodation already named (D-01).
+- **OQ-05 bill surplus** — the design plan already requires this to be an **input** (S05 5.5.3), so both answers are accommodated by construction.
+- **OQ-06 negative balances** — a display and warning policy; nothing stored changes.
+- **OQ-09 reversibility** — reversal by opposing entry is already mandatory under INV-03; only a time limit was ever in question, and "no limit" is simpler.
+
+Two Stage-1-raised questions **were** promoted to blocking because both change stored shape:
+**OQ-11** (one rule set or several) and **OQ-12** (flat or nested categories). Net result: **5
+blocking**, all five justified by "this changes the shape of the data".
+
+### Deliberate exclusions — avoiding the thirty-question anti-pattern
+
+Six flags from earlier substages were answerable from existing material and were recorded as
+assumptions rather than added to the register: F-01, F-02, F-03, F-06, F-09 and E-02. Of these, two
+are worth noting as genuine resolutions rather than dismissals:
+
+- **F-03** looked like a real ambiguity in 1.1 (percentage of gross income, or of the group's share?)
+  but the manifest's own engineering conventions state both levels explicitly. Answered, A-16.
+- **F-09** (does spending reopen headroom?) turned out **not to need a policy decision at all** — it
+  falls out of the two headroom formulas the design already specifies. A goal's room is target minus
+  balance, so spending raises it; a bill's room is bill amount minus what was collected this period,
+  which spending does not touch. The two behaviours are emergent, not chosen. Recorded as A-19.
+
+**E-02 was excluded on different grounds:** it is a design conclusion, not a user choice. Nobody
+should be asked whether overrides ought to be stored as inputs; INV-08 and INV-11 jointly determine
+the answer. Recorded as A-23 and handed to S02.07.
+
+### Counts
+
+- Questions: **18** — 10 carried, 8 new (OQ-11…OQ-18).
+- Blocking: **5** — OQ-02, OQ-03, OQ-07, OQ-11, OQ-12.
+- Assumptions: **26** — 13 from non-blocking defaults, 13 from resolved ambiguities.
+- Flags F-01…F-13 disposition: 2 promoted to blocking questions (F-04→OQ-12, F-10→OQ-11), 5 became
+  non-blocking questions (F-05→A-17, F-07→A-18, F-08→OQ-13, F-11→A-20, F-12→A-21), 6 resolved as
+  assumptions (F-01, F-02, F-03, F-06, F-09, F-13). All 13 accounted for.
+- Escalations E-01…E-04 and ESC-1.2-A / 1.5-A / 1.6-A disposition: E-01→OQ-07 (blocking),
+  E-02→A-23, E-03→A-24, E-04→OQ-03 (blocking), ESC-1.2-A→OQ-16/A-11, ESC-1.5-A→OQ-17/A-12,
+  ESC-1.6-A→OQ-18/A-13. All 7 accounted for.
+
+### Notes
+
+No blocking question was resolved by assumption — the five in Part 1 carry recommendations but no
+default is applied to them, and Stage 2's entry criteria require the user's answer or explicit
+authorisation to proceed on the recommendations. The three highest-residual-risk assumptions are
+named explicitly at the foot of `ASSUMPTIONS.md` (A-11, A-12, A-13) rather than left equal among
+twenty-six.

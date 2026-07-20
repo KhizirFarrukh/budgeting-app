@@ -1564,6 +1564,63 @@ rests on weaker evidence than every other NFR. This is a question for the user a
 
 ---
 
+## 8. Open questions
+
+Written in substage 1.7. The full register with options, consequences and recommended defaults is
+`docs/OPEN_QUESTIONS.md`; the defaults taken are recorded as numbered assumptions in
+`docs/ASSUMPTIONS.md`. This section summarises.
+
+### 8.1 The five blocking questions
+
+Design cannot proceed without these, because each changes the shape of the stored data — the one
+thing that is expensive to change after release.
+
+| # | Register id | Question | Recommendation |
+|---|---|---|---|
+| 1 | OQ-02 | Bank accounts: a label with a total, or real balances with transfers and reconciliation? | A label with a total |
+| 2 | OQ-03 | Is there a third kind of category — an open envelope with no target and no bill? | Yes. Six of the nineteen suggested categories already assume it |
+| 3 | OQ-07 | A permanent catch-all that always accepts overflow, renameable but not deletable, plus a business one? | Yes to both |
+| 4 | OQ-11 | Does everything arriving count as income, and does it all follow the same split? | Yes to both, with per-payment override |
+| 5 | OQ-12 | Do categories nest into real folders, or is "sub-category" just a category inside a group? | Flat; nesting reserved for later |
+
+### 8.2 Everything else is defaulted
+
+Thirteen further questions carry working defaults, each recorded as an assumption with its
+impact-if-wrong: currency policy (A-01), target dates deferred (A-02), bill surplus carrying forward
+(A-03), negative balances allowed with a warning (A-04), no payload encryption in v1 (A-05),
+unlimited undo (A-06), business-scoped export (A-07), one account per category (A-08), spending from
+a goal counted as spending (A-09), no transfers in v1 (A-10), backup prompting (A-11), NFR-04
+evidence strength (A-12), and the fourteen-MUST schedule (A-13).
+
+A further thirteen ambiguities (A-14…A-26) were answered from the manifest or the design plan and
+never became questions, so that the five blocking ones are not buried among trivia.
+
+### 8.3 Three things worth your attention even though they do not block
+
+- **A-11 / ESC-1.2-A.** A user who never signs in and never exports a backup loses everything if the
+  phone is lost. There is no recovery path, and this cannot be fully designed away while NFR-02
+  guarantees the app works with no account. The question is how insistently the app should prompt.
+- **A-12 / ESC-1.5-A.** NFR-04 — setup plus a first split in under five minutes, unaided — can only
+  be honestly verified by someone who has never seen the app and did not build it. Without such an
+  observer it will be reported on weaker evidence, clearly labelled.
+- **A-13 / ESC-1.6-A.** Fourteen of fifteen requirements are MUST. After genuine scoping, almost
+  nothing could be cut. Either the schedule absorbs that, or a requirement moves to SHOULD before
+  Stage 2.
+
+### 8.4 Register summary
+
+| | Count |
+|---|---|
+| Carried from the manifest | 10 |
+| Raised during Stage 1 | 8 |
+| **Total questions** | **18** |
+| Blocking Stage 2 | **5** |
+| Non-blocking, defaulted | 13 |
+| Carrying a recommended default | 18 of 18 |
+| Assumptions recorded | 26 |
+
+---
+
 ## Appendix A — Source requirement inventory
 
 Built in substage 1.1 from `00_project_manifest.json`. Wording in the "verbatim source" columns is
