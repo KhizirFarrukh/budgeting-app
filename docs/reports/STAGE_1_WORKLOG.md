@@ -9,7 +9,7 @@ Evidence log. One entry per substage, appended as each is ticked off.
 | 1.3 | User stories and acceptance criteria | ✅ Complete |
 | 1.4 | The money model in plain language | ✅ Complete |
 | 1.5 | Non-functional requirements with measurable targets | ✅ Complete |
-| 1.6 | Scope boundaries and the version 1 cut line | Not started |
+| 1.6 | Scope boundaries and the version 1 cut line | ✅ Complete |
 | 1.7 | Open questions and ambiguity register | Not started |
 | 1.8 | Traceability matrix and PRD assembly | Not started |
 
@@ -352,3 +352,79 @@ that NFR-04 rests on weaker evidence than every other NFR. Goes to the user at t
 No target was written that there is no intention of measuring — each of P-01…P-14 names the substage
 that measures it. The reference device is specified as a **class** with the exact model recorded at
 Stage 9, rather than a model named from memory, per the manifest's knowledge-freshness rule.
+
+---
+
+## 1.6 — Scope boundaries and the version 1 cut line (S01.06)
+
+**Output:** `docs/PRD.md` section 3 (§3.1–§3.7).
+
+### Work steps
+
+| Step | Action | Where the result lives |
+|---|---|---|
+| 1.6.1 | Restate manifest non-goals, add those discovered in 1.1–1.5 | §3.1 — 6 restated, **3 new** (NG-07…NG-09) |
+| 1.6.2 | Per-story in-scope or deferred, one-line justification per deferral | §3.2 — all 37 in scope, none deferred; justification given for the nine non-blocking |
+| 1.6.3 | The v1 acceptance definition as a tick-list | §3.3 — 16 tick boxes |
+| 1.6.4 | Classify every deferral schema-safe or requires-accommodation, naming the accommodation | §3.4 — 14 deferrals: **6 requiring accommodation, 8 safe** |
+| 1.6.5 | The R-05 boundary against accounting software, one sentence | §3.5 |
+| 1.6.6 | Sanity-check the cut line against both primary journeys | §3.6 |
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| The cut line is a tick-list, not a paragraph | §3.3: 16 checkbox items, each verifiable by a person holding a phone | ✅ |
+| Every deferral labelled schema-safe or requires-accommodation, with the accommodation named | §3.4: 14 deferrals in two tables; each of the 6 accommodation cases names the specific field or record change needed at v1.0 | ✅ |
+| Every step of both primary journeys supported by an in-scope capability | §3.6: J1's 22 steps and J2's 18 steps mapped to capabilities and cut-line item numbers; all 14 deferrals checked against both journeys, zero appearances | ✅ |
+| The accounting-software boundary stated in one sentence | §3.5: allocation versus obligation — the line falls where a feature must record what is owed to or by the user | ✅ |
+
+### must_not compliance
+
+- **Nothing a primary journey depends on was deferred** — verified by checking all 14 deferrals
+  against all 40 primary-journey steps in §3.6.
+- **No deferral needing accommodation was left unnamed** — all six name the specific field or record
+  change: reserved target date, ceiling kind plus parameter, parent reference, remote encryption
+  marker, soft budget plus period, rule-set discriminator.
+
+### Findings
+
+**Two deferrals are conditional on unresolved ambiguities, and both change Stage 2's data design.**
+D-03 (category hierarchy) depends on F-04 — whether FR-07's "sub-categories" means a tree or merely
+categories inside the business group. D-06 (per-source rules) depends on F-10 — whether business
+revenue follows the same three-way split. If either resolves the other way, it stops being a
+deferral and becomes v1 scope. Both must be answered before Stage 2 opens, and both are carried to
+1.7 accordingly.
+
+**D-14 is already accommodated by accident.** OQ-02's Reading B (accounts holding real balances)
+would normally be an expensive later addition, but ledger entries already carry an account
+reference, so per-account movement is recordable from v1.0. Reading B needs only an additive
+nullable arrival-account reference on income events. Recorded so this is not re-litigated in Stage 2
+as though it were a migration risk.
+
+**Three new non-goals.** NG-07 (no forecasting, projection, advice or scoring) surfaced from the
+Stage 8 plan's explicit exclusion and deserves to be a stated non-goal rather than a buried
+instruction, because a predictive feature changes the product's liability posture. NG-08 (no
+developer backend at any version) was implicit in INV-05 and NFR-01 but never stated as permanent.
+NG-09 (no web version) appears in the manifest's platform block but was not in the non-goals list.
+
+### Escalation raised
+
+**ESC-1.6-A — the brief leaves almost nothing to cut.** Fourteen of fifteen FRs are MUST, so after a
+genuine scoping attempt all 37 stories are in scope and only nine are non-blocking. The stage plan's
+own warning — "a cut line so generous that Stage 6 never ends" — applies directly. Rather than
+manufacture cuts the brief does not permit, the finding is named: either the schedule accommodates a
+fourteen-MUST v1, or an FR is renegotiated to SHOULD before Stage 2. Candidates named if wanted:
+FR-03 (accounts, informational-only under OQ-02's default, the least load-bearing MUST) and FR-14
+(already SHOULD, reducible to CSV export alone). User's call at the gate.
+
+### Deviations from the stage plan
+
+- **Sync classified in-scope-but-not-release-blocking**, rather than in scope with no further
+  qualification. FR-09 is a MUST and will be built, but making it a release blocker hands Google's
+  OAuth verification timeline a veto over the release date. This mirrors the manifest's own R-04
+  mitigation and is recorded so the choice is deliberate. The consequence is stated in §3.6: failure
+  journeys FJ-4 and FJ-5(a) are unavailable in a pre-verification release.
+- **A third disposition category introduced** — "in scope but not release-blocking" — because the
+  binary in/deferred split the plan assumes produces no useful information against a brief that is
+  14/15 MUST.

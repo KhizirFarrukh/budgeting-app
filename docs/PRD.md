@@ -4,8 +4,8 @@
 |---|---|
 | **Status** | In progress — Stage 1 |
 | **Source** | `prompts/00_project_manifest.json` (schema 4.0.0) |
-| **Sections assembled** | 2 (1.2), 4 (1.4), 5 (1.3), 6 and 7 (1.5), Appendix A (1.1) |
-| **Sections pending** | 1, 3, 8, 9, assembled across substages 1.6–1.8 |
+| **Sections assembled** | 2 (1.2), 3 (1.6), 4 (1.4), 5 (1.3), 6 and 7 (1.5), Appendix A (1.1) |
+| **Sections pending** | 1, 8, 9, assembled across substages 1.7–1.8 |
 
 > Sections are written across substages 1.2 to 1.8 and assembled in order in 1.8.
 > Appendix A was written first, in 1.1, so the finished document carries its own provenance.
@@ -311,6 +311,179 @@ percentages must total 100 and is a real data-model question for Stage 2.
 **F-12 (new ambiguity, to 1.7)** — FJ-4 step 3 requires that a new install detect existing cloud
 data *before* writing local configuration. No requirement states this ordering, and getting it
 wrong produces two divergent configurations that then have to be merged.
+
+---
+
+## 3. Scope, deferrals and the version 1 cut line
+
+Written in substage 1.6. Three distinct things are separated here, because conflating them is how
+scope decisions go wrong:
+
+- **Non-goals** — never built, at any version.
+- **Deferred** — will be built later, and the only question that matters is whether deferring costs
+  a migration.
+- **In scope but not release-blocking** — built for v1, but its absence would not stop a release.
+
+### 3.1 Non-goals
+
+Restated from the manifest, plus those discovered during substages 1.1 to 1.5.
+
+| ID | Non-goal | Source |
+|---|---|---|
+| NG-01 | No bank API or open-banking integration. Income and spending are entered manually. | Manifest |
+| NG-02 | No multi-user or shared household accounts. | Manifest |
+| NG-03 | No investment tracking, loans, debt payoff planning or net-worth calculation. | Manifest |
+| NG-04 | No third-party analytics, no crash reporting containing financial data, no ad SDKs. | Manifest |
+| NG-05 | No currency conversion or multi-currency portfolios. One currency per install. | Manifest |
+| NG-06 | No iOS in v1 — but no Android-only abstraction may enter the domain layer and block a later port. | Manifest platform block |
+| **NG-07** | **No forecasting, projection, advice or scoring.** The app shows what happened, never what will happen or what the user ought to do. | **New — discovered 1.5; a predictive feature would need its own requirement and changes the product's liability posture** |
+| **NG-08** | **No developer-operated backend, proxy, relay or metrics endpoint, at any version.** | **New — implicit in INV-05 and NFR-01, named here as permanent rather than merely absent** |
+| **NG-09** | **No web version.** | **Manifest platform block, not previously listed as a non-goal** |
+
+### 3.2 Story disposition
+
+**All 37 stories (US-001…US-037) are in scope for version 1. None is deferred.**
+
+That is not the result of generous scoping — it is a property of the brief. Fourteen of the
+manifest's fifteen feature requirements are marked MUST; only FR-14 (reports) is SHOULD. There is
+almost nothing the brief itself permits cutting. **See ESC-1.6-A** — this is a schedule risk that
+should be visible now rather than discovered in Stage 6.
+
+The real distinction available is therefore between in-scope-and-blocking and
+in-scope-but-not-blocking:
+
+| Disposition | Stories | Count |
+|---|---|---|
+| In scope, release-blocking | US-001…US-032 except US-028…US-031 | 28 |
+| In scope, **not** release-blocking — cloud sync | US-028, US-029, US-030, US-031 | 4 |
+| In scope, **not** release-blocking — reports and export | US-033…US-037 | 5 |
+
+**Why sync is in scope but not release-blocking.** FR-09 is a MUST and will be built. But the app
+delivers its daily value with no account linked at all (NFR-02 guarantees this), and R-04 warns that
+Google's OAuth verification for the app-data scope can take weeks of calendar time that the team
+does not control. Making sync a release blocker would hand a third party a veto over the release
+date. The manifest's own R-04 mitigation says the same thing: *"keep the app fully functional
+without sign-in so an unverified build is still shippable to testers."* Sync ships when verification
+clears; the app does not wait for it.
+
+### 3.3 The version 1 cut line
+
+The shortest set of capabilities that makes this app worth opening daily. **Anything not on this
+list does not block release.**
+
+- [ ] **1.** A first-time user completes setup by accepting defaults, in under two minutes, and lands on a dashboard
+- [ ] **2.** Every suggested category can be renamed, retyped, re-targeted or removed, and custom categories can be added
+- [ ] **3.** Group and within-group percentages can be set, and cannot be saved unless each totals exactly 100
+- [ ] **4.** An income event can be recorded, and its split previewed before confirming
+- [ ] **5.** The previewed amounts total the entered amount exactly, at one minor unit, at typical values, and at the documented maximum
+- [ ] **6.** A full category's overflow reaches the category the user named, and every hop is explained in the preview
+- [ ] **7.** A chain where everything is full terminates at the catch-all, by name
+- [ ] **8.** A fixed bill stops collecting once funded for its period, and its surplus visibly moves on
+- [ ] **9.** The split for a single payment can be adjusted by hand, and cannot be confirmed unless it totals exactly
+- [ ] **10.** A confirmed income event can be undone, restoring every balance exactly, with both entries visible in history
+- [ ] **11.** A spend can be recorded in seconds, and the category balance falls by exactly that amount
+- [ ] **12.** The dashboard shows every category's balance and ceiling progress, and updates without a manual refresh
+- [ ] **13.** History is filterable and its totals agree with the dashboard
+- [ ] **14.** Business and personal figures never mix, and a personal-only user sees no business surface
+- [ ] **15.** All fourteen of the above work with no network and no Google account, on a device that has never been online
+- [ ] **16.** A complete backup can be exported and restored, reproducing every balance exactly
+
+Sixteen items. Every one is verifiable by a person holding a phone, and each maps to stories already
+written in §5.
+
+### 3.4 Deferrals, classified — the load-bearing output
+
+Every deferred feature is labelled **schema-safe** (can be added later without migrating existing
+data) or **requires accommodation now** (adding it later would force a migration unless something is
+put in the schema at v1.0). Where accommodation is required, it is named explicitly, because an
+unnamed accommodation is an unpaid debt.
+
+#### Requires accommodation now — six items
+
+| ID | Deferred feature | Why deferred | **Accommodation required at v1.0** |
+|---|---|---|---|
+| D-01 | Target dates on accumulating categories, with a suggested monthly contribution (OQ-04) | Several seeded categories are deadline-driven, but "on track" calculations are a feature in their own right | A nullable **target date** on every category, present and documented as reserved but unused. *(Already required by the design plan at 2.3.3.)* |
+| D-02 | Ceilings expressed as a formula rather than an amount — "six months of spending" (IMP-06, escalation E-03) | A derived ceiling is recomputed from history, not stored; it changes what a ceiling *is* | A **ceiling kind discriminator** plus a **parameter field** on every category. Without it, every category row must be migrated when the second kind of ceiling appears. |
+| D-03 | True category hierarchy — categories nested inside categories (ambiguity F-04) | FR-07's word "sub-categories" may mean only "categories within the business group". If it means a tree, that is materially more scope | A nullable **parent category reference** (self-referencing) on every category. **Conditional on F-04** — if F-04 resolves to "a tree is wanted in v1", this is not a deferral at all. |
+| D-04 | Passphrase encryption of the cloud payload (OQ-08) | Manifest default is no encryption in v1; a forgotten passphrase is an unrecoverable failure mode | An **encryption-scheme field in the remote manifest file**, written from v1.0 with the value "none". Without it, a later client cannot distinguish an unencrypted payload from a corrupt one, and cannot safely mix encrypted and unencrypted devices during rollout. *(Remote format only — the local database is unaffected.)* |
+| D-05 | A soft monthly budget on envelope categories that warns but never redirects (part of the OQ-03 default) | It adds warning states and a period concept to a category type whose whole point is having no cap; no FR requires it | A nullable **soft budget amount** and its **period** on every category. |
+| D-06 | Different distribution rules per income source — salary split one way, business revenue another (ambiguity F-10) | The brief describes one rule set applying to all income | A **discriminator on the rule-version record** identifying which rule set it belongs to, so more than one can exist concurrently. **Conditional on F-10** — if F-10 resolves to "business revenue uses a business-only split", this is v1 scope, not a deferral. |
+
+**D-03 and D-06 are conditional and both depend on unresolved ambiguities.** If either resolves the
+other way, it moves from "deferred with accommodation" to "in scope", which changes Stage 2's data
+design materially. Both must be answered before Stage 2 begins.
+
+#### Schema-safe to defer — eight items
+
+| ID | Deferred feature | Why it is safe |
+|---|---|---|
+| D-07 | Transfers between categories | A future transfers table plus a new movement-source value. Ledger entries already carry a source kind and a source reference, so nothing existing changes. Enumerations are stored as stable strings, so a new value is additive. |
+| D-08 | Scheduled or recurring income — auto-logging a salary monthly | A new schedule table that writes ordinary income events. No existing table changes. |
+| D-09 | Reminders and notifications | New table plus platform integration; no financial record is touched. |
+| D-10 | Home screen widgets | Read-only projection of existing data. |
+| D-11 | Receipt or photo attachments | A new table referencing an existing ledger entry. |
+| D-12 | Localisation into other languages | No schema at all. The accommodation is behavioural and **already required**: seeded strings externalised (design plan 4.7.7) and all user-facing strings in one place (6.11.6). |
+| D-13 | An iOS version | No schema. The accommodation is NG-06, already a binding constraint on the domain layer. |
+| D-14 | Account-level balances, transfers and statement reconciliation — OQ-02 Reading B | **Already accommodated by accident, and worth stating so it is not re-litigated:** ledger entries carry an account reference, so per-account movement is recordable from v1.0. Reading B additionally needs a nullable arrival-account reference on income events, which is an additive nullable column, not a migration of existing rows. |
+
+**Total: fourteen deferrals — six needing accommodation, eight safe.** Every accommodation is named.
+None is left as "we'll deal with it later".
+
+### 3.5 The boundary against accounting software
+
+R-05 warns that the business feature set could turn this into accounting software. The line, in one
+sentence:
+
+> **PookieBudget records where money was *allocated*; the moment a feature requires recording what
+> is *owed to or by* the user — invoices, receivables, payables, tax liability, profit-and-loss or a
+> chart of accounts — it belongs in accounting software and not in this app.**
+
+Practically, that rules out: invoicing and quotes; customer and supplier records; VAT/GST or
+income-tax computation; cost of goods sold and margin analysis; payroll; depreciation; double-entry
+journals and trial balances; anything producing a document for a tax authority.
+
+It permits, and v1 delivers: ring-fencing business money as it arrives, keeping business balances
+visually and structurally separate from household money, and exporting business-scoped records so an
+accountant can do the accounting elsewhere. **The export is the boundary** — this app hands the data
+to accounting software rather than becoming it.
+
+Any proposed business feature that crosses this line is raised as an open question, never
+implemented inline.
+
+### 3.6 Journey sanity check
+
+Every step of both primary journeys must be supported by an in-scope capability — nothing a primary
+journey depends on may be deferred.
+
+| Journey segment | Steps | Supporting capabilities | Cut-line items |
+|---|---|---|---|
+| J1-A first launch to dashboard | 1–11 | Onboarding, currency, scope choice, suggested categories, percentages, optional ceilings, optional accounts | 1, 2, 3 |
+| J1-B first salary | 12–17 | Income entry, live preview, conservation, confirm, result | 4, 5, 12 |
+| J1-C spend and return next day | 18–22 | Spending entry, dashboard, category detail, ceiling progress | 11, 12 |
+| J2-A business setup | 1–11 | Scope with business, business categories, ceilings with redirect target, accounts, scope separation | 1, 2, 3, 14 |
+| J2-B business income overflowing a ceiling | 12–18 | Preview, headroom, redirect with named destination, hop explanation, confirm | 5, 6, 7 |
+
+**Result: every one of J1's 22 steps and J2's 18 steps is supported by an in-scope, release-blocking
+capability.** No primary journey touches any deferred feature — checked against all fourteen
+deferrals in §3.4; none of target dates, derived ceilings, hierarchy, payload encryption, soft
+budgets, per-source rules, transfers, scheduling, notifications, widgets, attachments, localisation,
+iOS or account reconciliation appears in either journey.
+
+The failure journeys FJ-4 and FJ-5(a) depend on sync, which is in scope but not release-blocking
+(§3.2). Those two journeys are therefore unavailable in a pre-verification release — stated here so
+the limitation is deliberate rather than discovered.
+
+### 3.7 Escalation from this substage
+
+**ESC-1.6-A — the brief leaves almost nothing to cut, and that is a schedule risk.**
+Fourteen of fifteen feature requirements are MUST. After a genuine attempt at scoping, all 37
+stories are in scope and only nine are non-blocking. The plan's own warning about "a cut line so
+generous that Stage 6 never ends" applies directly, and the honest response is not to pretend
+otherwise but to name it: **either the schedule accommodates a fourteen-MUST v1, or one or more FRs
+must be renegotiated to SHOULD before Stage 2 begins.** The most plausible candidates, if
+renegotiation is wanted, are FR-03 (accounts — informational only under OQ-02's default, and the
+least load-bearing MUST) and FR-14 (already SHOULD, and could be reduced to CSV export alone).
+Recorded, not resolved — this is the user's call at the gate.
 
 ---
 
