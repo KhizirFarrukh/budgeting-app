@@ -5,7 +5,7 @@ Evidence log, one entry per substage.
 | Substage | Name | Status |
 |---|---|---|
 | 2.1 | State management decision | ✅ Complete |
-| 2.2 | Layering, dependency rule and directory structure | Not started |
+| 2.2 | Layering, dependency rule and directory structure | ✅ Complete |
 | 2.3 | Data model: entities, tables and columns | Not started |
 | 2.4 | Data model: constraints, indexes, balances, migrations | Not started |
 | 2.5 | Allocation: contracts and phase A base split | Not started |
