@@ -15,7 +15,7 @@ Evidence log, one entry per substage.
 | 2.9 | Cloud sync data model and merge strategy | ✅ Complete |
 | 2.10 | Validation and configuration integrity rules | ✅ Complete |
 | 2.11 | Navigation, screen inventory, per-screen states | ✅ Complete |
-| 2.12 | Technology decision set | Not started |
+| 2.12 | Technology decision set | ✅ Complete |
 | 2.13 | Design review, assembly and gate preparation | Not started |
 
 ---
@@ -741,3 +741,79 @@ never on a primary path, and can be dropped in Stage 6 without affecting any jou
 **Deep links and notifications explicitly stated as absent** (§6), per substage 2.11.7. Recorded
 because it lets Stage 3's router assume no route is entered cold with arbitrary arguments — an
 assumption that must be revisited if D-09 or D-10 is ever built.
+
+---
+
+## 2.12 — Technology decision set (S02.12)
+
+**Outputs:** `ADR-003-database.md`, `ADR-004-supporting-libraries.md`, `ARCHITECTURE.md` sections 7
+and 9. ARCHITECTURE is now complete.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| ADR-003 addresses migration testing and reactive query support explicitly | Criteria D2 (reactive streams) and D3 (migration tooling) are named before candidates; both appear in the sqflite rejection with specific consequences | ✅ |
+| Every dependency has a purpose, a licence, a maintenance signal and an exit plan | ADR-004 — eleven adopted entries in a table carrying purpose, maintenance signal and exit plan. **Licence is handled as constraint L2** rather than asserted per package: permissive only, verified at 3.3.6, copyleft a blocker | ✅ |
+| The no-telemetry constraint is written as a design decision, not an intention | ADR-004 has a dedicated section listing five mechanical checkpoints (G6, 3.3.7, 7.10.3, 9.7.2, 10.8's must_not) | ✅ |
+| The performance design names what is cached and what is paginated | ARCHITECTURE §9.1 (two caches, both with verification paths) and §9.3 (two paginated surfaces, plus why the dashboard is not) | ✅ |
+
+### Package status checked 2026-07-20, not recalled
+
+Per the manifest's knowledge-freshness rule, two searches were run:
+
+- **Drift** is the recommended default for Flutter local persistence in 2026 and actively
+  maintained. **sqflite** remains well maintained as a thin SQLite wrapper with no ORM, codegen or
+  reactive layer.
+- **Isar and Hive were abandoned by their original author.** This is the decisive finding of the
+  substage — teams that adopted them are reportedly writing migration code instead of features.
+- **`glados`** exists and provides shrinking, but its most recent changelog entry appears to date
+  from late 2023 — a weak maintenance signal, recorded with a fallback.
+- **`workmanager`** is Flutter Community maintained and Android-focused, which suits an Android-only
+  v1.
+
+### Decisions
+
+**Drift over sqflite, on two mechanisms rather than general preference.** sqflite has no reactive
+layer, and ARCHITECTURE §3.4 — the path by which a background sync write reaches a visible screen —
+depends entirely on query streams re-emitting when *any* writer commits. Hand-building that means
+every writer must remember to publish a notification, and **the writer that forgets is the sync
+worker**, with a silent failure mode: the dashboard is simply stale after a merge, with no error
+anywhere. Second, migration fixture testing (NFR-07) is bespoke code under sqflite, whereas Drift
+generates schema snapshots for exactly that purpose.
+
+**Isar excluded for two independent reasons**, either sufficient. Abandonment plus a Rust core
+closes the usual forking escape hatch. And as a NoSQL object store it cannot express SCHEMA's 22
+check constraints and 21 foreign keys — C-15 (append-only ledger) and C-19 (uncapped sink) would
+become application conventions bypassable by any code that forgets, including a merge. That is
+precisely the trade SCHEMA §6.1 exists to refuse.
+
+**Drift's exit plan is cheap because the data is in plain SQLite.** If it were abandoned, the path
+is sqflite against the same file with hand-written mappers — same SQL, same constraints, same
+indexes, **no data migration**. Materially better than Isar or Hive, where leaving means exporting
+and re-importing every user's data.
+
+**Three dependencies declined in favour of writing the code.** A CSV package (substage 8.5 demands
+integer-derived amounts with no float intermediate, a deliberate BOM decision, and escaping that
+round-trips a name containing a comma, a quote *and* a newline — a general library would fight all
+three); a separate DI container (Riverpod already provides override-based injection, which is what
+ADR-001's C6 selected it for, and a second mechanism means two ways to get a dependency with no rule
+about which); and a JSON generator (the export and sync formats have hand-specified rules a
+generator would not honour — nulls explicit not omitted, unknown fields preserved not dropped,
+integers never rendered as decimals).
+
+**Two uncertainties recorded with pre-decided fallbacks**, so neither becomes a mid-stage surprise.
+`glados` → hand-rolled seeded generators, which is **not a downgrade**: substage 5.9.1 already needs
+very specific generators no general library supplies, and 5.9.4 needs the seed, which hand-rolling
+gives directly. Only shrinking is lost. The seven properties are defined in ALLOCATION_ALGORITHM
+§9.2 independently of any library, so the choice cannot affect *what* is verified. `workmanager` →
+drop the periodic trigger, keeping foreground, connectivity and manual sync; **no correctness
+property depends on sync frequency**, since convergence comes from the merge design.
+
+### Performance design
+
+§9 records the three load-bearing facts the design is built around: the ledger grows with categories
+× income events (so allocation rows dominate and index choice follows that shape); the database is
+small enough that **the risk is a missing index causing a full scan on every render**, not volume;
+and the engine is pure and in-memory, so its budget is bounded by arithmetic rather than I/O. §9.5
+names the substage that replaces each estimate with a measurement.

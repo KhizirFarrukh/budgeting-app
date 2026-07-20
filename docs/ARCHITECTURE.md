@@ -4,8 +4,7 @@
 |---|---|
 | **Status** | In progress — Stage 2 |
 | **Derived from** | `docs/PRD.md` (approved Stage 1), `00_project_manifest.json` |
-| **Sections assembled** | 1, 2, 4, 8, 10 (2.2); 3 (2.1); 5, 6 (2.9) |
-| **Sections pending** | 7, 9 (2.12) |
+| **Sections assembled** | 1, 2, 4, 8, 10 (2.2); 3 (2.1); 5, 6 (2.9); 7, 9 (2.12) — **complete** |
 
 Companion documents: `SCHEMA.md` (data design), `ALLOCATION_ALGORITHM.md` (the engine),
 `NAVIGATION.md` (screens and flow), `decisions/ADR-*.md`.
@@ -693,6 +692,105 @@ persisted rather than held in memory.
 **Device id** is generated once at install and persisted. It is **never derived from a hardware
 identifier** (substage 7.4.4): hardware ids are a privacy problem, they are restricted on modern
 Android anyway, and a random UUID serves the purpose completely.
+
+---
+
+## 7. Technology decisions
+
+Decided in substage 2.12. Full reasoning in the ADRs; this is the shopping list Stage 3 acts on
+without re-litigating anything.
+
+| Concern | Choice | ADR |
+|---|---|---|
+| State management and DI | Riverpod 3.x with code generation | ADR-001 |
+| Cloud storage target | Google Drive `appDataFolder` | ADR-002 |
+| Local database | Drift (SQLite) with code generation | ADR-003 |
+| Sign-in | `google_sign_in` | ADR-004 |
+| Drive client | `googleapis` + `googleapis_auth` | ADR-004 |
+| Identifiers | `uuid` — v7 for ledger rows, v4 for configuration (§8.6) | ADR-004 |
+| Connectivity | `connectivity_plus` — triggers sync, never gates it | ADR-004 |
+| Paths and sharing | `path_provider`, `share_plus` | ADR-004 |
+| Background scheduling | `workmanager` — **verify at 3.3**, fallback recorded | ADR-004 |
+| Charting | `fl_chart` — presentation-only | ADR-004 |
+| Mocking | `mocktail` — no codegen | ADR-004 |
+| Property testing | `glados` — **verify at 3.3**, fallback recorded | ADR-004 |
+| CSV | **Written by hand**, no package | ADR-004 |
+| JSON serialisation | **Written by hand**, no generator | ADR-004 |
+
+**No analytics, crash reporting, advertising or telemetry dependency may be added at any stage.**
+Enforced by guard G6 over the *resolved* tree (§2.3), re-verified at 3.3.7, 7.10.3 and 9.7.2.
+
+**Versions are not pinned here.** Substage 3.3.1 resolves them from pub.dev at implementation time
+and `DEPENDENCIES.md` records what was actually used, per the manifest's knowledge-freshness rule.
+
+---
+
+## 9. Performance design
+
+The design implied by the choices above, against NFR-06's fourteen budgets (PRD §6.6) and the volume
+model (PRD §7).
+
+### 9.1 What is cached
+
+| Cached | Where | Invalidation | Why |
+|---|---|---|---|
+| **Category balances** | `balance_cache`, device-local | Updated inside the same transaction as every ledger write; marked stale after a merge | The dashboard shows every category and re-renders on every reactive emit. A grouped scan costs 40–80 ms at Heavy, paid per emit rather than per navigation (SCHEMA §7.1) |
+| **Period aggregates for reports** | Data layer, Stage 8 | On any ledger change, plus a force-recompute path | Report aggregation touches the whole ledger; P-08 and P-09 budget 1 s and 2 s |
+
+**Nothing else is cached.** In particular **no balance is ever held in the state layer** (§3.2) —
+that would create a second copy no recompute-and-compare verifies.
+
+**Every cache has a verification path back to the ledger.** SCHEMA §7.1's two-tier verifier runs a
+cheap count check on every cold start and a full recompute after every merge, before every export,
+and on demand.
+
+### 9.2 What is computed lazily
+
+| Lazily | Trigger |
+|---|---|
+| Report aggregates | First view of a period; not precomputed on write |
+| Ceiling progress | Derived from a balance already in hand — arithmetic, not a query |
+| Per-account totals | On viewing the account list; a sum over that account's linked categories |
+| The allocation preview | On keystroke, **debounced**, P-07 budget 100 ms at 40 categories |
+
+### 9.3 What is paginated
+
+| Paginated | Page size | Why |
+|---|---|---|
+| `Transaction History` | Lazy-loaded pages | 67,000 ledger rows at Heavy, 141,000 at Stress. Loading all of it to compute running balances is the pitfall substage 6.9 names |
+| `Category Detail` recent entries | Fixed recent window, with a link into full history | The detail screen answers "what happened lately", not "show me everything" |
+
+**The dashboard is not paginated** — it shows at most ~100 categories (PRD §7.1 Stress), which is a
+list, not a feed.
+
+### 9.4 The load-bearing performance facts
+
+Three facts from PRD §7 that this design is built around:
+
+1. **The ledger grows with categories × income events, not income events alone** (PRD §7.2). At the
+   Heavy profile allocation rows are 80% of the table and at Stress 89%. Every index in SCHEMA §5.5
+   is chosen against that shape, and it is why one candidate index was rejected — `ledger_entries`
+   is the highest-volume table, so every additional index is paid on every allocation write.
+2. **The whole database is small** — under 150,000 rows even at Stress, roughly 70 MB with indexes.
+   The performance risk is not volume; it is **a missing index turning a 5 ms query into a full scan
+   executed on every dashboard render**. Hence substage 2.4.3's rule that every index names its
+   query, and 4.6.1/8.1.5's requirement to verify index use by **query plan** rather than assumption.
+3. **The engine is pure and in-memory**, so P-05's 50 ms budget across 100 categories is bounded by
+   arithmetic, not I/O. Its inputs are gathered before it runs (§10.1).
+
+### 9.5 Where measurement replaces estimate
+
+Every figure in this section is an estimate until measured. The substages that replace them:
+
+| Estimate | Measured at |
+|---|---|
+| Balance recompute cost | S04.6.6, against the five-year synthetic dataset |
+| Engine allocation time | S05.10.1, at 10 / 40 / 100 categories plus a pathological all-ceilings case |
+| Aggregation and report timings | S08.1.8 |
+| Every NFR-06 budget on a real device | S09.6, naming the device |
+
+Substage 5.10.2's rule applies throughout: **profile before optimising, and never trade correctness
+for speed** — any optimisation must leave every golden vector and every property passing unchanged.
 
 ---
 
