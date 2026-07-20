@@ -14,7 +14,7 @@ Evidence log, one entry per substage.
 | 2.8 | Allocation: pseudocode, worked examples, vector table | ✅ Complete |
 | 2.9 | Cloud sync data model and merge strategy | ✅ Complete |
 | 2.10 | Validation and configuration integrity rules | ✅ Complete |
-| 2.11 | Navigation, screen inventory, per-screen states | Not started |
+| 2.11 | Navigation, screen inventory, per-screen states | ✅ Complete |
 | 2.12 | Technology decision set | Not started |
 | 2.13 | Design review, assembly and gate preparation | Not started |
 
@@ -670,3 +670,74 @@ deleted redirect target → reassign to the group's sink; percentages no longer 
 proportional redistribution by largest remainder; sink deleted or archived → restore it; cycle formed
 by two valid edits → break at the newest-HLC edge; account deleted with categories still linked →
 unlink; a group whose categories were all deleted → zero its share and redistribute.
+
+---
+
+## 2.11 — Navigation, screen inventory and per-screen states (S02.11)
+
+**Output:** `docs/NAVIGATION.md`, complete.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every PRD journey step maps to a named screen, none homeless | §1.5 — a coverage table over all 12 journeys; **all 40 primary-journey steps** (J1's 22, J2's 18) and all 7 failure journeys mapped to named screens | ✅ |
+| The navigation graph has no unreachable screen and no dead end | §2.1 — checked against the Mermaid graph in §2; every screen has an inbound edge and an outbound or back path | ✅ |
+| Android back behaviour specified for every multi-step flow | §4 — nine flows specified | ✅ |
+| Every screen has a defined empty, loading and error state | §7 — 22 screens × 3 states; "n/a" used only where a state genuinely cannot occur, and the distinction from "not yet designed" is stated | ✅ |
+| The personal-only user's experience is specified explicitly | §5.1 — no business surface at all, not an empty group or disabled entry; enabling later requires a rebalance to exactly 100 | ✅ |
+
+### Counts
+
+- Screens: **22** — the PRD §2.3 label set of 21 carried through unchanged, plus one addition.
+- Routes: 22, with `Category Selection` parameterised by group and visited once per active group.
+- Journeys covered: 12 (2 primary, 7 failure, plus 3 J1/J2 sub-segments).
+- Back-behaviour flows: 9.
+- Per-screen states defined: 66.
+
+### Decisions
+
+**A central scope filter, not a business tab or a global mode switch.** Reasoned against P2's actual
+fear (PRD §2.2) rather than in the abstract. A separate tab duplicates every screen, and duplicated
+screens drift apart; it also implies business is a *place* rather than a property of the money. A
+global mode switch risks the worst failure available here — the user misreads which mode they are in
+and files a household spend against inventory. A central filter shows both scopes together but never
+combined, each labelled, **with no mode to be wrong about**.
+
+**A declarative router, justified on two specific needs** rather than general preference: startup
+routing is state-driven (`onboarding_state` picks between three destinations at cold start), and
+onboarding must resume after process death, which is a redirect under route-per-step but a
+serialisation problem under a single stateful widget. Deep links are out of scope, so they form no
+part of the argument.
+
+**Back from `Allocation Preview` preserves the entered amount, label, date and note.** Called out
+separately in §4 because losing a typed amount when the user backs out to check something is a trust
+failure, not an inconvenience.
+
+**Back from `Income Confirmed` goes to the Dashboard, not the preview.** The event is written;
+re-entering the preview would imply it is still editable. Undo is available from the confirmation
+screen and from history instead.
+
+**No confirm-to-exit on the Dashboard.** Nothing is in flight, and a confirmation prompt on the home
+screen is a well-known irritation.
+
+**`Transaction History` distinguishes "no history" from "no results for this filter" in wording.**
+Two different facts; one empty state for both would tell the user their records had vanished.
+
+**Two error states singled out in §7.1** as mattering more than the rest. `Dashboard`: if balance
+derivation fails, blank or zero would read as "your money is gone", so it shows the last known
+figures clearly marked stale. `Income Confirmed`: the message must state plainly that **nothing was
+recorded**, because ambiguity leads a user to re-enter a payment that already exists — and duplicate
+income is a money bug.
+
+### Deviation
+
+**One screen has no PRD journey: `Diagnostics`.** Substage 2.11.1 forbids screens no journey reaches,
+so this is declared rather than quietly added (§1.4). It exists because SCHEMA §7.1 requires a
+user-facing entry point for the recompute-and-compare verifier and §6.8 requires the repair log to be
+surfaced — both are features with nowhere to live otherwise. It is reachable only from Settings,
+never on a primary path, and can be dropped in Stage 6 without affecting any journey.
+
+**Deep links and notifications explicitly stated as absent** (§6), per substage 2.11.7. Recorded
+because it lets Stage 3's router assume no route is entered cold with arbitrary arguments — an
+assumption that must be revisited if D-09 or D-10 is ever built.
