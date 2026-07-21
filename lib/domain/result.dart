@@ -16,15 +16,15 @@ sealed class Result<T, F> {
 
   /// The value, or null when this is a [Failure].
   T? get valueOrNull => switch (this) {
-        Success<T, F>(:final value) => value,
-        Failure<T, F>() => null,
-      };
+    Success<T, F>(:final value) => value,
+    Failure<T, F>() => null,
+  };
 
   /// The failure, or null when this is a [Success].
   F? get failureOrNull => switch (this) {
-        Success<T, F>() => null,
-        Failure<T, F>(:final failure) => failure,
-      };
+    Success<T, F>() => null,
+    Failure<T, F>(:final failure) => failure,
+  };
 }
 
 /// A successful result carrying its value.

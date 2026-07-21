@@ -1,28 +1,76 @@
-# This file configures the analyzer, which statically analyzes Dart code to
-# check for errors, warnings, and lints.
+# Static analysis configuration — substage 3.4.1.
 #
-# The issues identified by the analyzer are surfaced in the UI of Dart-enabled
-# IDEs (https://dart.dev/tools#ides-and-editors). The analyzer can also be
-# invoked from the command line by running `flutter analyze`.
+# Strict by default. This project's correctness rests on invariants the compiler
+# can help enforce, so type inference gaps are treated as errors rather than
+# hints. See docs/ARCHITECTURE.md §2.3 for the six guards that cover what the
+# analyser cannot express.
 
-# The following line activates a set of recommended lints for Flutter apps,
-# packages, and plugins designed to encourage good coding practices.
 include: package:flutter_lints/flutter.yaml
 
-linter:
-  # The lint rules applied to this project can be customized in the
-  # section below to disable rules from the `package:flutter_lints/flutter.yaml`
-  # included above or to enable additional rules. A list of all available lints
-  # and their documentation is published at https://dart.dev/lints.
-  #
-  # Instead of disabling a lint rule for the entire project in the
-  # section below, it can also be suppressed for a single line of code
-  # or a specific dart file by using the `// ignore: name_of_lint` and
-  # `// ignore_for_file: name_of_lint` syntax on the line or in the file
-  # producing the lint.
-  rules:
-    # avoid_print: false  # Uncomment to disable the `avoid_print` rule
-    # prefer_single_quotes: true  # Uncomment to enable the `prefer_single_quotes` rule
+analyzer:
+  language:
+    # No implicit dynamic, no implicit casts, no unsound inference. INV-01 is
+    # far easier to hold when the compiler knows an amount is an int.
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
 
-# Additional information about this file can be found at
-# https://dart.dev/guides/language/analysis-options
+  errors:
+    # Promoted to errors: each of these has bitten a money-handling codebase.
+    missing_return: error
+    unused_import: error
+    unused_local_variable: error
+    dead_code: error
+    invalid_use_of_protected_member: error
+    invalid_override: error
+    # A TODO left in shipped code is a decision nobody made.
+    todo: info
+
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - "**/*.mocks.dart"
+    - "build/**"
+
+linter:
+  rules:
+    # --- correctness ---------------------------------------------------------
+    always_declare_return_types: true
+    avoid_dynamic_calls: true
+    avoid_slow_async_io: true
+    cancel_subscriptions: true
+    close_sinks: true
+    comment_references: false
+    literal_only_boolean_expressions: true
+    no_adjacent_strings_in_list: true
+    test_types_in_equals: true
+    throw_in_finally: true
+    unnecessary_statements: true
+    always_use_package_imports: true
+
+    # --- immutability --------------------------------------------------------
+    # Entities are immutable by design (Stage 4 substage 4.2); the analyser
+    # should push in the same direction.
+    prefer_final_fields: true
+    prefer_final_in_for_each: true
+    prefer_final_locals: true
+    avoid_setters_without_getters: true
+
+    # --- money and numbers ---------------------------------------------------
+    # Guard G3 forbids double/float/num on the money path outright. These catch
+    # the softer mistakes elsewhere.
+    avoid_double_and_int_checks: true
+    prefer_int_literals: false # would encourage `1.0`; the opposite of what we want
+    no_leading_underscores_for_local_identifiers: true
+
+    # --- readability ---------------------------------------------------------
+    always_put_required_named_parameters_first: true
+    avoid_positional_boolean_parameters: true
+    directives_ordering: true
+    omit_local_variable_types: false # explicit types read better in money code
+    prefer_single_quotes: true
+    sort_child_properties_last: true
+    unnecessary_parenthesis: true
+
+    # --- documentation -------------------------------------------------------
+    public_member_api_docs: false # revisited at substage 10.7

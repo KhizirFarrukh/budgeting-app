@@ -7,7 +7,7 @@ Evidence log, one entry per substage.
 | 3.1 | Project initialisation and Android configuration | ✅ Complete |
 | 3.2 | Directory structure and layer boundaries | ✅ Complete |
 | 3.3 | Dependencies and the code generation toolchain | ✅ Complete |
-| 3.4 | Linting, formatting and invariant guard checks | Not started |
+| 3.4 | Linting, formatting and invariant guard checks | ✅ Complete |
 | 3.5 | Continuous integration pipeline | Not started |
 | 3.6 | Theme, design tokens and the money formatter | Not started |
 | 3.7 | Router and stub screens | Not started |
@@ -190,3 +190,79 @@ them: `lib/data/database/database.dart` (one Drift table) and
 
 Even the probe honours the schema conventions, so nobody copies a violation out of it: a **TEXT**
 primary key rather than auto-increment (INV-12), and money as **INTEGER** minor units (INV-01).
+
+---
+
+## 3.4 — Linting, formatting and invariant guard checks (S03.04)
+
+**Outputs:** `analysis_options.yaml`, `tool/guards/guards.dart`, `docs/DEVELOPMENT.md`.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| `flutter analyze` returns zero issues on the scaffold | "No issues found!" under strict settings (`strict-casts`, `strict-inference`, `strict-raw-types`, plus promoted errors) | ✅ |
+| Each guard demonstrated failing on a deliberate violation, output captured | **All six**, output below. Two failed to fire on the first attempt and were fixed — see the finding | ✅ |
+| The formatting check runs and passes | `dart format --output=none --set-exit-if-changed .` → exit 0, "0 changed" | ✅ |
+| `DEVELOPMENT.md` documents how to run every check locally | §2 the full sequence, §3 codegen, §4 the guards, §6 tests, §9 known gotchas | ✅ |
+
+### The demonstration — every guard shown failing (3.4.6)
+
+```
+G1 — domain imports package:flutter        → G1  lib/domain/result.dart:1
+G2 — engine file uses async/Future         → G2  lib/domain/allocation/_probe.dart:1
+G3 — double on the money path              → G3  lib/domain/_probe.dart:1
+G4 — DateTime.now() outside the Clock      → G4  lib/application/_probe.dart:1
+G5 — presentation imports the database     → G5  lib/presentation/_probe.dart:1
+G6 — telemetry in the resolved tree        → G6  pubspec.lock:1187
+
+REVERTED → "All guards passed (G1-G6)."  exit 0
+working tree clean, no probe files left behind
+```
+
+### The finding — two guards were inert, and only the demonstration caught it
+
+**On the first run, G1 and G5 did not fire at all.**
+
+The cause: the comment-stripper also stripped **string literals**, so that a banned word inside a
+message could not trip a token guard. But **an import path is a string literal**. With stripping on,
+`import 'package:flutter/material.dart';` became `import ;` — and both layering guards matched
+nothing, ever.
+
+They passed their baseline. They looked correct. They enforced **nothing**.
+
+> This is the entire justification for substage 3.4.6 and its `must_not`: *"Do not claim a guard
+> works without demonstrating a failure."* Baseline-passing is not evidence — a guard that never
+> matches also passes its baseline. G1 and G5 protect the layer boundary that INV-08's testability
+> rests on, and they would have been silently inert for the next seven stages.
+
+**Fix:** `_scan` gained a `stripStrings` flag. Token guards (G2, G3, G4) keep stripping on; import
+guards (G1, G5) switch it off. Both the script header and `DEVELOPMENT.md` §4 record why, so nobody
+"tidies" it back.
+
+### A second false-positive class, caught earlier at 3.2
+
+The 3.2 pre-check fired on a documentation comment in `clock.dart` that legitimately names
+`DateTime.now()`. That is why the guards are a Dart script rather than a grep: every check strips
+comments before matching. Substage 3.4's pitfall — *"a grep-based guard with a pattern so loose it
+fires on comments, which then gets disabled"* — was avoided by design rather than discovered later.
+
+**The two findings pull in opposite directions**, which is precisely why both needed demonstrating:
+too little stripping produces false positives that get the guard switched off; too much produces
+false negatives that make it useless while looking healthy.
+
+### Six guards, not four
+
+The stage plan names four (money, time, layering, telemetry). ARCHITECTURE §2.3 specified six, and
+all six are implemented: **G2** engine purity (INV-08 is stronger than general layering and deserves
+its own check) and **G5** database containment (explicitly required by substage 2.2.3's wording).
+
+### Strict analyser settings
+
+`strict-casts`, `strict-inference` and `strict-raw-types` all on; `missing_return`, `unused_import`,
+`dead_code` and `invalid_override` promoted to **errors**. `always_use_package_imports` was enabled
+and immediately caught a relative import in `main.dart`, now fixed.
+
+One rule was removed after the analyser reported it: `package_api_docs` was removed in Dart 3.7.0.
+Recorded rather than silently dropped.
+

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-
-import 'app.dart';
+import 'package:pookiebudget/app.dart';
 
 /// Entry point.
 ///
