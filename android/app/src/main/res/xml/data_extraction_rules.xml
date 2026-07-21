@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Backup and device-transfer rules, set deliberately rather than left to the
+  platform default (substage 3.1.6).
+
+  Everything is excluded. The app's database holds every financial record the
+  user has, and Android's default backup would copy it to Google's backup
+  service — which PRD §6.10 states does not happen, and which substage 9.7.3
+  verifies on the release build.
+
+  The user's own backup path is the explicit JSON export (NFR-07), which they
+  initiate and control, and cloud sync to their own Drive (FR-09). Neither
+  depends on this mechanism.
+
+  Substage 9.7.3 may revisit this. Until it does, the safe position is nothing.
+-->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="root" />
+        <exclude domain="file" />
+        <exclude domain="database" />
+        <exclude domain="sharedpref" />
+        <exclude domain="external" />
+    </device-transfer>
+</data-extraction-rules>
