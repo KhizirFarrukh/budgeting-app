@@ -173,9 +173,31 @@ Build output and the route walk are captured in `docs/reports/STAGE_3_REPORT.md`
 |---|---|---|
 | `flutter build apk --debug` succeeds | 3.1.7 | ✅ 153.5s, `app-debug.apk` 139.4 MB |
 | Built artefact carries the intended identifiers | 3.1.7 | ✅ verified by `aapt2 dump badging` — see below |
-| App launches to its own screen, not generated boilerplate | 3.1.7 | *pending — emulator run* |
+| App launches to its own screen, not generated boilerplate | 3.1.7 | ✅ installed and launched on `emulator-5554`; screenshot confirms the placeholder screen |
 | Every version recorded here | 3.1.8 | ✅ including the resolved `minSdk` |
+| `flutter analyze` clean on the scaffold | 3.2 | ✅ "No issues found!" |
 | Versions finalised after dependencies are added | 3.9.5 | *pending* |
+
+### Launch verification
+
+```
+$ adb install -r build/app/outputs/flutter-apk/app-debug.apk
+Performing Streamed Install
+Success
+
+$ adb shell am start -n com.khizirfarrukh.pookiebudget/.MainActivity
+Starting: Intent { cmp=com.khizirfarrukh.pookiebudget/.MainActivity }
+
+$ adb shell pidof com.khizirfarrukh.pookiebudget
+5081
+
+$ adb shell dumpsys activity activities | grep ResumedActivity
+topResumedActivity=ActivityRecord{... com.khizirfarrukh.pookiebudget/.MainActivity t8}
+```
+
+A screenshot was captured and inspected: the app bar reads **PookieBudget** and the body reads
+**"Scaffold placeholder — Stage 3 substage 3.1. No features are implemented."** No trace of the
+generated counter screen. The launch was **verified visually**, not inferred from a zero exit code.
 
 ### Artefact verification, read from the APK rather than the source
 
