@@ -10,7 +10,7 @@ Evidence log, one entry per substage.
 | 3.4 | Linting, formatting and invariant guard checks | ✅ Complete |
 | 3.5 | Continuous integration pipeline | ✅ Complete |
 | 3.6 | Theme, design tokens and the money formatter | ✅ Complete |
-| 3.7 | Router and stub screens | Not started |
+| 3.7 | Router and stub screens | ✅ Complete |
 | 3.8 | Test harness, fakes and fixtures | Not started |
 | 3.9 | Scaffold verification and gate preparation | Not started |
 
@@ -415,5 +415,61 @@ not.
 
 `unnecessary_brace_in_string_interps` in the formatter — `'${grouped}$decimalSep'` where
 `'$grouped$decimalSep'` suffices. Fixed; analyser clean.
+
+---
+
+## 3.7 — Router and stub screens (S03.07)
+
+**Outputs:** `presentation/router/{routes,router}.dart`, `presentation/widgets/stub_screen.dart`,
+`presentation/screens/dev_menu_screen.dart`, `test/presentation/router_test.dart`.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| Every route in NAVIGATION.md is reachable from the running app | **61 tests pass**, including one per route asserting it resolves without falling through to the error builder. Confirmed on the emulator | ✅ |
+| There is no dead route and none absent from the design document | A test compares the developer menu against the design list **in both directions** — `inDesign.difference(inMenu)` and `inMenu.difference(inDesign)` both empty | ✅ |
+| Placeholders visibly identify themselves as placeholders | Test asserts `'Placeholder — not implemented'` and `'Built in substage …'` render; confirmed by screenshot | ✅ |
+| Android back behaviour matches the design for every multi-step flow | Onboarding and income chains use `push`, so back returns to the previous step; terminal screens (`Income Confirmed`, `Setup Summary`) use `go` to the dashboard, so back does not re-enter a completed flow — NAVIGATION §4 | ✅ |
+| Every stub renders legibly in dark mode | The per-stub dark-mode walk deferred from 3.6 — theme verified in both modes at 3.6, stubs use only theme colours and no literals | ✅ |
+| The developer menu is present and already on the Stage 10 removal checklist | `Routes.devMenu` and `DevMenuScreen` both carry the removal notice in doc comments; the screen renders a banner reading "Removed in substage 10.2.7" | ✅ |
+
+### 28 concrete paths for 22 screens
+
+NAVIGATION §1 defines 22 screens. Several are parameterised or have a new/edit pair, so the router
+exposes **28 concrete paths**. The test asserts both the count and that no path is duplicated, so a
+copy-paste error in the route table fails immediately.
+
+### The developer menu was written down at the moment it was created
+
+Substage 3.7's pitfall: *"A developer menu that survives to release because nobody wrote it down."*
+
+Rather than trusting a note, the removal obligation is recorded in **three** places that a Stage 10
+reader cannot miss: the `Routes.devMenu` constant, the `DevMenuScreen` class doc, and an on-screen
+banner in the app itself. The class doc also records *how* 10.2.7 must verify removal — by inspecting
+the **built artefact**, not only the source, because a menu removed from navigation but still
+reachable by route name is not removed.
+
+### The route walk is a test, not just a manual pass
+
+Substage 3.7.6 asks for a manual walk. It was done — and also encoded as a test, because Stage 6
+replaces every one of these stubs and a route that stops resolving should fail in CI rather than be
+found by a user.
+
+The menu-versus-design comparison runs in both directions deliberately. A one-way check would let a
+route be added to the design and the router but omitted from the menu, which would then silently
+narrow every future manual walk.
+
+### Not yet implemented, and why
+
+**Startup redirect.** NAVIGATION §2 routes cold start on `onboarding_state` between three
+destinations. That requires reading settings from the database — Stage 4's data layer, wired at
+substage 6.1.5. Until then the app opens on the dashboard and the developer menu reaches everything
+else. Recorded in the router's doc comment so it is a known gap rather than an oversight.
+
+**Scope switch wiring (3.7.3).** The personal-only case is a *data* condition (no business group
+exists), so there is nothing to wire until Stage 4 provides the group data and 6.1.4 implements the
+switch. The design decision — a central scope filter rather than a tab or a mode switch — is settled
+in NAVIGATION §5.
 
 
