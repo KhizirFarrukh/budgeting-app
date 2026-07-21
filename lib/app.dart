@@ -1,11 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:pookiebudget/presentation/theme/app_theme.dart';
 
 /// The application shell.
 ///
-/// Substage 3.1 stands this up only far enough to prove the project builds and
-/// launches to a screen of its own rather than generated boilerplate. Theming
-/// arrives in substage 3.6 and the router with its 22 stub screens in 3.7; both
-/// replace what is here.
+/// Substage 3.6 wires in the light and dark themes. The router and its 22 stub
+/// screens arrive in substage 3.7 and replace [_ScaffoldPlaceholder].
 class PookieBudgetApp extends StatelessWidget {
   const PookieBudgetApp({super.key});
 
@@ -14,6 +13,11 @@ class PookieBudgetApp extends StatelessWidget {
     return MaterialApp(
       title: 'PookieBudget',
       debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      // Follows the system setting. A finance app that fights the user's own
+      // display preference is one they read in the dark at 11pm.
+      themeMode: ThemeMode.system,
       home: const _ScaffoldPlaceholder(),
     );
   }
@@ -44,7 +48,7 @@ class _ScaffoldPlaceholder extends StatelessWidget {
               ),
               SizedBox(height: 12),
               Text(
-                'Stage 3 substage 3.1. No features are implemented.\n'
+                'Stage 3 substage 3.6. No features are implemented.\n'
                 'The router and screens arrive in substage 3.7.',
                 textAlign: TextAlign.center,
               ),

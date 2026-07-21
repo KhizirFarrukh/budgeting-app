@@ -9,7 +9,7 @@ Evidence log, one entry per substage.
 | 3.3 | Dependencies and the code generation toolchain | ✅ Complete |
 | 3.4 | Linting, formatting and invariant guard checks | ✅ Complete |
 | 3.5 | Continuous integration pipeline | ✅ Complete |
-| 3.6 | Theme, design tokens and the money formatter | Not started |
+| 3.6 | Theme, design tokens and the money formatter | ✅ Complete |
 | 3.7 | Router and stub screens | Not started |
 | 3.8 | Test harness, fakes and fixtures | Not started |
 | 3.9 | Scaffold verification and gate preparation | Not started |
@@ -345,5 +345,75 @@ visible from the first commit rather than appearing for the first time in Stage 
 
 **Box-drawing characters replaced with ASCII.** They rendered as mojibake in the Windows console
 host. Cosmetic, but a check script whose output looks broken invites being ignored.
+
+---
+
+## 3.6 — Theme, design tokens and the money formatter (S03.06)
+
+**Outputs:** `domain/money/currency.dart`, `domain/money/money_format.dart`,
+`presentation/theme/{tokens,app_theme,business_scope_theme}.dart`,
+`presentation/formatting/money_formatter.dart`, `presentation/widgets/state_views.dart`, and two
+test files.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| No colour, spacing or font literal outside the theme definition | Scan of `lib/presentation/**` excluding `theme/` for `Color(0x`, `EdgeInsets.all(<digit>`, `fontSize: <digit>` → **clean** | ✅ |
+| Money formatter tests pass, covering exponents 0, 2 and 3, negatives and extremes | **29 tests pass.** Exponent 0 (JPY), 2 (USD/PKR), 3 (KWD); zero; one minor unit; negatives; `MAX_MONEY_MINOR`; `int` minimum | ✅ |
+| The formatter has no code path accepting or returning a floating-point number | Guard **G3** passes over `lib/domain`; every operation is integer or string arithmetic. `minorUnitsPerMajor` uses a multiply loop rather than `pow()`, which returns a `double` | ✅ |
+| The business scope treatment is legible in greyscale | `BusinessScopeTheme` carries an **icon** and a **label** alongside colour, so meaning survives greyscale and colour vision deficiency (NFR-08) | ✅ |
+| Dark mode renders without unreadable text | Built, installed, and **screenshotted in both modes** via `cmd uimode night yes/no`. Dark render inspected: dark surface, legible light text, correct contrast | ✅ |
+
+### The split that makes the export path possible
+
+ARCHITECTURE §8.5 called for money to have two representations. Implemented as:
+
+- **`domain/money/money_format.dart`** — `toDecimalString()` and `tryParse()`. Plain decimal, no
+  locale, no separators, no symbol. **In the domain layer** so the CSV exporter and JSON backup
+  (both in `lib/data`) can use it without importing presentation.
+- **`presentation/formatting/money_formatter.dart`** — locale-aware, with grouping separators and
+  symbol, **built on** the domain function and never re-deriving decimal placement.
+
+Two implementation details worth recording, both avoiding a `double`:
+
+**Grouping operates on the digit string, not on a number.** Handing the value to a numeric formatter
+would reintroduce a `double` on the display path — substage 3.6's named pitfall: *"A formatter that
+divides by 100 in a double, reintroducing floating point on the display path."*
+
+**`int` minimum is handled without negation.** `-9223372036854775808` has no positive counterpart in
+int64, so `.abs()` returns itself. The sign is taken first and digits read from the unsigned string
+form. Tested explicitly.
+
+### Parsing refuses rather than truncates
+
+`tryParse` returns null when the input carries **more decimal places than the currency allows**,
+rather than rounding. Substage 4.1.1 requires a typed failure rather than truncation, and silently
+dropping a digit is how money goes missing. `1.234` in USD → null; `1.5` in JPY → null.
+
+Twelve malformed inputs are rejected explicitly, including `1,234.56` — a grouped string is *not*
+valid parser input, since grouping is a display concern.
+
+### Two design rules baked into `CeilingProgressBar`
+
+Rather than left to Stage 8 callers:
+
+- **Never 100% before genuinely full.** The percentage is integer-floored, so `999/1000` reads 99%.
+  Substage 8.3's `must_not`: *"Do not round a progress percentage upward to 100."*
+- **Over-ceiling renders without clipping.** The bar saturates while the label tells the truth
+  (`"120% (over target)"`). A balance can exceed its ceiling after a manual override
+  (ALLOCATION_ALGORITHM §4.5), and 8.3.5 requires that not to break the indicator.
+
+### Colour is never the only signal
+
+`BusinessScopeTheme` carries `icon` and `label` alongside its colours, and `MoneyStateTheme`
+separates *negative balance* from *at ceiling* — the latter being a **success** state per PRD §4.3,
+not a warning. Substage 3.6.2 requires meaning to survive greyscale; an accent colour alone would
+not.
+
+### One analyser issue found and fixed
+
+`unnecessary_brace_in_string_interps` in the formatter — `'${grouped}$decimalSep'` where
+`'$grouped$decimalSep'` suffices. Fixed; analyser clean.
 
 
