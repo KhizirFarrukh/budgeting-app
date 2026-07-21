@@ -6,7 +6,7 @@ Evidence log, one entry per substage.
 |---|---|---|
 | 3.1 | Project initialisation and Android configuration | ✅ Complete |
 | 3.2 | Directory structure and layer boundaries | ✅ Complete |
-| 3.3 | Dependencies and the code generation toolchain | Not started |
+| 3.3 | Dependencies and the code generation toolchain | ✅ Complete |
 | 3.4 | Linting, formatting and invariant guard checks | Not started |
 | 3.5 | Continuous integration pipeline | Not started |
 | 3.6 | Theme, design tokens and the money formatter | Not started |
@@ -121,3 +121,72 @@ warns about:
 **The real guards must strip comments before matching.** Recorded now so 3.4 implements it rather
 than discovering it when the first false positive lands. A guard that cries wolf is a guard someone
 switches off.
+
+---
+
+## 3.3 — Dependencies and the code generation toolchain (S03.03)
+
+**Outputs:** `pubspec.yaml` + `pubspec.lock`, `docs/DEPENDENCIES.md`, generated code proven.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| `flutter pub get` resolves with no conflicts and no unexplained discontinued-package warning | Resolves cleanly at 149 packages. **One discontinued package was found and removed**, one rejected, two dropped — all four explained in `DEPENDENCIES.md` §4 | ✅ |
+| The code generation command runs successfully against a placeholder | `build_runner` produced 15 outputs in 26s — `riverpod_generator` and `drift_dev` both ran; `flutter analyze` clean afterwards | ✅ |
+| `DEPENDENCIES.md` lists every direct dependency with purpose, licence and exit plan | §1 and §2. Licence handled as ADR-004 constraint **L2** — permissive only, copyleft a blocker — rather than asserted per package from memory | ✅ |
+| The resolved tree contains no telemetry, analytics or advertising package | 13 known packages scanned across all **149 resolved** entries, not just direct dependencies → clean | ✅ |
+| The `minSdk` floor is re-verified against installed plugins and recorded | Rebuilt with **all** plugins present; merged manifest still reports 24 | ✅ |
+
+### The finding this substage exists to produce
+
+**`minSdk` remains 24 — no plugin raised the floor.** Substage 3.3's `common_pitfalls` names the
+failure being pre-empted: *"Discovering in Stage 7 that the Google client raised minSdk above the
+level already advertised."*
+
+The Stage 7 and Stage 8 plugins (`google_sign_in`, `googleapis`, `connectivity_plus`, `share_plus`,
+`workmanager`, `fl_chart`) were added **now** rather than when first used, precisely so this question
+is answered while it is cheap. Read from the merged manifest of a build with everything present, not
+predicted.
+
+### Three dependency findings
+
+**`sqlite3_flutter_libs` — discontinued, removed.** Resolved as `0.6.0+eol`; from 0.6.0 the package
+**does nothing at all**, existing only as a migration marker. Drift 2.32+ bundles SQLite
+automatically and this project resolves 2.34.2. Removed.
+
+**`glados` — the ADR-004 fallback fired, exactly as written.** Version solving failed: it requires
+`uuid ^3.0.6` and declares pre-null-safety SDK bounds. ADR-004 had already pre-decided the fallback
+— hand-rolled generators with a seeded PRNG — so there was no mid-implementation decision to make.
+**Only automatic shrinking is lost.** Properties P1–P7 are defined in ALLOCATION_ALGORITHM §9.2
+independently of any library, so this changes how they are verified, never what.
+
+**`riverpod_lint` + `custom_lint` — dropped, and the trade is a real one.** Both force `uuid ^3.0.6`
+via `analyzer`/`analyzer_plugin` constraints. But `uuid` 4.x is what provides **UUID v7**, which
+ARCHITECTURE §8.6 assigns to ledger entries and income events for index locality — PRD §7.2 shows
+those are **80–89% of all rows** at the Heavy profile. Downgrading `uuid` to satisfy a lint plugin
+would surrender a decision made on measured grounds.
+
+> The lint plugins lose. They offer Riverpod-specific advice; they enforce **none** of the twelve
+> invariants. Those are enforced by guards G1–G6, which are this project's own and independent of
+> the analyzer plugin ecosystem.
+
+Verified afterwards that `uuid` 4.6.0 genuinely exports v7, rather than assuming the trade was worth
+making. Re-check at Stage 6 — if the plugins become compatible, adding them costs nothing.
+
+### Decision — generated code is not committed (3.3.4)
+
+`*.g.dart`, `*.freezed.dart`, `*.mocks.dart` are gitignored. Generated files in a diff obscure the
+real change, and **regenerating in CI verifies that generation still works on every push** — stronger
+than trusting a committed artefact that may no longer match its source. The cost is a `build_runner`
+step before analyze or test on a fresh clone, which CI performs and `DEVELOPMENT.md` documents.
+
+### Codegen probes
+
+Two deliberately trivial files prove both generators end to end before any real schema depends on
+them: `lib/data/database/database.dart` (one Drift table) and
+`lib/application/providers/codegen_probe.dart` (one provider). Both are documented as disposable —
+4.3 and 6.1 replace them wholesale.
+
+Even the probe honours the schema conventions, so nobody copies a violation out of it: a **TEXT**
+primary key rather than auto-increment (INV-12), and money as **INTEGER** minor units (INV-01).

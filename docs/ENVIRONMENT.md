@@ -72,8 +72,12 @@ demands it**, recording which plugin set the floor.
 | | |
 |---|---|
 | **Resolved value** | **24** (Android 7.0) |
-| Plugin that set the floor | *none yet — this is Flutter 3.44.7's own floor. Re-checked at 3.3.2* |
-| How it was determined | Read from the **built artefact**, not assumed: the merged manifest shows `android:minSdkVersion="24"`, and `aapt2 dump badging app-debug.apk` confirms `minSdkVersion:'24'` |
+| Plugin that set the floor | **None.** Re-checked at substage 3.3.2 with *all* plugins present — including `google_sign_in`, the likeliest to raise it — and the floor was unchanged. This is Flutter 3.44.7's own floor |
+| How it was determined | Read from the **built artefact**, not assumed: the merged manifest shows `android:minSdkVersion="24"`, and `aapt2 dump badging app-debug.apk` confirms `minSdkVersion:'24'`. Re-read after the plugin build |
+
+Substage 3.3's `common_pitfalls` names the failure this pre-empts: *"Discovering in Stage 7 that the
+Google client raised minSdk above the level already advertised."* Adding the Stage 7 and Stage 8
+plugins during 3.3 rather than when they are first used is what makes the answer available now.
 
 The Google Sign-In client (Stage 7) is the most likely to raise it. Substage 3.3's
 `common_pitfalls` names exactly this: *"Discovering in Stage 7 that the Google client raised minSdk

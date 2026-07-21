@@ -1,3 +1,21 @@
+# ---------------------------------------------------------------------------
+# Generated code — NOT committed (decision recorded in substage 3.3.4)
+#
+# Two reasons:
+#   1. Generated files in a diff obscure the real change. Every commit in this
+#      project is meant to be reviewable.
+#   2. Regenerating in CI verifies that generation still WORKS on every push,
+#      which is strictly stronger than trusting a committed artefact that might
+#      no longer match its source.
+#
+# The cost: `flutter pub run build_runner build` must run before analyze or test
+# on a fresh clone. The CI pipeline (substage 3.5) does exactly that, and
+# docs/DEVELOPMENT.md documents it for local use.
+# ---------------------------------------------------------------------------
+*.g.dart
+*.freezed.dart
+*.mocks.dart
+
 # Miscellaneous
 *.class
 *.log
