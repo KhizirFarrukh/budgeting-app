@@ -8,7 +8,7 @@ Evidence log, one entry per substage.
 | 3.2 | Directory structure and layer boundaries | ✅ Complete |
 | 3.3 | Dependencies and the code generation toolchain | ✅ Complete |
 | 3.4 | Linting, formatting and invariant guard checks | ✅ Complete |
-| 3.5 | Continuous integration pipeline | Not started |
+| 3.5 | Continuous integration pipeline | ✅ Complete |
 | 3.6 | Theme, design tokens and the money formatter | Not started |
 | 3.7 | Router and stub screens | Not started |
 | 3.8 | Test harness, fakes and fixtures | Not started |
@@ -265,4 +265,85 @@ and immediately caught a relative import in `main.dart`, now fixed.
 
 One rule was removed after the analyser reported it: `package_api_docs` was removed in Dart 3.7.0.
 Recorded rather than silently dropped.
+
+---
+
+## 3.5 — Continuous integration pipeline (S03.05)
+
+**Outputs:** `tool/check.ps1`, `.github/workflows/ci.yml`, `test/domain/result_test.dart`.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| The pipeline, or an equivalent single local command, runs every check in one invocation | `tool/check.ps1` runs seven steps: pub get, codegen, format, analyze, guards, tests+coverage, debug build | ✅ |
+| It runs green on the scaffold commit, with output captured | `ALL CHECKS PASSED (6 steps)`, exit 0 — output below | ✅ |
+| A deliberate formatting break turns it red, demonstrated and reverted | Exit **1** with the offending file named; exit **0** after revert; tree clean | ✅ |
+| A coverage figure is produced, even though it is near zero | **16/26 lines (61.5%)** | ✅ |
+
+### Full run output
+
+```
+[1] Resolve dependencies      ok
+[2] Code generation           ok
+[3] Format check              ok    Formatted 10 files (0 changed)
+[4] Static analysis           ok    No issues found!
+[5] Invariant guards G1-G6    ok    All guards passed (G1-G6).
+[6] Tests with coverage       ok    +5: All tests passed!
+
+Coverage: 16/26 lines (61.5%)
+==========================================================
+ALL CHECKS PASSED (6 steps)      exit 0
+```
+
+### The red-then-green demonstration (3.5.6)
+
+```
+=== deliberate formatting violation ===
+Changed lib\domain\result.dart
+Formatted 11 files (1 changed)
+format exit code: 1                    <- pipeline would go RED
+
+=== reverted ===
+Formatted 11 files (0 changed)
+format exit code after revert: 0       <- green again
+git status: clean
+```
+
+### The check script found a real problem immediately
+
+Its first run **failed** — `Test directory "test" does not appear to contain any test files.` The
+template test was deleted in 3.1 and nothing had replaced it.
+
+That is the script working. **A pipeline that cannot go green has not been verified**, so 3.5.5
+cannot be satisfied without at least one test. `test/domain/result_test.dart` was added: five cases
+covering the sealed `Result` type — value carrying, failure carrying, value equality, cross-type
+inequality, and that an exhaustive `switch` compiles without a default clause.
+
+It is deliberately a **real** test of a **real** type, not a placeholder that asserts nothing.
+Substage 9.1's `must_not` — *"do not write a test that asserts only that a widget rendered"* — is
+worth applying from the first test rather than from Stage 9. The full harness (fakes, builders, the
+golden-vector loader) remains substage 3.8's job.
+
+### One authority, two callers
+
+`tool/check.ps1` is the authority; `.github/workflows/ci.yml` mirrors its steps. Substage 3.5.7 makes
+the requirement explicit — *"one command runs every check, not that a particular host runs it"* — and
+keeping the workflow a mirror means a green pipeline and a green local run mean the same thing.
+
+The workflow pins **Flutter 3.44.7**, matching `ENVIRONMENT.md` §2, so a version bump is a deliberate
+act that updates that document too.
+
+### Decisions
+
+**Codegen runs in CI on every push**, following from the 3.3.4 decision not to commit generated
+files. It verifies generation still *works*, which is stronger than trusting a committed artefact
+that may no longer match its source.
+
+**Coverage is captured now, at 61.5%**, while it is near zero and meaningless — so the trend is
+visible from the first commit rather than appearing for the first time in Stage 9 (substage 3.5.4).
+
+**Box-drawing characters replaced with ASCII.** They rendered as mojibake in the Windows console
+host. Cosmetic, but a check script whose output looks broken invites being ignored.
+
 

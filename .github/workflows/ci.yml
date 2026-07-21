@@ -1,0 +1,107 @@
+name: CI
+
+# Substage 3.5: automate the full check sequence so every later stage is
+# verified on every push.
+#
+# The steps below mirror tool/check.ps1 exactly. That script is the authority —
+# it is what a developer runs locally, and keeping the two in step means a green
+# pipeline and a green local run mean the same thing.
+
+on:
+  push:
+    branches: [master, develop, 'v*']
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: Full check sequence
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          # Matches the JDK bundled with Android Studio locally (ENVIRONMENT.md §5).
+          java-version: '21'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          # Pinned to the version recorded in docs/ENVIRONMENT.md §2. Bumping it
+          # is a deliberate act that updates that document too, per the
+          # manifest's knowledge-freshness rule.
+          flutter-version: '3.44.7'
+          channel: stable
+          # Substage 3.5.2 — keep the pipeline fast enough that people wait for it.
+          cache: true
+
+      - name: Resolve dependencies
+        run: flutter pub get
+
+      # Generated code is gitignored (substage 3.3.4). Regenerating here proves
+      # generation still WORKS on every push, rather than trusting a committed
+      # artefact that may no longer match its source.
+      - name: Code generation
+        run: flutter pub run build_runner build
+
+      - name: Format check
+        run: dart format --output=none --set-exit-if-changed .
+
+      # Substage 3.5.3: fail on ANY analyser issue, not only on errors.
+      - name: Static analysis
+        run: flutter analyze
+
+      # The six invariant guards. Each was demonstrated failing on a deliberate
+      # violation in substage 3.4.6 — see docs/reports/STAGE_3_WORKLOG.md.
+      - name: Invariant guards G1-G6
+        run: dart run tool/guards/guards.dart
+
+      # Substage 3.5.4: produce a coverage figure now, while it is near zero, so
+      # the trend is visible from the first commit rather than from Stage 9.
+      - name: Tests with coverage
+        run: flutter test --coverage
+
+      - name: Coverage summary
+        if: always()
+        run: |
+          if [ -f coverage/lcov.info ]; then
+            found=$(grep -E '^LF:' coverage/lcov.info | cut -d: -f2 | paste -sd+ - | bc)
+            hit=$(grep -E '^LH:' coverage/lcov.info | cut -d: -f2 | paste -sd+ - | bc)
+            if [ "${found:-0}" -gt 0 ]; then
+              pct=$(echo "scale=1; 100 * $hit / $found" | bc)
+              echo "Coverage: $hit/$found lines ($pct%)"
+              echo "### Coverage: $hit/$found lines ($pct%)" >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "No coverage data yet."
+            fi
+          else
+            echo "coverage/lcov.info not produced."
+          fi
+
+      - name: Upload coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage/lcov.info
+          if-no-files-found: warn
+
+      - name: Debug build
+        run: flutter build apk --debug
+
+      - name: Upload debug APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: build/app/outputs/flutter-apk/app-debug.apk
+          if-no-files-found: error
