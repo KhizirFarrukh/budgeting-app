@@ -1,0 +1,32 @@
+# Normalise line endings so a mixed-OS checkout produces no spurious diffs and the
+# Stage 3 format check (substage 3.4.7) cannot fail on line endings alone.
+#
+# Every text file is stored LF in the repository and checked out LF, including on
+# Windows. Dart tooling, Gradle and the Flutter toolchain all handle LF on Windows.
+* text=auto eol=lf
+
+# Windows-only scripts must keep CRLF or they can fail to execute.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# Binary: never normalise, never diff as text.
+*.png    binary
+*.jpg    binary
+*.jpeg   binary
+*.webp   binary
+*.ico    binary
+*.ttf    binary
+*.otf    binary
+*.jar    binary
+*.keystore binary
+*.jks    binary
+
+# Test fixture databases are binary and must survive byte-identical, since the
+# migration harness (substage 4.9.2) opens them at a prior schema version.
+test/fixtures/databases/** binary
+
+# Golden test images: binary, and excluded from diffs because a rendered-pixel
+# diff is noise. Substage 9.1.3 compares them with the golden matcher, not git.
+test/**/goldens/** binary
+**/*.golden.png    binary

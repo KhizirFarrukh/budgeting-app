@@ -846,12 +846,30 @@ source.
 5.6 bound:                 922337203685477; bound*10000 fits, (bound+1)*10000 does not
 ```
 
-### Consistency pass
+### Consistency pass — and a mis-triage corrected
 
-Four checks, all passing. The one worth recording: **`Diagnostics` needs the repair log to be
-durable**, which SCHEMA §6.8 already requires but which no table currently holds. Noted in report §6
-as a Stage 4 obligation rather than left to be discovered — the repair log needs a home in the
-schema, and Stage 4 must add it or Stage 7 will have nowhere to write.
+Four checks, all passing. One finding: **`Diagnostics` needs the repair log to be durable**, which
+SCHEMA §6.8 requires but which no table held.
+
+This was initially filed as "a Stage 4 obligation." **That was wrong.** Stage 4 transcribes SCHEMA
+*exactly* and proves the transcription faithful with a comparison table (4.3.5) — so a table absent
+from SCHEMA is a table Stage 4 will not build, and the gap would have surfaced at Stage 7 substage
+7.6.4 with the merge engine having nowhere to write its repairs. A missing table in the schema is a
+Stage 2 defect, not a Stage 4 task.
+
+**Closed by amendment:** SCHEMA §3.13 now defines `repair_log` — device-local, append-only, with a
+`RepairKind` enumeration covering all six repairs from §6.8, a `merge_session_id` grouping repairs
+from one merge so the UI can say "3 changes were made when your devices last synced", and index
+IX-12 for the unread-repairs query. Wired through §2 (table inventory, now thirteen tables), §4
+(enumerations), §4.1 (ER diagram), §5.5/§5.6 (index and query tables), §6.8 (the repair catalogue
+now names the table) and §8.1 (does not travel).
+
+**Device-local, and that follows from a property already required.** §6.8 mandates deterministic
+repairs, so each device generates identical entries independently; syncing would duplicate every
+one. The determinism requirement is what makes local logging correct rather than a compromise.
+
+Recorded per the manifest's `sdlc_discipline` rule: *"do not silently patch forward: raise it, amend
+the earlier document, and note the amendment."*
 
 ### An encoding incident, and the lesson
 

@@ -38,7 +38,7 @@ columns end `_ms`. Basis-point columns end `_bp`. Boolean columns begin `is_` or
 
 ## 2. Table inventory
 
-Twelve tables. Nine are synced; three are device-local and never leave the device.
+Thirteen tables. Nine are synced; four are device-local and never leave the device.
 
 | Table | Purpose | Synced | Mutable |
 |---|---|---|---|
@@ -54,6 +54,7 @@ Twelve tables. Nine are synced; three are device-local and never leave the devic
 | `sync_metadata` | Device id, HLC state, last sync, remote pointers | ❌ device-local | ✅ |
 | `outbox` | Local changes awaiting push | ❌ device-local | ✅ |
 | `balance_cache` | Materialised balances — a cache, never a source of truth | ❌ device-local | ✅ |
+| `repair_log` | Every automatic repair a merge performed, for the user to read | ❌ device-local | append-only |
 
 ### 2.1 The five sync columns
 
@@ -356,6 +357,40 @@ precisely so a merge can never import a balance — balances are always recomput
 entries. The full policy, including the recompute-and-compare verifier and when it runs, is
 substage 2.4.5's; this section only declares the table.
 
+### 3.13 `repair_log` — device-local, append-only
+
+> **Added by amendment after the substage 2.13 consistency pass.** §6.8 requires every post-merge
+> repair to be "written to a durable repair log and surfaced to the user", and NAVIGATION's
+> `Diagnostics` screen displays it — but no table held it. Since Stage 4 transcribes this document
+> exactly, the omission would have produced a design requiring a log with nowhere to write it, and
+> Stage 7 substage 7.6.4 would have discovered that mid-implementation. Recorded rather than
+> silently patched, per the manifest's `sdlc_discipline` rule.
+
+| Column | Type | Null | Meaning |
+|---|---|---|---|
+| `id` | TEXT | no | UUID v7 — time-sortable, as this is an append-only log |
+| `occurred_at_ms` | INTEGER | no | When the repair was applied |
+| `merge_session_id` | TEXT | no | Groups every repair from one merge, so the UI can say "3 changes were made when your devices last synced" |
+| `kind` | TEXT | no | `RepairKind` (§4) — which of the six §6.8 repairs this was |
+| `table_name` | TEXT | no | Which table was repaired |
+| `record_id` | TEXT | no | Which row. **Not a foreign key** — the repair may concern a record that was deleted, which is often the reason a repair was needed |
+| `detail_json` | TEXT | no | Structured context: the ids involved and any amounts, as integers |
+| `acknowledged_at_ms` | INTEGER | yes | Set when the user has seen it; null means unread |
+
+**Why it is device-local rather than synced.** §6.8 requires every repair to be **deterministic** —
+two devices performing the same merge produce identical repairs. Each device therefore generates and
+logs the same repair independently, so syncing the log would duplicate every entry. The determinism
+requirement is precisely what makes local logging correct.
+
+**Why `detail_json` holds ids rather than names.** Same reasoning as the engine's diagnostics
+(ALLOCATION §2.3): the data layer has no locale and should not build user-facing sentences. The
+`Diagnostics` screen resolves ids to current names at display time, which also means a later rename
+is reflected in old log entries rather than preserving a stale name.
+
+**Append-only, with bounded growth.** Nothing updates a repair-log row except `acknowledged_at_ms`.
+Entries older than **365 days and acknowledged** may be pruned; unacknowledged entries are never
+pruned, because a repair the user has not seen is exactly the one worth keeping.
+
 ---
 
 ## 4. Enumerations
@@ -377,6 +412,7 @@ migration**. Any value not listed is invalid and rejected at the mapper boundary
 | `OutboxState` | `PENDING`, `IN_FLIGHT`, `FAILED` | `outbox.state` |
 | `CeilingKind` | `ABSOLUTE` *(only value v1 writes)* | `categories.ceiling_kind` — reserved, D-02 |
 | `RuleSet` | `DEFAULT` *(only value v1 writes)* | `distribution_rule_versions.rule_set` — reserved, D-06 |
+| `RepairKind` | `REDIRECT_TARGET_REASSIGNED`, `PERCENTAGES_REDISTRIBUTED`, `SINK_RESTORED`, `CYCLE_BROKEN`, `ACCOUNT_UNLINKED`, `GROUP_SHARE_ZEROED` | `repair_log.kind` — one value per §6.8 repair |
 
 `UNCAPPED_FLOW` exists because OQ-03 was answered **yes**; the six seeded categories typed that way
 are valid.
@@ -547,7 +583,21 @@ erDiagram
         INTEGER computed_at_ms
         INTEGER is_stale
     }
+    REPAIR_LOG {
+        TEXT id PK
+        INTEGER occurred_at_ms
+        TEXT merge_session_id
+        TEXT kind
+        TEXT table_name
+        TEXT record_id
+        TEXT detail_json
+        INTEGER acknowledged_at_ms
+    }
 ```
+
+`REPAIR_LOG` stands alone with no relationships drawn: `record_id` deliberately is not a foreign key,
+because the record a repair concerns has often been deleted — which is frequently why the repair was
+needed (§3.13).
 
 ### 4.2 Verification against substage 2.3's acceptance criteria
 
@@ -693,6 +743,7 @@ An index with no named query does not belong in this design. Query numbers refer
 | IX-09 | `categories (linked_account_id) WHERE linked_account_id IS NOT NULL` | Q12 per-account total |
 | IX-10 | `spending_transactions (category_id, occurred_at_ms)` | Q14 spending history per category |
 | IX-11 | `<table> (hlc)` on **each of the nine synced tables** | Q13 sync: records changed since a given clock value |
+| IX-12 | `repair_log (acknowledged_at_ms, occurred_at_ms)` | Q15 unread repairs for the Diagnostics badge and list |
 
 **Deliberately not created:** a composite `ledger_entries (category_id, source_type, occurred_at_ms)`
 for Q9. IX-01 already narrows to one category — roughly 1,675 rows at the Heavy profile (PRD §7.3) —
@@ -721,6 +772,7 @@ used, rather than assuming.
 | Q12 | Categories linked to an account, for its derived total | US-011, US-012 | IX-09 |
 | Q13 | Rows changed since an HLC value, per table | S07.7 outbox push, S07.5 merge | IX-11 |
 | Q14 | Spending for a category in a date range | US-024, US-026 | IX-10 |
+| Q15 | Unread repairs, newest first | `Diagnostics` screen; S07.9.5 surfaces merge repairs | IX-12 |
 
 ---
 
@@ -887,10 +939,15 @@ repair that picks "the first surviving category" depends on iteration order and 
 devices diverge permanently — worse than the original invalidity, because it is stable and invisible.
 Every repair above breaks ties by HLC then device id, exactly as the merge does.
 
-**2. Never silent.** Every repair is written to a durable repair log and surfaced to the user in
-plain language (substage 7.6.4, exposed at 7.9.5). The user's configuration changed without them
-asking; they are entitled to know what and why. *"Trip savings used to overflow into Holiday fund,
-which was deleted on your other device, so it now overflows into Unallocated buffer."*
+**2. Never silent.** Every repair is written to the durable **`repair_log`** table (§3.13) and
+surfaced to the user in plain language (substage 7.6.4, exposed at 7.9.5 and on the `Diagnostics`
+screen). The user's configuration changed without them asking; they are entitled to know what and
+why. *"Trip savings used to overflow into Holiday fund, which was deleted on your other device, so it
+now overflows into Unallocated buffer."*
+
+Each of the six repairs above maps to one `RepairKind` value (§4), and every repair from a single
+merge shares a `merge_session_id`, so the UI can group them: *"3 changes were made when your devices
+last synced."*
 
 ### 6.9 Violation dispositions, at a glance
 
@@ -1068,6 +1125,7 @@ contract rather than improvising.
 | `sync_metadata` | ❌ | Device-local by design — syncing a device's own clock state would be meaningless at best and corrupting at worst |
 | `outbox` | ❌ | Device-local queue |
 | `balance_cache` | ❌ | **Derived.** Excluded so a merge can never import a balance (INV-04) |
+| `repair_log` | ❌ | Device-local. Repairs are deterministic (§6.8), so each device generates the same entries independently — syncing would duplicate every one |
 
 ### 8.2 Record envelope
 

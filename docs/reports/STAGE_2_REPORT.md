@@ -105,9 +105,33 @@ Re-derived independently by script at review time, not carried forward from when
 | Check | Result |
 |---|---|
 | Every SCHEMA entity used somewhere, or justified as reserved | ✅ All twelve tables are referenced by ALLOCATION or NAVIGATION. The six reserved columns are justified as PRD 3.4 accommodations and pinned unused by C-21/C-22 |
-| Every NAVIGATION screen has the data it needs in SCHEMA | ✅ Checked screen by screen. `Diagnostics` needs the repair log, which SCHEMA 6.8 requires as durable — noted as a Stage 4 obligation |
+| Every NAVIGATION screen has the data it needs in SCHEMA | ✅ Checked screen by screen. `Diagnostics` needs the repair log, which SCHEMA 6.8 required as durable but no table held — **gap closed by amendment**, see below |
 | Terminology matches the PRD glossary across all four documents | ✅ Design documents use PRD 9's right-hand column exclusively; product language stays in the PRD and the UI, per 9.1's binding mapping |
 | Numbers stated in one document match the same numbers elsewhere | ✅ `MAX_MONEY_MINOR`, `MAX_HOPS` = 32, 10000 basis points, the 19 seeded categories, the five-year row counts and the NFR-06 budgets all cross-checked |
+
+### 6.1 Amendment after the gate was drafted — the repair log had no table
+
+The consistency pass found that SCHEMA 6.8 requires every post-merge repair to be "written to a
+durable repair log and surfaced to the user", and NAVIGATION's `Diagnostics` screen displays it —
+**but no table held it.** This report originally filed that as "a Stage 4 obligation."
+
+**That triage was wrong, and is corrected here.** Stage 4 transcribes SCHEMA *exactly* (substage
+4.3.5 proves the transcription faithful with a comparison table). A table absent from SCHEMA is a
+table Stage 4 will not build, so the gap would have survived to Stage 7 substage 7.6.4 and been
+discovered mid-implementation, with the merge engine having nowhere to write.
+
+SCHEMA now defines **`repair_log`** (section 3.13) as a thirteenth table: device-local, append-only,
+with `RepairKind` covering all six repairs from 6.8, a `merge_session_id` grouping repairs from one
+merge, and index IX-12 serving the unread-repairs query. Wired through the table inventory, the
+enumerations, the ER diagram, the index and query tables, and the sync payload's travels/does-not-
+travel list.
+
+**It is device-local, and that follows from a property already required.** Section 6.8 mandates that
+repairs be *deterministic* — two devices performing the same merge produce identical repairs. Each
+device therefore generates the same log entries independently, so syncing the log would duplicate
+every one.
+
+Recorded here rather than silently patched, per the manifest's `sdlc_discipline` rule.
 
 ## 7. Frozen decisions (substage 2.13.8)
 
