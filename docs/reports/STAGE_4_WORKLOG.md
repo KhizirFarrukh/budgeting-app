@@ -365,3 +365,135 @@ flutter test                         All tests passed!   (183 tests, 29 of them 
 dart run tool/guards/guards.dart     All guards passed (G1-G6).
 dart run tool/domain_purity_check    22 libraries compiled and ran on the bare Dart VM
 ```
+
+---
+
+## Amendment — FR-16, ceiling-triggered cascade redirect (ADR-006)
+
+**Arrived:** between substages 4.3 and 4.4, after both the Stage 1 and Stage 2 gates.
+**Recorded in:** [`ADR-006`](../decisions/ADR-006-ceiling-triggered-cascade-redirect.md).
+
+A new requirement: when an Accumulating Reserve hits its ceiling, its allocation redirects to
+explicitly configured fallback categories — by priority or split — cascading onward if those are also
+full, and reaching a flagged surplus bucket if the chain runs out.
+
+### Most of it was already designed; two clauses were not
+
+Recorded precisely, because re-implementing an existing mechanism under a new name is how a codebase
+acquires two sources of truth for one behaviour.
+
+| Clause | Already lives at | Built? |
+|---|---|---|
+| live check on every event, mid-calculation | ALLOCATION §3.2 `accepted_so_far` | Yes, 4.2 |
+| cascade when a target is also full | §3.3 FIFO worklist; vector V-05 | Specified |
+| surplus bucket, never dropped silently | the sink, `SINK_TERMINAL`, INV-07, V-06 | Yes, 4.2 |
+| reserve-only; bills stay simpler | §3.1 headroom table | Yes, 4.2 |
+| **many targets, split or priority** | — | **New** |
+| **Reference Monthly Amount** | — | **New** |
+
+### Decision 1 — `redirect_targets` replaces the single column
+
+`categories.redirect_target_category_id` is **removed**, not kept alongside a table for the
+multi-target case. One target is the one-row case of many, and two places to read "where does
+overflow go" is the shape SCHEMA §3.7 rejects when it refuses to store a signed amount beside a
+direction.
+
+`SPLIT` divides overflow by **the sum of the live targets' weights**, not a constant 10000. This is
+the substage 2.8 primitive again: when one of three targets is archived the live weights total 6667,
+and dividing by the constant leaves a third of the overflow unallocated. A test asserts the wrong
+divisor loses more than 29,000 of a 90,000 overflow, so the defect cannot return quietly.
+
+### The requirement contained an ambiguity, resolved explicitly
+
+Two clauses pull different ways when Hajj is full:
+
+- *"a user-configurable split or **priority order**"* → try Wedding, the source's next choice.
+- *"cascade further down **that target's own** redirect target"* → try Hajj's target.
+
+**Resolved: the source's own list is exhausted first, then the chain descends** (ALLOCATION §3.10.1).
+Descending immediately would make priority order nearly meaningless — a priority-1 target would only
+be reached if priority-0's chain circled back to it. A user who lists Hajj then Wedding is saying
+*fill Hajj, then Wedding*, and the design should say what they said.
+
+This is why a parcel carries its **origin** and how far through that origin's list it has travelled,
+not merely its immediate predecessor. `origin_id` and `redirected_from` diverge once a chain exceeds
+one hop, and conflating them is the easiest way to build this wrongly: the ledger wants to say *"this
+came from Hajj"* while the walk still needs to know Wedding is EV Bike's next choice.
+
+Vector **V-18** pins the decision — under the rejected reading Wedding is never reached, so the
+vector fails loudly if it is ever quietly reversed.
+
+**A pleasant consequence:** the existing FIFO worklist already produces sibling-before-descendant for
+free, since siblings enqueue at hop *N* and descendants only at *N+1*. §3.3 chose FIFO to avoid a
+stack overflow and keep the hop count visible; it turns out to also be what makes this ordering
+correct without a second mechanism. Under LIFO, a deep chain beneath the first target would starve
+the second.
+
+### Decision 2 — the Reference Monthly Amount is stored but does not yet allocate
+
+The requirement describes an **absolute** figure (193,000/month). FR-02, a MUST requirement, reads
+*"Set a fixed percentage of income allocated to each category."* These differ visibly the first time
+income varies: on a 700,000 month against a 550,000 reference, does the bike get 193,000 or 245,000?
+
+Answering "absolute" would require under-funding and over-funding rules, would rework phase A, would
+contradict an approved MUST requirement, and would invalidate several golden vectors. **Raised as
+OQ-19 with a recommendation rather than decided silently.**
+
+`reference_monthly_amount_minor` is stored now, constrained by C-33 to reserves and to positive
+values, so whichever way OQ-19 resolves no row exists that the answer would invalidate — and if it
+resolves toward absolute amounts the data is already captured rather than needing backfill.
+
+**The cascade is unaffected by that fork**, which is why Decision 1 shipped with full confidence
+while Decision 2 waits. The fork is upstream of the interesting part.
+
+### Ripple
+
+| Document | Change |
+|---|---|
+| `PRD.md` | FR-16; US-038, US-039 |
+| `SCHEMA.md` | §3.14 `redirect_targets`; `categories` ±columns; C-29…C-33; V-28…V-31; U-11, U-12; IX-13; `RedirectMode` |
+| `ALLOCATION_ALGORITHM.md` | §3.10 (four subsections); vectors **V-16…V-19** |
+| `OPEN_QUESTIONS.md` | OQ-19 |
+| `TRACEABILITY.md` | FR-16 row |
+| 4.2 outputs | `RedirectTarget` entity; `Category` reworked; `RedirectMode`; four new failures |
+| 4.3 outputs | `RedirectTargets` drift table; indexes; comparison document regenerated |
+
+### The four cases the requirement names, tested
+
+Golden vectors V-16…V-19 map one-to-one onto them. The engine is Stage 5, but the **arithmetic each
+vector asserts was executed here**, at the level Stage 4 can reach — `Category.headroom` and
+`Money.multiplyByBasisPoints` walked by hand in `test/domain/entities/redirect_target_test.dart`,
+each asserting conservation:
+
+| Case | Vector | Arithmetic proved |
+|---|---|---|
+| simple single-target redirect | V-16 | 193,000 into 100,000 headroom → 93,000 to the priority-0 target; total 386,000 |
+| multi-target split | V-17 | 93,001 across 6000/4000 → 55,801 / 37,200, leftover 1 to the larger remainder |
+| chained cascade, target also full | V-18 | 40,000 → 20,000 → 133,000 to the sink; EV Bike produces **no line**, not a zero line |
+| no valid target | V-19 | 193,000 reaches the sink whole; a capped sink cannot be constructed |
+
+A vector whose numbers were never executed is a guess. Substage 2.8 found a real defect precisely by
+running the algorithm instead of reading it, so the numbers were run before they were written down.
+
+### Verification
+
+```
+flutter pub run build_runner build   0 warnings
+tool/check.ps1 -SkipBuild            ALL CHECKS PASSED (7 steps)
+flutter test                         All tests passed!   (206 tests)
+```
+
+The domain purity check **failed first**, refusing to run because `redirect_target.dart` existed
+under `lib/domain` without being imported by it — the completeness assertion added at 4.2 doing
+exactly the job it was written for. An unimported library would have been an unchecked one.
+
+### Left for later stages
+
+- **Stage 5** implements §3.10 and must pass V-16…V-19. Fixture files for the four vectors are not
+  yet written; the vector table is the contract.
+- **Stage 6** needs a redirect-target editor (list, reorder, mode, shares) rather than a single-target
+  dropdown, plus the `SURPLUS_UNALLOCATED` surfacing. Named in ADR-006 so it is sized, not discovered.
+- **Substage 4.8**'s cycle walk is now over a **branching** graph — a chain check following only the
+  first target would miss a cycle reachable through the second.
+- **Substage 4.7**'s seed should name the personal sink **"Unallocated Surplus"**, matching the
+  requirement's wording.

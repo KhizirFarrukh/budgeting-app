@@ -32,9 +32,10 @@ final class Category {
     required this.ceilingMinor,
     required this.billAmountMinor,
     required this.periodAnchorDay,
-    required this.redirectTargetCategoryId,
     required this.linkedAccountId,
     required this.ceilingKind,
+    required this.redirectMode,
+    required this.referenceMonthlyAmountMinor,
     required this.sync,
   });
 
@@ -69,9 +70,10 @@ final class Category {
     int? ceilingMinor,
     int? billAmountMinor,
     int? periodAnchorDay,
-    String? redirectTargetCategoryId,
     String? linkedAccountId,
     CeilingKind ceilingKind = CeilingKind.absolute,
+    RedirectMode redirectMode = RedirectMode.priority,
+    int? referenceMonthlyAmountMinor,
   }) {
     final String trimmed = name.trim();
     if (trimmed.isEmpty) {
@@ -120,10 +122,28 @@ final class Category {
       );
     }
 
-    // V-10 / C-20 — a redirect target is not the category itself.
-    if (redirectTargetCategoryId != null && redirectTargetCategoryId == id) {
-      return Failure<Category, EntityFailure>(SelfRedirect(id));
+    // C-33 — a reference monthly amount belongs only to a reserve, and only
+    // as a positive figure. This is what makes the field safe to store while
+    // OQ-19 is open: whichever way that resolves, no row exists that the
+    // answer would invalidate.
+    if (referenceMonthlyAmountMinor != null) {
+      if (type != CategoryType.accumulatingReserve) {
+        return Failure<Category, EntityFailure>(
+          ReferenceAmountTypeMismatch(type.wireName),
+        );
+      }
+      if (referenceMonthlyAmountMinor <= 0) {
+        return Failure<Category, EntityFailure>(
+          NonPositiveAmount(
+            field: 'reference_monthly_amount_minor',
+            value: referenceMonthlyAmountMinor,
+          ),
+        );
+      }
     }
+
+    // NOTE: the self-redirect rule (V-10 / C-29) now lives on RedirectTarget,
+    // which is where the source/target pair exists since ADR-006.
 
     // V-13 / C-19 — the sink is uncapped. INV-07's termination rests on it.
     if (isSink) {
@@ -149,9 +169,10 @@ final class Category {
         ceilingMinor: ceilingMinor,
         billAmountMinor: billAmountMinor,
         periodAnchorDay: periodAnchorDay,
-        redirectTargetCategoryId: redirectTargetCategoryId,
         linkedAccountId: linkedAccountId,
         ceilingKind: ceilingKind,
+        redirectMode: redirectMode,
+        referenceMonthlyAmountMinor: referenceMonthlyAmountMinor,
         sync: sync,
       ),
     );
@@ -188,8 +209,25 @@ final class Category {
   /// concern handled in `domain/allocation/period.dart`, not here.
   final int? periodAnchorDay;
 
-  /// Where overflow goes. Null means the sink.
-  final String? redirectTargetCategoryId;
+  /// How overflow is distributed across this category's redirect targets.
+  ///
+  /// The targets themselves live in `redirect_targets` (ADR-006), loaded
+  /// separately — a category does not carry its own list, because the list is a
+  /// repository concern and an entity that held it could disagree with storage.
+  final RedirectMode redirectMode;
+
+  /// The user's stated monthly intent for an `ACCUMULATING_RESERVE`, e.g.
+  /// 193,000 toward a bike. Null on every other type (C-33).
+  ///
+  /// **This does not currently drive allocation** — percentages do. Whether it
+  /// should is **OQ-19**, raised by ADR-006 because the requirement describes an
+  /// absolute figure while FR-02 specifies a percentage, and the two differ
+  /// visibly the moment income varies. Stored now so that if the question
+  /// resolves toward absolute amounts, the data is already captured.
+  ///
+  /// Used today for projections: *"at this rate you reach your ceiling in 2
+  /// months."*
+  final int? referenceMonthlyAmountMinor;
 
   /// At most one (PRD A-08 — structural, enforced by the column being single).
   final String? linkedAccountId;
@@ -266,14 +304,15 @@ final class Category {
     int? ceilingMinor,
     int? billAmountMinor,
     int? periodAnchorDay,
-    String? redirectTargetCategoryId,
     String? linkedAccountId,
     CeilingKind? ceilingKind,
+    RedirectMode? redirectMode,
+    int? referenceMonthlyAmountMinor,
     SyncFields? sync,
     bool clearCeiling = false,
     bool clearBill = false,
-    bool clearRedirectTarget = false,
     bool clearLinkedAccount = false,
+    bool clearReferenceAmount = false,
   }) => Category.create(
     id: id,
     groupId: groupId ?? this.groupId,
@@ -291,13 +330,14 @@ final class Category {
     periodAnchorDay: clearBill
         ? null
         : (periodAnchorDay ?? this.periodAnchorDay),
-    redirectTargetCategoryId: clearRedirectTarget
-        ? null
-        : (redirectTargetCategoryId ?? this.redirectTargetCategoryId),
     linkedAccountId: clearLinkedAccount
         ? null
         : (linkedAccountId ?? this.linkedAccountId),
     ceilingKind: ceilingKind ?? this.ceilingKind,
+    redirectMode: redirectMode ?? this.redirectMode,
+    referenceMonthlyAmountMinor: clearReferenceAmount
+        ? null
+        : (referenceMonthlyAmountMinor ?? this.referenceMonthlyAmountMinor),
     sync: sync ?? this.sync,
   );
 
@@ -318,9 +358,10 @@ final class Category {
           ceilingMinor == other.ceilingMinor &&
           billAmountMinor == other.billAmountMinor &&
           periodAnchorDay == other.periodAnchorDay &&
-          redirectTargetCategoryId == other.redirectTargetCategoryId &&
           linkedAccountId == other.linkedAccountId &&
           ceilingKind == other.ceilingKind &&
+          redirectMode == other.redirectMode &&
+          referenceMonthlyAmountMinor == other.referenceMonthlyAmountMinor &&
           sync == other.sync;
 
   @override
@@ -337,9 +378,10 @@ final class Category {
     ceilingMinor,
     billAmountMinor,
     periodAnchorDay,
-    redirectTargetCategoryId,
     linkedAccountId,
     ceilingKind,
+    redirectMode,
+    referenceMonthlyAmountMinor,
     sync,
   ]);
 

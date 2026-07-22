@@ -4,6 +4,12 @@
 the transcription is faithful"*, and its `why_it_matters` states the stakes plainly: *"Any divergence
 here invalidates the Stage 2 design review, silently."*
 
+> **Regenerated after [ADR-006](../decisions/ADR-006-ceiling-triggered-cascade-redirect.md).** The
+> cascade-redirect requirement added `redirect_targets`, added two columns to `categories` and
+> removed one, one substage after this document was first written. Regenerated from the live schema
+> rather than hand-patched — the whole point of a dump is that it cannot drift from what the code
+> builds.
+
 **How this document was produced.** The column tables below are **dumped from a running database**
 (`tool/_dump_schema.dart` reading `PRAGMA table_info`), not transcribed by hand from the Dart
 definitions. A hand-written comparison table is evidence that someone read the code; a dump is
@@ -11,7 +17,7 @@ evidence of what the code actually builds. The same principle drives substage 4.
 *"read the schema at runtime rather than trusting the definition source, so a generator change cannot
 slip past."*
 
-**Totals: 13 tables, 169 columns.** Every column is `TEXT` or `INTEGER`; there is no `REAL`,
+**Totals: 14 tables, 180 columns.** Every column is `TEXT` or `INTEGER`; there is no `REAL`,
 `NUMERIC` or `DECIMAL` anywhere, asserted by test rather than by inspection.
 
 ---
@@ -21,10 +27,11 @@ slip past."*
 | SCHEMA § | Table | Designed columns | Implemented | Difference |
 |---|---|---|---|---|
 | 3.1 | `category_groups` | 5 + 5 sync | 10 | none |
-| 3.2 | `categories` | 20 + 5 sync | 25 | none |
+| 3.2 | `categories` | 21 + 5 sync | 26 | none — **+2 −1 by ADR-006**: gains `reference_monthly_amount_minor` and `redirect_mode`, loses `redirect_target_category_id` |
 | 3.3 | `accounts` | 7 + 5 sync | 12 | none |
 | 3.4 | `distribution_rule_versions` | 6 + 5 sync | 11 | none |
 | 3.5 | `rule_lines` | 6 + 5 sync | 11 | none |
+| **3.14** | **`redirect_targets`** | 5 + 5 sync | 10 | none — **added by ADR-006** |
 | 3.6 | `income_events` | 13 + 5 sync | 18 | none |
 | 3.7 | `ledger_entries` | 14 + 5 sync | 19 | none |
 | 3.8 | `spending_transactions` | 11 + 5 sync | 16 | none |
@@ -34,7 +41,7 @@ slip past."*
 | 3.12 | `balance_cache` | 5, device-local | 5 | none |
 | 3.13 | `repair_log` | 8, device-local | 8 | none |
 
-**Nine synced tables carry all five sync columns; the four device-local tables carry none of them.**
+**Ten synced tables carry all five sync columns; the four device-local tables carry none of them.**
 Both halves are asserted by test. The second half matters as much as the first: `balance_cache`
 carrying sync columns would let a merge import a balance, which is precisely what INV-04 forbids.
 
@@ -42,10 +49,10 @@ carrying sync columns would let a merge import a balance, which is precisely wha
 
 | Group | Designed | Implemented | Difference |
 |---|---|---|---|
-| Foreign keys (§5.2) | 21, all `ON DELETE RESTRICT` | 21, all `RESTRICT` | none — verified by reading `PRAGMA foreign_key_list` on every table, not by reading the Dart |
-| Unique constraints (§5.3) | U-01…U-10 | U-01…U-08 as partial unique indexes, U-09 as a check, U-10 as a primary key | none — the expression differs by kind because Drift cannot express a partial unique index, so those eight are raw SQL |
-| Check constraints (§5.4) | C-01…C-22 | C-01…C-22, **plus C-23…C-28** | **six added — see below** |
-| Indexes (§5.5) | IX-01…IX-12 | IX-01…IX-12, with IX-11 expanded to nine | none. The deliberately-omitted Q9 composite is asserted **absent**, so a later hand cannot add it without failing a test |
+| Foreign keys (§5.2) | 22, all `ON DELETE RESTRICT` | 22, all `RESTRICT` | none — verified by reading `PRAGMA foreign_key_list` on every table, not by reading the Dart |
+| Unique constraints (§5.3) | U-01…U-12 | U-01…U-08 and U-11…U-12 as partial unique indexes, U-09 as a check, U-10 as a primary key | none — the expression differs by kind because Drift cannot express a partial unique index, so those eight are raw SQL |
+| Check constraints (§5.4) | C-01…C-33 | C-01…C-33 | none — **C-23…C-28** were added at 4.3 (below), **C-29…C-33** by ADR-006 |
+| Indexes (§5.5) | IX-01…IX-13 | IX-01…IX-13, with IX-11 expanded to ten | none. The deliberately-omitted Q9 composite is asserted **absent**, so a later hand cannot add it without failing a test |
 
 ### The six added constraints
 
@@ -75,6 +82,11 @@ share exists but is summed nowhere, which looks correct on screen while breaking
 | Ids | `TEXT` UUID | every primary key (INV-12) |
 | Enumerations | `TEXT`, stable strings | asserted non-numeric by test (S-05) |
 | Booleans | `INTEGER` 0/1 | Drift's `boolean()` maps to `INTEGER` in SQLite |
+
+**`redirect_targets.basis_points` is nullable where every other share column is not.** Under
+`PRIORITY` a share is meaningless, and 0 is a *meaningful* share — "this target gets nothing" is a
+different statement from "this target is not weighted". Recorded here because a nullable numeric
+column normally deserves suspicion.
 
 **Every primary key is `TEXT`.** Asserted across all 13 tables by reading `pk` from
 `PRAGMA table_info` — no auto-increment integer anywhere, because two devices creating records
@@ -157,7 +169,8 @@ and no query depends on it.
 | `ceiling_minor` | INTEGER | yes | — |  |
 | `bill_amount_minor` | INTEGER | yes | — |  |
 | `period_anchor_day` | INTEGER | yes | — |  |
-| `redirect_target_category_id` | TEXT | yes | — |  |
+| `redirect_mode` | TEXT | no | `'PRIORITY'` |  |
+| `reference_monthly_amount_minor` | INTEGER | yes | — |  |
 | `linked_account_id` | TEXT | yes | — |  |
 | `target_date_ms` | INTEGER | yes | — |  |
 | `ceiling_kind` | TEXT | no | `'ABSOLUTE'` |  |
@@ -257,6 +270,21 @@ and no query depends on it.
 | `state` | TEXT | no | — |  |
 | `attempt_count` | INTEGER | no | — |  |
 | `last_error` | TEXT | yes | — |  |
+
+#### `redirect_targets`
+
+| Column | Implemented type | Null | Default | PK |
+|---|---|---|---|---|
+| `updated_at_ms` | INTEGER | no | — |  |
+| `updated_by_device` | TEXT | no | — |  |
+| `hlc` | TEXT | no | — |  |
+| `is_deleted` | INTEGER | no | `0` |  |
+| `deleted_at_ms` | INTEGER | yes | — |  |
+| `id` | TEXT | no | — | ✓ |
+| `source_category_id` | TEXT | no | — |  |
+| `target_category_id` | TEXT | no | — |  |
+| `priority` | INTEGER | no | — |  |
+| `basis_points` | INTEGER | yes | — |  |
 
 #### `repair_log`
 

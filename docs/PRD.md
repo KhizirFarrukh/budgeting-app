@@ -421,7 +421,8 @@ Restated from the manifest, plus those discovered during substages 1.1 to 1.5.
 
 ### 3.2 Story disposition
 
-**All 37 stories (US-001…US-037) are in scope for version 1. None is deferred.**
+**All 39 stories (US-001…US-039) are in scope for version 1. None is deferred.**
+*(US-038 and US-039 added by [ADR-006](decisions/ADR-006-ceiling-triggered-cascade-redirect.md) after the Stage 1 gate.)*
 
 That is not the result of generous scoping — it is a property of the brief. Fourteen of the
 manifest's fifteen feature requirements are marked MUST; only FR-14 (reports) is SHOULD. There is
@@ -1141,6 +1142,7 @@ renameable, but always present. *(Story anchor: US-019, sink per OQ-07.)*
 | FR-13 | US-023 | ✅ |
 | FR-14 | US-033…US-037 (§5.8) | ✅ |
 | FR-15 | US-027, US-029, US-030 | ✅ |
+| FR-16 | US-038, US-039 | ✅ |
 
 Non-FR CRITICAL items: NFR-05 → US-014; NFR-07a → US-032; IMP-07 → US-022; IMP-11 → US-030.
 IMP-12 → US-031. No FR is uncovered.
@@ -1183,6 +1185,19 @@ IMP-12 → US-031. No FR is uncovered.
 ---
 
 **US-037 — Business records exportable on their own** · P2 · SHOULD · FR-14d, OQ-10 default · *flag → OQ-10*
+
+**US-038 — A full goal passes its money on to the goals I chose** · P1 · MUST · FR-16, ADR-006 ·
+*"When my EV bike fund hits its target, I want that monthly amount to start filling Hajj and Wedding
+instead — the ones I picked, in the order I picked, not somewhere the app decided."* Targets are
+explicit and never inferred. Configurable as a priority order (fill one, then the next) or a split
+(advance several together). The switch happens **during** the income event that crosses the ceiling,
+not on some later run, so no money is ever allocated to a goal that is already full.
+
+**US-039 — Money that has nowhere to go is visible, not lost** · P1 · MUST · FR-16, OQ-07 default ·
+*"If every goal in the chain is full, I want to be told where the money went and why, not find it
+sitting somewhere I never chose."* The overflow lands in the surplus bucket and the allocation
+result carries a `SURPLUS_UNALLOCATED` diagnostic naming the category whose chain ran out. Correct
+but silent is the failure mode here: to the user, unexplained money reads as missing money.
 
 - Given business scope, When I export with the business-only scope, Then the file contains only business activity, suitable for handing to an accountant, and its totals match the business report for the same range.
 
@@ -1837,6 +1852,7 @@ Parent requirement total: **23**. After splitting compound requirements: **42** 
 | FR-13 | "Dashboard showing real-time balance per category against its ceiling/target." | MUST | Functional |
 | FR-14 | "Reports: monthly/yearly summaries, category trends, CSV export." | SHOULD | Functional |
 | FR-15 | "Offline-first: app fully usable without internet, syncs when connectivity returns." | MUST | Non-functional (registered as FR — see F-01) |
+| FR-16 | "When an Accumulating Reserve reaches its ceiling, its allocation redirects to explicitly configured fallback categories — by priority or split — cascading onward if those are also full, and reaching a surplus bucket that is flagged to the user if the chain runs out." | MUST | Functional |
 
 #### A.1.2 Non-functional requirements
 

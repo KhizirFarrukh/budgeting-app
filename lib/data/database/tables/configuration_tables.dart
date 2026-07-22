@@ -89,12 +89,18 @@ class Categories extends Table with SyncColumns {
   IntColumn get periodAnchorDay =>
       integer().named('period_anchor_day').nullable()();
 
-  /// Where overflow goes. Self-reference.
-  @ReferenceName('categoriesRedirectingHere')
-  TextColumn get redirectTargetCategoryId => text()
-      .named('redirect_target_category_id')
-      .nullable()
-      .references(Categories, #id, onDelete: KeyAction.restrict)();
+  /// How overflow is distributed across this category's `redirect_targets`
+  /// rows: `PRIORITY` | `SPLIT` (ADR-006).
+  TextColumn get redirectMode =>
+      text().named('redirect_mode').withDefault(const Constant('PRIORITY'))();
+
+  /// The user's stated monthly intent for an `ACCUMULATING_RESERVE`, e.g.
+  /// 193,000 toward a bike. Permitted only on that type (C-33).
+  ///
+  /// **Does not currently drive allocation** — percentages do. Whether it
+  /// should is OQ-19; stored now so the data exists either way.
+  IntColumn get referenceMonthlyAmountMinor =>
+      integer().named('reference_monthly_amount_minor').nullable()();
 
   /// At most one (PRD A-08) — structural, the column is single.
   @ReferenceName('linkedCategories')
@@ -160,8 +166,11 @@ class Categories extends Table with SyncColumns {
     // guarantee at database level, so no code path including a sync merge can
     // produce a capped sink.
     'CHECK (is_sink = 0 OR (ceiling_minor IS NULL AND bill_amount_minor IS NULL))',
-    // C-20 — not its own redirect target.
-    'CHECK (redirect_target_category_id IS NULL OR redirect_target_category_id <> id)',
+    // C-33 — mode is one of the two, and a reference amount belongs only to a
+    // reserve, only as a positive figure. (C-20's self-redirect rule moved to
+    // redirect_targets as C-29 when the single column was removed — ADR-006.)
+    "CHECK (redirect_mode IN ('PRIORITY','SPLIT'))",
+    "CHECK (reference_monthly_amount_minor IS NULL OR (type = 'ACCUMULATING_RESERVE' AND reference_monthly_amount_minor > 0))",
     // C-21 — the reserved columns hold only their v1 values.
     "CHECK (ceiling_kind = 'ABSOLUTE')",
     'CHECK (target_date_ms IS NULL)',
@@ -311,6 +320,65 @@ class RuleLines extends Table with SyncColumns {
     // screen while breaking V-01.
     "CHECK ((scope = 'GROUP') = (group_id IS NOT NULL))",
     "CHECK ((scope = 'CATEGORY') = (category_id IS NOT NULL))",
+    'CHECK (is_deleted IN (0,1) AND (is_deleted = 0 OR deleted_at_ms IS NOT NULL) AND (is_deleted = 1 OR deleted_at_ms IS NULL))',
+  ];
+}
+
+/// SCHEMA §3.14 — where a full category's overflow goes (ADR-006).
+///
+/// Replaces the single `categories.redirect_target_category_id` column. One
+/// target is the one-row case of many; keeping both a column and a table would
+/// give two places to read the same fact, which is the shape §3.7 rejects when
+/// it refuses to store a signed amount alongside a direction.
+///
+/// **Targets are explicit, never inferred** (FR-16). A category with no rows
+/// here sends its overflow to the sink, which is the documented terminal
+/// (INV-07), not a guess.
+@DataClassName('RedirectTargetRow')
+class RedirectTargets extends Table with SyncColumns {
+  @override
+  String get tableName => 'redirect_targets';
+
+  /// UUID v4.
+  TextColumn get id => text().named('id')();
+
+  /// The category that is full.
+  @ReferenceName('redirectTargetsFromCategory')
+  TextColumn get sourceCategoryId => text()
+      .named('source_category_id')
+      .references(Categories, #id, onDelete: KeyAction.restrict)();
+
+  /// Where its overflow goes.
+  @ReferenceName('redirectTargetsToCategory')
+  TextColumn get targetCategoryId => text()
+      .named('target_category_id')
+      .references(Categories, #id, onDelete: KeyAction.restrict)();
+
+  /// Order of offer under `PRIORITY`; lower first. **Also the deterministic
+  /// tie-break under `SPLIT`** — two equal shares must still split a leftover
+  /// minor unit reproducibly (ALLOCATION_ALGORITHM §5.1). A tie-break key that
+  /// can be absent is not a tie-break key, which is why this is NOT NULL.
+  IntColumn get priority => integer().named('priority')();
+
+  /// Share under `SPLIT`; null under `PRIORITY`.
+  ///
+  /// Nullable rather than defaulting to 0 because **0 is a meaningful share** —
+  /// "this target gets nothing" is a different statement from "this target is
+  /// not weighted".
+  IntColumn get basisPoints => integer().named('basis_points').nullable()();
+
+  @override
+  Set<Column<Object>> get primaryKey => <Column<Object>>{id};
+
+  @override
+  List<String> get customConstraints => <String>[
+    // C-29 — the old C-20, relocated with the column it guarded. The one-node
+    // case of the cycle rule, and the case a sync merge most easily produces.
+    'CHECK (source_category_id <> target_category_id)',
+    // C-31
+    'CHECK (basis_points IS NULL OR basis_points BETWEEN 0 AND 10000)',
+    // C-32
+    'CHECK (priority >= 0)',
     'CHECK (is_deleted IN (0,1) AND (is_deleted = 0 OR deleted_at_ms IS NOT NULL) AND (is_deleted = 1 OR deleted_at_ms IS NULL))',
   ];
 }

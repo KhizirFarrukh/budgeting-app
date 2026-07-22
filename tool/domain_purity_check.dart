@@ -33,6 +33,7 @@ import 'package:pookiebudget/domain/entities/enums.dart';
 import 'package:pookiebudget/domain/entities/headroom.dart';
 import 'package:pookiebudget/domain/entities/income_event.dart';
 import 'package:pookiebudget/domain/entities/ledger_entry.dart';
+import 'package:pookiebudget/domain/entities/redirect_target.dart';
 import 'package:pookiebudget/domain/entities/rule_line.dart';
 import 'package:pookiebudget/domain/entities/spending_transaction.dart';
 import 'package:pookiebudget/domain/entities/sync_fields.dart';
@@ -59,6 +60,7 @@ const List<String> _importedLibraries = <String>[
   'lib/domain/entities/headroom.dart',
   'lib/domain/entities/income_event.dart',
   'lib/domain/entities/ledger_entry.dart',
+  'lib/domain/entities/redirect_target.dart',
   'lib/domain/entities/rule_line.dart',
   'lib/domain/entities/spending_transaction.dart',
   'lib/domain/entities/sync_fields.dart',
@@ -132,6 +134,35 @@ void main() {
     ).isSuccess,
     'account',
   );
+  // ADR-006 — the cascade redirect model, exercised end to end.
+  final RedirectTarget hop = RedirectTarget.create(
+    id: 'rt-1',
+    sourceCategoryId: 'purity-1',
+    targetCategoryId: 'purity-2',
+    priority: 0,
+    basisPoints: 10000,
+    sync: sync,
+  ).valueOrNull!;
+  _require(
+    <RedirectTarget>[hop].inOfferOrder.first.targetCategoryId == 'purity-2' &&
+        <RedirectTarget>[hop].sharesSumToFull &&
+        validateRedirectMode(RedirectMode.split, <RedirectTarget>[
+          hop,
+        ]).isSuccess,
+    'redirect target',
+  );
+  _require(
+    RedirectTarget.create(
+          id: 'rt-2',
+          sourceCategoryId: 'purity-1',
+          targetCategoryId: 'purity-1',
+          priority: 0,
+          sync: sync,
+        ).failureOrNull
+        is SelfRedirect,
+    'self-redirect is rejected',
+  );
+
   _require(
     RuleLine.create(
       id: 'rl-1',

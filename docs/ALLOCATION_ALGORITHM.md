@@ -455,6 +455,130 @@ category A and simply appear in category D unexplained.*
 
 ---
 
+### 3.10 Multiple redirect targets — priority and split
+
+> **Added by amendment — see
+> [ADR-006](decisions/ADR-006-ceiling-triggered-cascade-redirect.md).** A category may name
+> **several** targets. The single-target behaviour of §3.4–§3.9 is the one-row case of this, and
+> every worked example there remains correct.
+
+#### 3.10.1 Two fallback axes, and which is tried first
+
+The requirement contains two statements that pull in different directions:
+
+> *"…with a user-configurable split or **priority order** if there are multiple targets."*
+> *"Redirect targets can themselves be full. If so, cascade further down **that target's own**
+> redirect target."*
+
+If Hajj is full, does the remainder go to **Wedding** (the source's next-priority choice) or to
+**Hajj's own** target? These are different answers and both sentences are in the requirement.
+
+**Decision: the source's own list is exhausted first, then the chain descends.**
+
+| Axis | Meaning | Tried |
+|---|---|---|
+| **Sibling fallback** | The remaining targets of the category the overflow *originated* from | First |
+| **Descendant cascade** | The targets of the category the parcel most recently *landed* on | Only once the origin's list is spent |
+
+The alternative — descending immediately — makes priority order nearly meaningless: a
+priority-1 target would only ever be reached if priority-0's chain happened to circle back to it.
+A user who lists Hajj then Wedding is saying *"fill Hajj, then Wedding"*, and the design should say
+what they said.
+
+This is why a parcel carries its **origin** and how far through that origin's target list it has
+travelled, not merely its immediate predecessor:
+
+| Parcel field | Purpose |
+|---|---|
+| `category_id` | Where this parcel is being offered now |
+| `pending` | How much is still looking for a home |
+| `origin_id` | The category whose ceiling started this — whose target list is still being walked |
+| `next_target_index` | How far through `origin_id`'s targets we are |
+| `redirected_from` | The immediate predecessor, for the ledger's `redirected_from_category_id` |
+| `hop` | Termination guard (§3.5) and user-facing explanation |
+
+`origin_id` and `redirected_from` are **not** the same field once a chain is more than one hop long,
+and conflating them is the easiest way to implement this wrongly: the ledger wants to say *"this
+came from Hajj"* while the walk still needs to know Wedding is EV Bike's next choice.
+
+#### 3.10.2 PRIORITY — fill one goal, then the next
+
+```
+FUNCTION on_overflow(parcel, overflow, landed_on) -> parcel or sink
+    origin  := lookup(parcel.origin_id)
+    targets := live_targets(origin) ORDERED BY priority ASC, id ASC
+
+    IF parcel.next_target_index < length(targets):
+        next := targets[parcel.next_target_index]
+        RETURN Parcel(category_id:      next.id,
+                      pending:          overflow,
+                      origin_id:        origin.id,
+                      next_target_index: parcel.next_target_index + 1,
+                      redirected_from:  landed_on.id,
+                      hop:              parcel.hop + 1)
+
+    // The origin's list is spent. Descend: the category we landed on becomes
+    // the new origin, and we start at the top of ITS list.
+    IF live_targets(landed_on) is not empty:
+        RETURN Parcel(category_id:      live_targets(landed_on)[0].id,
+                      pending:          overflow,
+                      origin_id:        landed_on.id,
+                      next_target_index: 1,
+                      redirected_from:  landed_on.id,
+                      hop:              parcel.hop + 1)
+
+    RETURN sink_parcel(overflow, reason: SINK_TERMINAL, from: landed_on.id)
+```
+
+**The whole remaining amount is offered to one target at a time, never pre-divided.** How much that
+target can take is decided when its parcel is popped, against headroom computed at that moment
+(§3.2). Pre-computing shares here would read headroom too early — the defect §3.2 exists to prevent.
+
+#### 3.10.3 SPLIT — advance several goals together
+
+```
+FUNCTION distribute_split(overflow, source) -> list of parcels
+    live    := live_targets(source)
+    divisor := sum of t.basis_points for t in live        // NOT the constant 10000
+    IF divisor == 0: RETURN [sink_parcel(overflow, reason: SINK_TERMINAL)]
+
+    shares := largest_remainder(overflow, live, divisor)  // §5.1; tie-break priority ASC, id ASC
+    RETURN [Parcel(category_id: t.id, pending: shares[t], origin_id: t.id,
+                   next_target_index: 0, redirected_from: source.id, hop: hop + 1)
+            for t in live IF shares[t] > 0]
+```
+
+**`divisor` is the sum of the *live* targets' weights.** If one of three equally weighted targets is
+archived, the participating weights total 6667, not 10000, and dividing by the constant would leave
+a third of the overflow unallocated. This is the identical defect substage 2.8 found in override
+redistribution. V-29 checks the configured total at save time; this divides by the actual total at
+run time, because a target can be archived between the two.
+
+Each split parcel becomes **its own origin** — under `SPLIT` the source has already made its choice
+by weighting, so a share that overflows descends its own chain rather than borrowing its siblings'
+capacity. Zero shares produce no parcel, matching §2.2.
+
+#### 3.10.4 When the chain runs out
+
+A parcel with no live target anywhere in its walk goes to the sink with `reason = SINK_TERMINAL`
+(§3.7). This is the requirement's *"default Unallocated Surplus bucket"* and it is not a new
+mechanism: INV-07 already terminates here, and C-19 guarantees the sink is uncapped so it can always
+accept.
+
+Every arrival by this route emits a **`SURPLUS_UNALLOCATED`** diagnostic naming the category whose
+chain was exhausted and the amount, so substage 6.4.3 can surface it. **The requirement is that this
+is visible, not merely correct** — *"flag this to the user in the UI rather than losing the funds
+silently."* Money reaching the sink is money the user's plan did not account for; behaviour that is
+silently correct here still reads to the user as money going missing.
+
+#### 3.10.5 Termination
+
+The visited set and hop limit of §3.5 still bound the walk. Branching raises the parcel *count*, not
+the depth: each parcel carries its own visited set, and a parcel revisiting a category it has already
+touched routes to the sink with `CYCLE_DEFENDED`. The bound becomes
+`hop_limit × max_targets_per_category` parcels — finite and small for a few dozen categories.
+
+
 ## 4. Manual overrides and reversals
 
 ### 4.1 What an override is
@@ -1156,8 +1280,21 @@ Configurations use a single `SAVINGS` group at 10000 basis points unless stated 
 | **V-14** | Simultaneous ceiling hits to one target | 100,000; A, B, C all full at 3000bp each → Buffer 1000bp | Buffer **10,000** BASE + **30,000** from A + **30,000** from B + **30,000** from C, all hop 1 · buffer total 100,000 |
 | **V-15** | Very large income near the maximum | `MAX_MONEY_MINOR` = 922,337,203,685,477 across 40 uncapped categories at 250bp each | **37 categories at 23,058,430,092,137** and **3 at 23,058,430,092,136** · total 922,337,203,685,477 exactly |
 
-**Sixteen fixture files for fifteen vectors** — V-11 is split into `v11a` and `v11b` because the
+| **V-16** | **Ceiling-triggered redirect, PRIORITY, first target has room** (ADR-006) | 386,000; EV Bike 5000bp ceiling 350,000 balance 250,000, targets Hajj(p0) then Wedding(p1); Spend 5000bp uncapped | EV Bike **100,000** BASE; Spend **193,000** BASE; Hajj **93,000** REDIRECT from EV Bike hop 1 · Wedding **no line** · total 386,000 |
+| **V-17** | **Multi-target SPLIT redirect, leftover breaks the tie** (ADR-006) | as V-16 but balance 250,001, mode `SPLIT`, Hajj 6000bp / Wedding 4000bp | EV Bike **99,999**; Spend **193,000**; overflow 93,001 splits **55,801 / 37,200** — floors 55,800/37,200, leftover 1 to Hajj on the larger remainder · total 386,000 |
+| **V-18** | **Chained cascade: sibling fallback, then descend, then sink** (ADR-006) | as V-16 but EV Bike balance 350,000 (full), Hajj ceiling 500,000 balance 460,000, Wedding ceiling 300,000 balance 280,000, Wedding has no targets | Spend **193,000** BASE; Hajj **40,000** hop 1; Wedding **20,000** hop 2 *(EV Bike's priority-1 sibling, not Hajj's descendant)*; Sink **133,000** SINK_TERMINAL hop 3 · **EV Bike produces no line** · total 386,000 |
+| **V-19** | **No valid target — the surplus fallback** (ADR-006) | as V-16 but EV Bike full and its only target archived | Spend **193,000** BASE; Sink **193,000** SINK_TERMINAL hop 1 · one `DEGRADED_TARGET` and one `SURPLUS_UNALLOCATED` diagnostic · total 386,000 |
+
+**Twenty fixture files for nineteen vectors** — V-11 is split into `v11a` and `v11b` because the
 fixture format holds one request per file.
+
+**V-16 to V-19 are the four cases the cascade requirement names**, in its own order: simple
+single-target redirect, multi-target split, chained cascade when a target is also full, and the
+no-valid-target fallback. V-18 is the one that pins the ordering decision of §3.10.1 — under the
+rejected reading it would route Hajj's overflow to Hajj's own chain and Wedding would never be
+reached, so the vector fails loudly if that decision is ever quietly reversed.
+
+
 
 ### 10.1 Coverage of this table
 

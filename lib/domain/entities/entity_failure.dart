@@ -115,11 +115,12 @@ final class AnchorDayOutOfRange extends EntityFailure {
   String get describe => 'A due day must be between 1 and 31 (got $value).';
 }
 
-/// A category whose redirect target is itself. SCHEMA V-10 / C-20.
+/// A redirect row whose source and target are the same category.
+/// SCHEMA V-10 / C-29 (relocated from C-20 by ADR-006).
 ///
 /// The single-node case of the cycle rule V-12. Caught here because it needs no
-/// graph — the whole cycle check lives in substage 4.8, which can see every
-/// category; this one is visible from the entity alone.
+/// graph — the full check lives in substage 4.8, which can see every category;
+/// this one is visible from the row alone.
 final class SelfRedirect extends EntityFailure {
   const SelfRedirect(this.categoryId);
 
@@ -288,4 +289,65 @@ final class LedgerEntryTombstoned extends EntityFailure {
   String get describe =>
       'A money movement cannot be deleted. Corrections are recorded as new '
       'entries.';
+}
+
+/// A negative redirect priority. SCHEMA C-32 (ADR-006).
+final class NegativeRedirectPriority extends EntityFailure {
+  const NegativeRedirectPriority(this.value);
+
+  final int value;
+
+  @override
+  String get rule => 'C-32';
+
+  @override
+  String get describe => 'A fallback order cannot be negative.';
+}
+
+/// A redirect list whose shares contradict the category's mode.
+/// SCHEMA V-30 (ADR-006).
+final class RedirectModeMismatch extends EntityFailure {
+  const RedirectModeMismatch(this.detail);
+
+  final String detail;
+
+  @override
+  String get rule => 'V-30';
+
+  @override
+  String get describe => 'These fallback settings are inconsistent: $detail.';
+}
+
+/// A `SPLIT` redirect whose shares do not total 100%. SCHEMA V-29 (ADR-006).
+///
+/// The same exactness the group and category percentage rules require (V-01,
+/// V-02), one level down: an overflow split that does not total 100% either
+/// loses money or creates it.
+final class RedirectSharesDoNotSum extends EntityFailure {
+  const RedirectSharesDoNotSum(this.total);
+
+  /// The actual total, in basis points.
+  final int total;
+
+  @override
+  String get rule => 'V-29';
+
+  @override
+  String get describe =>
+      'The shares across your fallback categories must add up to exactly 100%.';
+}
+
+/// A reference monthly amount on a category that is not an
+/// `ACCUMULATING_RESERVE`. SCHEMA C-33 (ADR-006).
+final class ReferenceAmountTypeMismatch extends EntityFailure {
+  const ReferenceAmountTypeMismatch(this.typeWireName);
+
+  final String typeWireName;
+
+  @override
+  String get rule => 'C-33';
+
+  @override
+  String get describe =>
+      'Only a savings goal can have a monthly target amount.';
 }

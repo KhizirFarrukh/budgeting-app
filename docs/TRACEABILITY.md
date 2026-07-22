@@ -57,6 +57,7 @@ assumption A-14.
 | Pair | Claim |
 |---|---|
 | FR-15 ↔ NFR-02 | The app works fully offline |
+| FR-16 | US-038, US-039 | ADR-006; SCHEMA §3.14, C-29…C-33, V-28…V-31; ALLOCATION §3.10; vectors V-16…V-19 | Stage 4 (data model), Stage 5 (engine), Stage 6 (editor + surplus flag) |
 | FR-09 ↔ NFR-01 | Financial data reaches only the user's own Google account |
 | FR-07b ↔ NFR-03 | Business and personal data stay separate |
 

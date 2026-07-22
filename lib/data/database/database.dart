@@ -63,6 +63,14 @@ const String uCategoryLinePerVersion =
 const String uOneSinkPerGroup =
     'CREATE UNIQUE INDEX u_08_one_sink_per_group ON categories (group_id) WHERE is_sink = 1 AND is_deleted = 0';
 
+/// U-11 — one redirect row per source/target pair, among live rows (ADR-006).
+const String uRedirectPair =
+    'CREATE UNIQUE INDEX u_11_redirect_pair ON redirect_targets (source_category_id, target_category_id) WHERE is_deleted = 0';
+
+/// U-12 — one row per source at each priority, so the offer order is total.
+const String uRedirectPriority =
+    'CREATE UNIQUE INDEX u_12_redirect_priority ON redirect_targets (source_category_id, priority) WHERE is_deleted = 0';
+
 const List<String> kUniqueIndexStatements = <String>[
   uCategoryNamePerGroup,
   uAccountName,
@@ -72,6 +80,8 @@ const List<String> kUniqueIndexStatements = <String>[
   uGroupLinePerVersion,
   uCategoryLinePerVersion,
   uOneSinkPerGroup,
+  uRedirectPair,
+  uRedirectPriority,
 ];
 
 /// IX-01 — Q1 balance derivation, Q2 category history, Q9 allocated-in-period.
@@ -118,6 +128,11 @@ const String ixSpendingCategoryTime =
 const String ixRepairLogUnread =
     'CREATE INDEX ix_12_repair_log_unread ON repair_log (acknowledged_at_ms, occurred_at_ms)';
 
+/// IX-13 — Q16 loading a category's redirect chain. Read once per full
+/// category on **every** income event, so it is on the allocation hot path.
+const String ixRedirectSourcePriority =
+    'CREATE INDEX ix_13_redirect_source_priority ON redirect_targets (source_category_id, priority)';
+
 /// The performance indexes of SCHEMA §5.5. **Every one names the query it
 /// serves** — an index with no named query does not belong in this design.
 ///
@@ -142,6 +157,7 @@ const List<String> kPerformanceIndexStatements = <String>[
   ixCategoriesAccount,
   ixSpendingCategoryTime,
   ixRepairLogUnread,
+  ixRedirectSourcePriority,
 ];
 
 /// IX-11 — `(hlc)` on each of the nine synced tables, serving Q13: records
@@ -160,6 +176,7 @@ List<String> get kHlcIndexStatements => <String>[
     Accounts,
     DistributionRuleVersions,
     RuleLines,
+    RedirectTargets,
     // Movement
     IncomeEvents,
     LedgerEntries,

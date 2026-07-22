@@ -221,8 +221,9 @@ void main() {
       }
     });
 
-    test('the nine synced tables are exactly the ones named', () async {
-      expect(kSyncedTableNames.length, 9);
+    test('the ten synced tables are exactly the ones named', () async {
+      // Nine at substage 4.3; `redirect_targets` joined them with ADR-006.
+      expect(kSyncedTableNames.length, 10);
       final List<String> all = await tableNames();
       for (final String table in kSyncedTableNames) {
         expect(all, contains(table));
@@ -235,7 +236,7 @@ void main() {
   // ===========================================================================
 
   group('4.3.1 the schema matches SCHEMA.md', () {
-    test('all thirteen tables exist', () async {
+    test('all fourteen tables exist', () async {
       expect(
         await tableNames(),
         containsAll(<String>[
@@ -244,6 +245,7 @@ void main() {
           'accounts',
           'distribution_rule_versions',
           'rule_lines',
+          'redirect_targets',
           'income_events',
           'ledger_entries',
           'spending_transactions',
@@ -333,8 +335,8 @@ void main() {
           'ceiling_minor',
           'bill_amount_minor',
           'period_anchor_day',
-          'redirect_target_category_id',
           'linked_account_id',
+          'reference_monthly_amount_minor',
           'seed_version',
         ],
         'ledger_entries': <String>[
@@ -360,6 +362,128 @@ void main() {
           );
         }
       }
+    });
+  });
+
+  // ===========================================================================
+  // ADR-006 — the redirect_targets table
+  // ===========================================================================
+
+  group('ADR-006 redirect_targets', () {
+    Future<void> seedTwoCategories() async {
+      await db.customStatement(
+        'INSERT INTO category_groups (id, kind, name, sort_order, '
+        'updated_at_ms, updated_by_device, hlc) VALUES '
+        "('g1', 'SAVINGS', 'Savings', 0, 0, 'd', 'h')",
+      );
+      for (final String id in <String>['bike', 'hajj']) {
+        await db.customStatement(
+          'INSERT INTO categories (id, group_id, name, type, sort_order, '
+          'ceiling_minor, updated_at_ms, updated_by_device, hlc) VALUES '
+          "('$id', 'g1', '$id', 'ACCUMULATING_RESERVE', 0, 350000, 0, "
+          "'d', 'h')",
+        );
+      }
+    }
+
+    test('THE SINGLE redirect_target_category_id COLUMN IS GONE', () async {
+      // ADR-006 replaces it outright rather than keeping both. Two places to
+      // read "where does overflow go" is the shape SCHEMA §3.7 rejects.
+      final Set<String> columns = (await tableInfo(
+        'categories',
+      )).map((QueryRow c) => c.read<String>('name')).toSet();
+      expect(columns, isNot(contains('redirect_target_category_id')));
+      expect(columns, contains('redirect_mode'));
+      expect(columns, contains('reference_monthly_amount_minor'));
+    });
+
+    test('C-29 — a row cannot redirect a category to itself', () async {
+      await seedTwoCategories();
+      expect(
+        () => db.customStatement(
+          'INSERT INTO redirect_targets (id, source_category_id, '
+          'target_category_id, priority, updated_at_ms, updated_by_device, '
+          "hlc) VALUES ('rt1', 'bike', 'bike', 0, 0, 'd', 'h')",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test('C-31 and C-32 — share range and non-negative priority', () async {
+      await seedTwoCategories();
+      expect(
+        () => db.customStatement(
+          'INSERT INTO redirect_targets (id, source_category_id, '
+          'target_category_id, priority, basis_points, updated_at_ms, '
+          "updated_by_device, hlc) VALUES ('rt1', 'bike', 'hajj', 0, 10001, "
+          "0, 'd', 'h')",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+      expect(
+        () => db.customStatement(
+          'INSERT INTO redirect_targets (id, source_category_id, '
+          'target_category_id, priority, updated_at_ms, updated_by_device, '
+          "hlc) VALUES ('rt2', 'bike', 'hajj', -1, 0, 'd', 'h')",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test('U-12 — a source cannot hold two targets at one priority', () async {
+      // The offer order must be total; a tie the engine has to break
+      // arbitrarily is a determinism hole (INV-08).
+      await seedTwoCategories();
+      await db.customStatement(
+        'INSERT INTO categories (id, group_id, name, type, sort_order, '
+        'updated_at_ms, updated_by_device, hlc) VALUES '
+        "('wedding', 'g1', 'wedding', 'UNCAPPED_FLOW', 0, 0, 'd', 'h')",
+      );
+      await db.customStatement(
+        'INSERT INTO redirect_targets (id, source_category_id, '
+        'target_category_id, priority, updated_at_ms, updated_by_device, hlc) '
+        "VALUES ('rt1', 'bike', 'hajj', 0, 0, 'd', 'h')",
+      );
+      expect(
+        () => db.customStatement(
+          'INSERT INTO redirect_targets (id, source_category_id, '
+          'target_category_id, priority, updated_at_ms, updated_by_device, '
+          "hlc) VALUES ('rt2', 'bike', 'wedding', 0, 0, 'd', 'h')",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test('C-33 — a reference amount belongs only to a reserve', () async {
+      await db.customStatement(
+        'INSERT INTO category_groups (id, kind, name, sort_order, '
+        'updated_at_ms, updated_by_device, hlc) VALUES '
+        "('g1', 'SPENDING', 'S', 0, 0, 'd', 'h')",
+      );
+      expect(
+        () => db.customStatement(
+          'INSERT INTO categories (id, group_id, name, type, sort_order, '
+          'reference_monthly_amount_minor, updated_at_ms, updated_by_device, '
+          "hlc) VALUES ('c1', 'g1', 'C', 'UNCAPPED_FLOW', 0, 193000, 0, "
+          "'d', 'h')",
+        ),
+        throwsA(isA<SqliteException>()),
+      );
+    });
+
+    test('IX-13 serves the redirect-chain lookup by query plan', () async {
+      // Read once per full category on EVERY income event, so it is on the
+      // allocation hot path — worth proving used, not assumed.
+      final List<QueryRow> plan = await db
+          .customSelect(
+            'EXPLAIN QUERY PLAN SELECT * FROM redirect_targets '
+            "WHERE source_category_id = 'bike' ORDER BY priority",
+          )
+          .get();
+      final String detail = plan
+          .map((QueryRow r) => r.read<String>('detail'))
+          .join(' ');
+      expect(detail, contains('redirect'));
     });
   });
 

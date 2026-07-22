@@ -10,6 +10,7 @@ import 'package:pookiebudget/domain/entities/enums.dart';
 import 'package:pookiebudget/domain/entities/headroom.dart';
 import 'package:pookiebudget/domain/entities/income_event.dart';
 import 'package:pookiebudget/domain/entities/ledger_entry.dart';
+import 'package:pookiebudget/domain/entities/redirect_target.dart';
 import 'package:pookiebudget/domain/entities/rule_line.dart';
 import 'package:pookiebudget/domain/entities/spending_transaction.dart';
 import 'package:pookiebudget/domain/entities/sync_fields.dart';
@@ -32,7 +33,7 @@ void main() {
     int? ceilingMinor,
     int? billAmountMinor,
     int? periodAnchorDay,
-    String? redirectTargetCategoryId,
+    int? referenceMonthlyAmountMinor,
   }) => Category.create(
     id: id,
     groupId: 'grp-1',
@@ -44,7 +45,7 @@ void main() {
     ceilingMinor: ceilingMinor,
     billAmountMinor: billAmountMinor,
     periodAnchorDay: periodAnchorDay,
-    redirectTargetCategoryId: redirectTargetCategoryId,
+    referenceMonthlyAmountMinor: referenceMonthlyAmountMinor,
   );
 
   // ===========================================================================
@@ -137,17 +138,28 @@ void main() {
       expect(category(name: '  Groceries  ').valueOrNull!.name, 'Groceries');
     });
 
-    test('a category whose redirect target is itself (V-10)', () {
-      final Result<Category, EntityFailure> r = category(
-        id: 'cat-1',
-        redirectTargetCategoryId: 'cat-1',
+    test('a redirect row whose target is its own source (V-10 / C-29)', () {
+      // Since ADR-006 the source/target pair lives on RedirectTarget, so this
+      // rule moved with the column it guarded.
+      final Result<RedirectTarget, EntityFailure> r = RedirectTarget.create(
+        id: 'rt-1',
+        sourceCategoryId: 'cat-1',
+        targetCategoryId: 'cat-1',
+        priority: 0,
+        sync: sync,
       );
       expect(r.isSuccess, isFalse);
       expect(r.failureOrNull, isA<SelfRedirect>());
       expect(r.failureOrNull!.rule, 'V-10');
       // Pointing at a different category is fine.
       expect(
-        category(id: 'cat-1', redirectTargetCategoryId: 'cat-2').isSuccess,
+        RedirectTarget.create(
+          id: 'rt-1',
+          sourceCategoryId: 'cat-1',
+          targetCategoryId: 'cat-2',
+          priority: 0,
+          sync: sync,
+        ).isSuccess,
         isTrue,
       );
     });
@@ -450,10 +462,12 @@ void main() {
       );
       // Nor a name to a blank one.
       expect(reserve.copyWith(name: '  ').failureOrNull, isA<BlankName>());
-      // Nor a redirect into a self-reference.
+      // Nor a reference amount onto a type that cannot carry one.
       expect(
-        reserve.copyWith(redirectTargetCategoryId: 'cat-1').failureOrNull,
-        isA<SelfRedirect>(),
+        category(type: CategoryType.uncappedFlow).valueOrNull!
+            .copyWith(referenceMonthlyAmountMinor: 193000)
+            .failureOrNull,
+        isA<ReferenceAmountTypeMismatch>(),
       );
     });
 

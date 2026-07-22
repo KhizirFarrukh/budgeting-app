@@ -314,3 +314,27 @@ enum RepairKind implements WireEnum {
     return null;
   }
 }
+
+/// `categories.redirect_mode` — how a full category's overflow is distributed
+/// across its `redirect_targets` (ADR-006).
+enum RedirectMode implements WireEnum {
+  /// Offer the whole overflow to each live target in `priority` order; each
+  /// takes what its headroom allows. Fills one goal, then the next.
+  priority('PRIORITY'),
+
+  /// Divide the overflow across the live targets by basis points, which must
+  /// total exactly 10000 among them. Advances several goals together.
+  split('SPLIT');
+
+  const RedirectMode(this.wireName);
+
+  @override
+  final String wireName;
+
+  static RedirectMode? fromWire(String value) {
+    for (final RedirectMode v in values) {
+      if (v.wireName == value) return v;
+    }
+    return null;
+  }
+}

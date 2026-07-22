@@ -133,7 +133,8 @@ a sort order, and because the business group can be absent entirely (PRD A-20).
 | `ceiling_minor` | INTEGER | yes | null | Target amount. Required when `type = ACCUMULATING_RESERVE`, must be null otherwise |
 | `bill_amount_minor` | INTEGER | yes | null | Per-period bill. Required when `type = FIXED_RECURRING`, null otherwise |
 | `period_anchor_day` | INTEGER | yes | null | 1–31. Required when `type = FIXED_RECURRING`, null otherwise |
-| `redirect_target_category_id` | TEXT | yes | null | Self-reference → `categories.id`. Where overflow goes |
+| `reference_monthly_amount_minor` | INTEGER | yes | null | **Added by ADR-006.** The user's stated monthly intent for an `ACCUMULATING_RESERVE`, e.g. 193,000 toward a bike. Permitted only on that type. Drives projections; whether it also drives allocation is **OQ-19** |
+| `redirect_mode` | TEXT | no | `'PRIORITY'` | **Added by ADR-006.** `PRIORITY` \| `SPLIT` — how overflow is distributed across this category's `redirect_targets` rows |
 | `linked_account_id` | TEXT | yes | null | → `accounts.id`. At most one (PRD A-08) |
 | **`target_date_ms`** | INTEGER | yes | null | **RESERVED, UNUSED in v1.** Accommodation for deferral D-01 (OQ-04). Written by nothing, read by nothing; present so adding deadline-driven goals later is not a migration |
 | **`ceiling_kind`** | TEXT | no | `'ABSOLUTE'` | **RESERVED.** `ABSOLUTE` is the only value v1 writes or accepts. Accommodation for D-02 (derived ceilings, escalation E-03) |
@@ -391,6 +392,54 @@ is reflected in old log entries rather than preserving a stale name.
 Entries older than **365 days and acknowledged** may be pruned; unacknowledged entries are never
 pruned, because a repair the user has not seen is exactly the one worth keeping.
 
+### 3.14 `redirect_targets` — where a full category's overflow goes
+
+> **Added by amendment — see [ADR-006](decisions/ADR-006-ceiling-triggered-cascade-redirect.md).**
+> Replaces the single `categories.redirect_target_category_id` column, which is **removed**. One
+> target is the one-row case of many; keeping both a column and a table would give two places to
+> read the same fact, which is the shape §3.7 rejects when it refuses to store a signed amount
+> alongside a direction.
+
+Each row says: *when this source category is full, some of its overflow goes here.*
+
+| Column | Type | Null | Default | Meaning |
+|---|---|---|---|---|
+| `id` | TEXT | no | — | UUID v4, primary key |
+| `source_category_id` | TEXT | no | — | → `categories.id`. The category that is full |
+| `target_category_id` | TEXT | no | — | → `categories.id`. Where its overflow goes |
+| `priority` | INTEGER | no | — | Order of offer when the source's `redirect_mode = PRIORITY`. Lower is offered first. Also the deterministic tie-break under `SPLIT` |
+| `basis_points` | INTEGER | yes | null | Share when `redirect_mode = SPLIT`; must be null under `PRIORITY` |
+| *five sync columns* | | | | §2.1 |
+
+**Targets are explicit, never inferred.** The app does not pick a fallback category on the user's
+behalf — a redirect the user did not choose moves their money somewhere they did not expect, which
+is the one kind of surprise this app cannot afford. A category with no rows here sends its overflow
+straight to the sink, which is the documented terminal (INV-07), not an inference.
+
+**`priority` is `NOT NULL` even under `SPLIT`.** Two targets holding equal basis points must still
+split a leftover minor unit deterministically, and `priority` is that tie-break — the same role
+`sort_order` plays for categories in ALLOCATION_ALGORITHM §5.1. A nullable tie-break key is not a
+tie-break key.
+
+**Why `basis_points` is nullable rather than defaulting to 0.** Under `PRIORITY` a share is
+meaningless, and 0 is a meaningful share — it would read as "this target gets nothing", which is a
+different statement from "this target is not weighted". C-30 enforces that the column is present
+exactly when the mode needs it.
+
+#### The two modes
+
+| Mode | Behaviour |
+|---|---|
+| `PRIORITY` *(default)* | The overflow is offered to each live target in `priority` order; each accepts `min(remaining, its own headroom)`. Fills one goal, then the next |
+| `SPLIT` | The overflow is divided across the live targets by `basis_points`, which must total exactly 10000 among them (C-31) |
+
+Under `SPLIT` the division uses the largest-remainder method with **divisor = the sum of the live
+targets' weights**, not a constant 10000 (ALLOCATION_ALGORITHM §3.10). When one of several targets is
+archived or already full, the participating weights total less than 10000, and dividing by the
+constant would silently lose money — the identical defect substage 2.8 found in override
+redistribution.
+
+
 ---
 
 ## 4. Enumerations
@@ -412,6 +461,7 @@ migration**. Any value not listed is invalid and rejected at the mapper boundary
 | `OutboxState` | `PENDING`, `IN_FLIGHT`, `FAILED` | `outbox.state` |
 | `CeilingKind` | `ABSOLUTE` *(only value v1 writes)* | `categories.ceiling_kind` — reserved, D-02 |
 | `RuleSet` | `DEFAULT` *(only value v1 writes)* | `distribution_rule_versions.rule_set` — reserved, D-06 |
+| `RedirectMode` | `PRIORITY`, `SPLIT` | `categories.redirect_mode` — ADR-006 |
 | `RepairKind` | `REDIRECT_TARGET_REASSIGNED`, `PERCENTAGES_REDISTRIBUTED`, `SINK_RESTORED`, `CYCLE_BROKEN`, `ACCOUNT_UNLINKED`, `GROUP_SHARE_ZEROED` | `repair_log.kind` — one value per §6.8 repair |
 
 `UNCAPPED_FLOW` exists because OQ-03 was answered **yes**; the six seeded categories typed that way
@@ -635,7 +685,8 @@ row was removed, which is precisely what INV-03 exists to prevent.
 | Table.column | References | On delete |
 |---|---|---|
 | `categories.group_id` | `category_groups.id` | RESTRICT |
-| `categories.redirect_target_category_id` | `categories.id` | RESTRICT |
+| `redirect_targets.source_category_id` | `categories.id` | RESTRICT |
+| `redirect_targets.target_category_id` | `categories.id` | RESTRICT |
 | `categories.linked_account_id` | `accounts.id` | RESTRICT |
 | `categories.parent_category_id` *(reserved)* | `categories.id` | RESTRICT |
 | `rule_lines.rule_version_id` | `distribution_rule_versions.id` | RESTRICT |
@@ -676,6 +727,8 @@ category must not block reusing its name, and a tombstoned row must not block re
 | U-06 | One group-level rule line per group per version | `UNIQUE (rule_version_id, group_id) WHERE scope = 'GROUP' AND is_deleted = 0` |
 | U-07 | One category-level rule line per category per version | `UNIQUE (rule_version_id, category_id) WHERE scope = 'CATEGORY' AND is_deleted = 0` |
 | U-08 | At most one sink per group | `UNIQUE (group_id) WHERE is_sink = 1 AND is_deleted = 0` |
+| **U-11** | **One redirect row per source/target pair, among live rows** (ADR-006) | `UNIQUE (source_category_id, target_category_id) WHERE is_deleted = 0` |
+| **U-12** | **One row per source at each priority** (ADR-006) | `UNIQUE (source_category_id, priority) WHERE is_deleted = 0` |
 | U-09 | Settings is a single row | `CHECK (id = 'singleton')` |
 | U-10 | One cache row per category | primary key on `category_id` |
 
@@ -726,6 +779,24 @@ produce a capped sink.
 **C-21 and C-22 make the reserved columns provably unused.** A v1 build cannot write a non-default
 value even by mistake, so a v1.1 client can trust that every v1.0 row carries the defaults.
 
+#### C-29 to C-33 — added by ADR-006
+
+| # | Constraint | Table |
+|---|---|---|
+| C-29 | `source_category_id <> target_category_id` — a category cannot redirect to itself | `redirect_targets` |
+| C-30 | `basis_points` is present exactly when the source's mode is `SPLIT` — enforced by the validator, since it needs the source row | `redirect_targets` |
+| C-31 | `basis_points IS NULL OR basis_points BETWEEN 0 AND 10000` | `redirect_targets` |
+| C-32 | `priority >= 0` | `redirect_targets` |
+| C-33 | `redirect_mode IN ('PRIORITY','SPLIT')`, and `reference_monthly_amount_minor IS NULL OR (type = 'ACCUMULATING_RESERVE' AND reference_monthly_amount_minor > 0)` | `categories` |
+
+**C-29 is the old C-20 relocated.** With the single column gone, the self-redirect rule moves to the
+table. It remains a database-level constraint rather than only a validator because it is the
+one-node case of the cycle rule, and it is the case a sync merge is most likely to produce.
+
+**C-33's second half is why the reference amount is safe to store before OQ-19 is answered.** A
+non-reserve cannot carry one, and a zero or negative one is rejected, so whichever way the open
+question resolves, no row exists that the answer would invalidate.
+
 #### C-23 to C-28 — added by amendment during substage 4.3
 
 > **Amended during transcription.** Substage 4.3's `must_not` is *"Do not silently deviate from
@@ -774,6 +845,7 @@ An index with no named query does not belong in this design. Query numbers refer
 | IX-10 | `spending_transactions (category_id, occurred_at_ms)` | Q14 spending history per category |
 | IX-11 | `<table> (hlc)` on **each of the nine synced tables** | Q13 sync: records changed since a given clock value |
 | IX-12 | `repair_log (acknowledged_at_ms, occurred_at_ms)` | Q15 unread repairs for the Diagnostics badge and list |
+| **IX-13** | `redirect_targets (source_category_id, priority)` | Q16 loading a category's redirect chain — read once per full category on **every** income event, so it is on the allocation hot path (ADR-006) |
 
 **Deliberately not created:** a composite `ledger_entries (category_id, source_type, occurred_at_ms)`
 for Q9. IX-01 already narrows to one category — roughly 1,675 rows at the Heavy profile (PRD §7.3) —
@@ -856,7 +928,7 @@ a merge.
 | V-07 | A ceiling, when set, is greater than zero | Database (C-03) + validator | **Block** |
 | V-08 | A ceiling is set **iff** the type is `ACCUMULATING_RESERVE` | Database (C-17) + validator | **Block** |
 | V-09 | A redirect target exists and is not deleted | Domain validator | **Block** at save. At allocation time a missing target is a *warning* routed to the sink (§3.6 of the algorithm) — the asymmetry is deliberate: save time can refuse, allocation time cannot |
-| V-10 | A redirect target is not the category itself | Database (C-20) + validator | **Block** |
+| V-10 | A redirect target is not the category itself | Database (C-29) + validator | **Block** |
 | V-11 | A redirect target is not archived | Domain validator | **Block** |
 | V-12 | **The redirect graph is acyclic** | Domain validator, on every save touching a redirect target | **Block**; name the cycle by listing the categories in it |
 | V-13 | The sink exists, is uncapped, and is not archived or deleted | Database (C-19) + validator | **Block**; INV-07's termination guarantee depends on it |
@@ -864,10 +936,28 @@ a merge.
 | V-15 | The sink cannot be deleted or archived | Domain validator | **Block** |
 | V-16 | Exactly one sink per group that has one, at most (C-19, U-08) | Database | **Block** |
 
+#### V-28 to V-31 — the multi-target rules (ADR-006)
+
+| # | Rule | Enforced at | On violation |
+|---|---|---|---|
+| V-28 | Every `redirect_targets` row's target exists, is not deleted, and is not archived | Domain validator | **Block** at save. At allocation time a dead target is *skipped with a warning*, not fatal — the same save-time/run-time asymmetry as V-09, and for the same reason: a save can refuse, an allocation cannot |
+| V-29 | Under `SPLIT`, a source's live targets' `basis_points` total **exactly** 10000 | Domain validator | **Block**; the same rule as V-01/V-02 one level down |
+| V-30 | Under `PRIORITY`, no `basis_points` are set; under `SPLIT`, all are | Domain validator (C-30) | **Block** |
+| V-31 | A category's `priority` values are distinct | Database (U-12) | **Block** |
+
+**V-29 is checked against *live* targets, and the engine divides by their actual total.** These are
+two different things and both are needed. The validator blocks a configuration that does not total
+10000 at save time; the engine still divides by the live sum at run time, because a target can be
+archived between the save and the allocation. Relying on the validator alone would mean dividing by
+10000 when the live weights total 6000 — the substage 2.8 defect, in a second place.
+
 #### V-12 — the cycle detection method, and when it runs
 
-**Method:** depth-first traversal from the category being saved, following
-`redirect_target_category_id`, carrying a visited set. If the traversal re-reaches any node already
+**Method:** depth-first traversal from the category being saved, following its `redirect_targets`
+rows, carrying a visited set. **Since ADR-006 the graph branches** — a node has many successors, not
+one — so the traversal explores every target of every node. A chain check that followed only the
+first target would miss a cycle reachable through the second, which is the same class of defect as
+checking only the immediate pair. If the traversal re-reaches any node already
 in the visited set, the graph is cyclic and the save is rejected.
 
 **Traversal is over the whole reachable graph, not just the immediate pair.** Checking only

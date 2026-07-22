@@ -49,7 +49,7 @@ const List<String> kSyncColumnNames = <String>[
   'deleted_at_ms',
 ];
 
-/// The nine synced tables (SCHEMA §8.1). The four device-local tables —
+/// The ten synced tables (SCHEMA §8.1). The four device-local tables —
 /// `sync_metadata`, `outbox`, `balance_cache`, `repair_log` — deliberately have
 /// none of these columns and are excluded from the payload.
 const List<String> kSyncedTableNames = <String>[
@@ -58,6 +58,7 @@ const List<String> kSyncedTableNames = <String>[
   'accounts',
   'distribution_rule_versions',
   'rule_lines',
+  'redirect_targets',
   'income_events',
   'ledger_entries',
   'spending_transactions',

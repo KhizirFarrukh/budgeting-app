@@ -193,6 +193,45 @@ could be cut, because the brief itself marks nearly everything as required.
 
 ---
 
+### N-16 (OQ-19) — Does the Reference Monthly Amount replace the percentage, or describe it?
+
+> **Raised after the Stage 1 and Stage 2 gates, by the cascade-redirect requirement. Non-blocking —
+> see [ADR-006](decisions/ADR-006-ceiling-triggered-cascade-redirect.md) Decision 2.**
+
+**The question.** The requirement describes an Accumulating Reserve as having a *"Reference Monthly
+Amount"* — an absolute figure, e.g. 193,000 toward a bike. The approved design allocates by
+**percentage**: FR-02, a MUST requirement, reads *"Set a fixed percentage of income allocated to each
+category."* Which one actually decides how much the category gets?
+
+**Why it matters.** The difference is visible to the user the first time income varies. On a 700,000
+month where the reference income is 550,000, does the bike receive **193,000** or **245,000**?
+
+It is not a small change. Absolute amounts require deciding what happens when the reference amounts
+total **more** than the income (prorate? priority order?) and when they total **less** (does the
+remainder follow percentages? sit in the surplus bucket?), and how conservation (INV-02) survives
+both — the largest-remainder split currently guarantees it by construction. Several of the nineteen
+golden vectors would need rewriting.
+
+- **Percentages allocate; the reference amount describes intent (recommended).** The user types
+  "193,000 per month", the app derives and stores the basis points, and the amount is kept for
+  projections — *"at this rate you reach your ceiling in 2 months"*. Conservation is untouched, FR-02
+  stands, and every existing vector stays valid. On a bigger month the bike gets proportionally more,
+  which is arguably what a percentage-based budget should do.
+- **Reference amounts allocate; percentages become the fallback for the remainder.** Closer to the
+  requirement's literal wording, and closer to how people describe saving. Costs a phase A redesign,
+  contradicts FR-02 as written, and needs both an under-funding and an over-funding rule.
+
+**Recommended default: percentages allocate.** `reference_monthly_amount_minor` is stored now either
+way (C-33 keeps it to reserves and positive), so if this reverses, the data is already being
+captured and no backfill is needed.
+
+**What is *not* affected by this question.** The whole ceiling-triggered cascade — the redirect, the
+priority or split across targets, the onward cascade, the surplus fallback — behaves identically
+under both answers. The fork is upstream of it. That is why ADR-006 implements the cascade now and
+leaves this open.
+
+---
+
 ## Part 3 — The blocking list, as five plain questions
 
 For putting in front of the user at the gate. No jargon, answerable in a few minutes.
@@ -227,6 +266,7 @@ For putting in front of the user at the gate. No jargon, answerable in a few min
 | Raised during Stage 1 | 8 (OQ-11…OQ-18) |
 | **Total** | **18** |
 | **Blocking Stage 2** | **5** — OQ-02, OQ-03, OQ-07, OQ-11, OQ-12 |
+| **Raised post-gate** | **1** — OQ-19 (ADR-006), non-blocking, answered by default |
 | Non-blocking, defaulted | 13 |
 | Recommended default stated | 18 of 18 |
 
