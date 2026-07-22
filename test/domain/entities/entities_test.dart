@@ -598,12 +598,19 @@ void main() {
       sync: sync,
     );
 
-    test('ZERO income is valid — vector V-11a covers it', () {
-      expect(event(0).isSuccess, isTrue);
+    test('ZERO income is REJECTED (C-02), not stored as an empty event', () {
+      // Vector V-11a expects `IncomeNotPositive`. An earlier draft of this
+      // entity read V-11a as "zero produces no lines" and allowed it; the 4.3
+      // transcription pass caught the disagreement with C-02.
+      expect(event(0).failureOrNull, isA<NonPositiveAmount>());
     });
 
     test('negative income is rejected', () {
-      expect(event(-1).failureOrNull, isA<NegativeAmount>());
+      expect(event(-1).failureOrNull, isA<NonPositiveAmount>());
+    });
+
+    test('one minor unit is accepted — vector V-13 splits it', () {
+      expect(event(1).isSuccess, isTrue);
     });
 
     test(

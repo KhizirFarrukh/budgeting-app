@@ -195,31 +195,17 @@ final class NonPositiveAmount extends EntityFailure {
   String get describe => 'The amount must be greater than zero.';
 }
 
-/// A negative amount where the schema requires a non-negative one.
-final class NegativeAmount extends EntityFailure {
-  const NegativeAmount({required this.field, required this.value});
-
-  final String field;
-  final int value;
-
-  @override
-  String? get rule => null;
-
-  @override
-  String get describe => 'The amount cannot be negative.';
-}
-
 /// A `rule_lines` row whose scope and target column disagree.
 ///
 /// `scope = GROUP` requires `group_id` and forbids `category_id`, and the
-/// reverse (SCHEMA §3.5, C-21).
+/// reverse (SCHEMA §3.5, C-24 — added by amendment during substage 4.3).
 final class RuleLineScopeMismatch extends EntityFailure {
   const RuleLineScopeMismatch(this.detail);
 
   final String detail;
 
   @override
-  String get rule => 'C-21';
+  String get rule => 'C-24';
 
   @override
   String get describe => 'This distribution rule is inconsistent: $detail';

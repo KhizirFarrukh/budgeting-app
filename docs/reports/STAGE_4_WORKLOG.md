@@ -6,7 +6,7 @@ Evidence log, one entry per substage.
 |---|---|---|
 | 4.1 | The Money type and core value types | ✅ Complete |
 | 4.2 | Domain entities and enumerations | ✅ Complete |
-| 4.3 | Database schema and code generation | ⬜ Not started |
+| 4.3 | Database schema and code generation | ✅ Complete |
 | 4.4 | Repository interfaces and CRUD | ⬜ Not started |
 | 4.5 | The append-only ledger and transactional writes | ⬜ Not started |
 | 4.6 | Balance derivation and cache verification | ⬜ Not started |
@@ -246,4 +246,122 @@ flutter analyze                        No issues found!
 flutter test                           All tests passed!   (153 tests)
 dart run tool/guards/guards.dart       All guards passed (G1-G6).
 dart run tool/domain_purity_check.dart 22 libraries compiled and ran on the bare Dart VM
+```
+
+---
+
+## 4.3 — Database schema definition and code generation (S04.03)
+
+**Outputs:** `lib/data/database/database.dart`, `lib/data/database/tables/**` (4 files),
+`test/data/database/schema_test.dart`, `docs/reports/STAGE_4_SCHEMA_COMPARISON.md`.
+
+Thirteen tables, 169 columns, 21 foreign keys, 28 check constraints, 10 unique constraints and 22
+indexes. The Stage 3 codegen probe (`CodegenProbes` / `ProbeDatabase`) was **replaced wholesale**, as
+its own doc comment instructed.
+
+### Acceptance criteria — verification
+
+| Criterion | Evidence |
+|---|---|
+| The comparison table shows no undocumented differences from SCHEMA.md | [`STAGE_4_SCHEMA_COMPARISON.md`](STAGE_4_SCHEMA_COMPARISON.md). Six added constraints, all documented as an amendment — see below. |
+| A test proves foreign key enforcement is active by failing an orphan insert | `AN ORPHAN INSERT FAILS` inserts a category with a non-existent `group_id` and expects `SqliteException`. Two further tests check that `RESTRICT` blocks a delete, and that **every** declared key is `RESTRICT` rather than `CASCADE`. |
+| The automated floating-point check reads the live schema and passes | Three tests. A blocklist (`REAL`, `DOUBLE`, `FLOAT`, `NUMERIC`, `DECIMAL`), an **allowlist** (`TEXT` or `INTEGER` only — which catches a storage class nobody thought to forbid), and a demonstration that INTEGER affinity stores `5000.0` as `integer`. All read `PRAGMA table_info`. |
+| Code generation completes with no unresolved warnings | Zero. Two classes of warning were fixed rather than ignored — see below. |
+| Every synced table carries all five sync columns | Asserted for all nine, **and** asserted absent on all four device-local tables. |
+
+### The comparison pass found a real defect in substage 4.2
+
+`SCHEMA.md` C-02 requires `amount_minor > 0` on `income_events`. My 4.2 `IncomeEvent` entity
+**allowed zero**, on a misreading of golden vector V-11a as "zero income produces no lines". V-11a is
+a *failure* vector — its expected outcome is `IncomeNotPositive`, and its own fixture file says so in
+its description.
+
+Fixed at the entity (`NonPositiveAmount` now, with the test renamed to state the rule), and the
+database enforces it independently. Two mechanisms, as with C-15 and INV-03.
+
+This is what 4.3's `why_it_matters` warns about — *"any divergence here invalidates the Stage 2
+design review, silently"* — and it is worth recording that the divergence was mine, introduced one
+substage earlier, and that transcribing against the document is what surfaced it. Re-reading my own
+entity code would not have.
+
+The now-unused `NegativeAmount` failure was deleted rather than left as dead vocabulary.
+
+### Six constraints added, and recorded rather than absorbed
+
+4.3's `must_not`: *"Do not silently deviate from SCHEMA.md — amend the document and note it."*
+Transcribing §3 and §4 surfaced six constraints the design required but §5.4 had not listed. Added to
+`SCHEMA.md` §5.4 as **C-23…C-28** with a note explaining the omission.
+
+All six are tightenings — no row valid under the Stage 2 design is now rejected. **C-24** is the one
+with teeth: `rule_lines` scope/target agreement was stated in §3.5 as prose only, and without it a
+`GROUP` line carrying a `category_id` is counted in neither total. A share that exists but is summed
+nowhere looks correct on screen while breaking V-01, and a merge of two independently valid edits is
+a plausible way to produce one.
+
+A related mislabel was corrected: `RuleLineScopeMismatch` in 4.2 cited rule `C-21`, which is the
+reserved-columns constraint on `categories`. It now cites C-24, the rule that actually exists.
+
+### Generator warnings, and why each mattered
+
+| Warning | Count | Resolution |
+|---|---|---|
+| *"Drift can only verify custom constraints set as constant string literals"* | 9 | The shared `kSyncCheckConstraint` was inlined at each of the nine sites. Referencing a named constant meant **Drift silently stopped verifying those constraints** — it still emits them, but no longer parses them, so a typo would have reached SQLite as a runtime error instead of a build error. DRY was the wrong trade here. |
+| *"Duplicate orderings/filters detected … Filter and orderings for this field wont be generated"* | 4 | `@ReferenceName` added to 15 foreign keys. Two keys pointing at the same table collide in the generated manager API, and the generator's response is to **omit** the accessors — so the loss is silent until 4.4 reaches for one that does not exist. |
+
+Both were cases where the warning meant *"something you asked for was not generated"*, which is the
+kind that costs a session to diagnose later.
+
+### Design decisions worth recording
+
+**Foreign keys are switched on in `beforeOpen`, and the result is asserted.** SQLite defaults
+enforcement OFF, and it is a **per-connection** setting, so `onCreate` would be the wrong place. The
+`PRAGMA foreign_keys` result is read back and the open refused if it is not 1 — a PRAGMA that
+silently failed to apply would leave all 21 `RESTRICT` clauses decorative.
+
+**Eight unique constraints are raw `CREATE UNIQUE INDEX … WHERE` rather than Drift `uniqueKeys`.**
+Drift cannot express a partial index, and partiality is the whole point: an archived category must
+not block reusing its name, and a tombstoned row must not block re-creation. Tested — U-01 refuses a
+duplicate live name, then accepts it once the holder is archived.
+
+**Each index is a named constant** rather than an anonymous list entry, so a failing `CREATE INDEX`
+names the rule it came from.
+
+**The deliberately-omitted Q9 composite index is asserted absent**, not merely left out. SCHEMA §5.5
+records the reasoning — `ledger_entries` is the highest-volume table and every extra index is paid on
+every allocation write. A test now stops a later hand from adding it without confronting that.
+
+**IX-01 is verified used by query plan, not assumed.** `EXPLAIN QUERY PLAN` on the balance-derivation
+query names `ix_01_ledger_category_time`. SCHEMA §5.5 asks for this at 4.6.1 and 8.1.5; doing it here
+costs nothing and means the index has proved useful once before anything depends on it.
+
+**Column order differs from `SCHEMA.md`** — the five sync columns appear first on synced tables,
+because they come from a mixin. Column order is not part of the design and no query selects by
+position, so it is recorded in the comparison document as an artefact rather than a difference.
+
+### A process failure worth recording
+
+**Substage 4.2 was committed with 48 analyzer issues.** Its worklog entry claims
+`flutter analyze — No issues found!`, and that was true when I ran it — but I then added
+`tool/domain_purity_check.dart` and committed without re-running. The claim was accurate about a
+state that no longer existed by the time of the commit.
+
+All 48 are now fixed (24 `prefer_single_quotes`, 19 `no_adjacent_strings_in_list`, 4
+`unnecessary_type_check`, 1 `unused_import`), and the verification below covers the whole tree. The
+lesson is narrow and worth keeping: **the verification run must be the last thing before the commit,
+not the last thing before the final edit.** `tool/check.ps1` exists precisely so this is one command;
+I ran the individual pieces out of order instead.
+
+The `unused_import` was fixed by **using** `result.dart` rather than dropping the import — the purity
+check's `_importedLibraries` list claims that library is covered, so dropping the import would have
+made the completeness guarantee quietly false.
+
+### Verification run
+
+```
+flutter pub run build_runner build   wrote 10 outputs, 0 warnings
+dart format .                        Formatted 58 files (0 changed)
+flutter analyze                      No issues found!
+flutter test                         All tests passed!   (183 tests, 29 of them schema)
+dart run tool/guards/guards.dart     All guards passed (G1-G6).
+dart run tool/domain_purity_check    22 libraries compiled and ran on the bare Dart VM
 ```

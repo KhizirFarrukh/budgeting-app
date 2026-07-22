@@ -726,6 +726,36 @@ produce a capped sink.
 **C-21 and C-22 make the reserved columns provably unused.** A v1 build cannot write a non-default
 value even by mistake, so a v1.1 client can trust that every v1.0 row carries the defaults.
 
+#### C-23 to C-28 — added by amendment during substage 4.3
+
+> **Amended during transcription.** Substage 4.3's `must_not` is *"Do not silently deviate from
+> SCHEMA.md — amend the document and note it."* Transcribing §3 and §4 into table definitions
+> surfaced six constraints that this section had not listed although the design required them
+> elsewhere: four enumeration columns whose value sets are stated in §4 but had no `CHECK` here, the
+> `rule_lines` scope/target agreement stated in §3.5 as prose, and the `sync_metadata` singleton
+> stated in §3.10. Adding them is a tightening, not a change of behaviour — no valid row is now
+> rejected — but it is recorded rather than absorbed silently.
+
+| # | Constraint | Table |
+|---|---|---|
+| C-23 | `scope IN ('GROUP','CATEGORY')` | `rule_lines` |
+| C-24 | Scope/target agreement: `(scope = 'GROUP') = (group_id IS NOT NULL)` **and** `(scope = 'CATEGORY') = (category_id IS NOT NULL)` | `rule_lines` |
+| C-25 | `onboarding_state IN ('NOT_STARTED','IN_PROGRESS','COMPLETE')` | `app_settings` |
+| C-26 | `operation IN ('UPSERT','TOMBSTONE')`, `state IN ('PENDING','IN_FLIGHT','FAILED')`, `attempt_count >= 0` | `outbox` |
+| C-27 | `kind IN (…the six `RepairKind` values…)` | `repair_log` |
+| C-28 | `id = 'singleton'` | `sync_metadata` |
+
+**C-24 is the one worth explaining.** §3.5 states in prose that `group_id` is set when
+`scope = GROUP` and null otherwise. Without the constraint, a `GROUP` line carrying a `category_id`
+would be **counted in neither total**: the group pass skips it for having a category, the category
+pass skips it for being group-scoped. A share that exists but is summed nowhere looks correct on
+screen while breaking V-01, and a sync merge of two independently valid edits is a plausible way to
+produce one.
+
+**C-28 mirrors U-09.** `sync_metadata` is a single-row table for the same reason `app_settings` is,
+and §3.10 says so, but only `app_settings` had the constraint. Two rows of persisted HLC state would
+make the clock non-deterministic across a restart.
+
 ### 5.5 Indexes — every one names the query it serves
 
 An index with no named query does not belong in this design. Query numbers refer to §5.6.

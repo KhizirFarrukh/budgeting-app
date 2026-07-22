@@ -1,4 +1,4 @@
-﻿// Proves the domain layer is pure Dart, by *being* pure Dart that uses it.
+// Proves the domain layer is pure Dart, by *being* pure Dart that uses it.
 //
 // Substage 4.2.6: "Confirm the domain package compiles as pure Dart with no
 // Flutter dependency."
@@ -86,6 +86,12 @@ void main() {
 
   final Money amount = Money.fromMinorUnits(123456, currency);
   _require(amount.toDecimalString() == '1234.56', 'Money formats');
+
+  // Named explicitly so `result.dart` is genuinely exercised, not merely
+  // imported. `_importedLibraries` claims this library is covered; using the
+  // type is what makes the claim true.
+  final Result<Money, MoneyFailure> parsed = Money.parse('1234.56', currency);
+  _require(parsed.isSuccess && parsed.valueOrNull == amount, 'Money parses');
   _require(
     amount.multiplyByBasisPoints(3500).valueOrNull!.floor.minorUnits == 43209,
     'basis-point split',
@@ -160,16 +166,16 @@ void main() {
   );
   _require(
     LedgerEntry.create(
-      id: 'led-1',
-      categoryId: 'purity-1',
-      direction: LedgerDirection.inbound,
-      amountMinor: 5000,
-      occurredAtMs: 0,
-      recordedAtMs: 0,
-      sourceType: LedgerSourceType.allocation,
-      sourceId: 'inc-1',
-      sync: sync,
-    ).valueOrNull!.signedMinor ==
+          id: 'led-1',
+          categoryId: 'purity-1',
+          direction: LedgerDirection.inbound,
+          amountMinor: 5000,
+          occurredAtMs: 0,
+          recordedAtMs: 0,
+          sourceType: LedgerSourceType.allocation,
+          sourceId: 'inc-1',
+          sync: sync,
+        ).valueOrNull!.signedMinor ==
         5000,
     'ledger entry',
   );
@@ -194,30 +200,32 @@ void main() {
   );
   _require(
     AppSettings.create(
-      currencyCode: 'PKR',
-      currencyMinorExponent: 2,
-      locale: 'en_PK',
-      schemaVersion: 1,
-      sync: sync,
-    ).valueOrNull!.currency ==
+          currencyCode: 'PKR',
+          currencyMinorExponent: 2,
+          locale: 'en_PK',
+          schemaVersion: 1,
+          sync: sync,
+        ).valueOrNull!.currency ==
         currency,
     'app settings',
   );
 
-  // Interfaces only — the implementations live in `lib/data` and are not
-  // imported here, which is the dependency rule in one line.
-  _require(
-    Clock is Object && IdGenerator is Object,
-    'clock and id generator are interfaces',
-  );
   _require(MoneyFormat.tryParse('1.00', currency) == 100, 'money format');
   _require(
-    const MoneyOverflow(operation: 'x', operands: <int>[1]) is MoneyFailure,
+    const MoneyOverflow(operation: 'x', operands: <int>[1]).describe.isNotEmpty,
     'money failure',
   );
+  _require(const BlankName('x').describe.isNotEmpty, 'entity failure');
+
+  // `Clock` and `IdGenerator` are interfaces; their implementations live in
+  // `lib/data` and are deliberately **not** imported here. That absence is the
+  // dependency rule made concrete — this program compiles and runs without
+  // them, so nothing in the domain depends on the data layer.
+  //
+  // Naming the types keeps them in the compiled output rather than tree-shaken.
   _require(
-    const BlankName('x') is EntityFailure,
-    'entity failure',
+    <Type>[Clock, IdGenerator].length == 2,
+    'clock and id generator are declared in the domain',
   );
 
   stdout.writeln(
@@ -260,5 +268,3 @@ void _assertAllDomainLibrariesImported() {
     exit(1);
   }
 }
-
-

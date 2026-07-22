@@ -44,12 +44,13 @@ final class IncomeEvent {
     String? reversesEventId,
     String? note,
   }) {
-    // Zero income is valid — vector V-11a covers it, and it produces no lines.
-    // A negative income is not: money arriving is money arriving, and a
-    // negative one would invert every split.
-    if (amountMinor < 0) {
+    // C-02: amount_minor > 0. Zero is rejected, not merely empty — vector
+    // V-11a expects `IncomeNotPositive`, and the engine treats it as input
+    // rejection rather than a run that produces no lines. Recording an income
+    // of nothing is a mistake worth naming, not a no-op worth storing.
+    if (amountMinor <= 0) {
       return Failure<IncomeEvent, EntityFailure>(
-        NegativeAmount(field: 'amount_minor', value: amountMinor),
+        NonPositiveAmount(field: 'amount_minor', value: amountMinor),
       );
     }
     return Success<IncomeEvent, EntityFailure>(
