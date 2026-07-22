@@ -180,7 +180,9 @@ Build output and the route walk are captured in `docs/reports/STAGE_3_REPORT.md`
 | App launches to its own screen, not generated boilerplate | 3.1.7 | ✅ installed and launched on `emulator-5554`; screenshot confirms the placeholder screen |
 | Every version recorded here | 3.1.8 | ✅ including the resolved `minSdk` |
 | `flutter analyze` clean on the scaffold | 3.2 | ✅ "No issues found!" |
-| Versions finalised after dependencies are added | 3.9.5 | *pending* |
+| Versions finalised after dependencies are added | 3.9.5 | ✅ All 21 direct dependencies resolved and recorded in `DEPENDENCIES.md`; `minSdk` re-confirmed as 24 with every plugin present |
+| Full check passes from a clean checkout | 3.9.2 | ✅ `ALL CHECKS PASSED (6 steps)`, exit 0 |
+| Dark mode and 200% font scale on device | 3.9.3 | ✅ Screenshots at default, dark, and `font_scale 2.0` in dark — no clipping or truncation |
 
 ### Launch verification
 

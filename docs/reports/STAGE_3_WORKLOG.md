@@ -12,7 +12,7 @@ Evidence log, one entry per substage.
 | 3.6 | Theme, design tokens and the money formatter | ✅ Complete |
 | 3.7 | Router and stub screens | ✅ Complete |
 | 3.8 | Test harness, fakes and fixtures | ✅ Complete |
-| 3.9 | Scaffold verification and gate preparation | Not started |
+| 3.9 | Scaffold verification and gate preparation | ✅ Complete — **stage gate reached** |
 
 ---
 
@@ -549,5 +549,46 @@ by then, taking the fallback costs nothing already designed for.
 
 Not a target — Stage 4 sets real ones. It is recorded because substage 3.5.4 wanted the trend
 visible from the first commit, and this is the first movement in it.
+
+---
+
+## 3.9 — Scaffold verification and gate preparation (S03.09)
+
+**Outputs:** `docs/reports/STAGE_3_REPORT.md`, `ENVIRONMENT.md` finalised.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| All three comparison tables show no differences, or documented deviations | Report §3 — tree 40/40, routes 28 designed + 1 dev menu reconciled by test, dependencies 21/21 resolved and 7/7 declined absent. Three tree deviations documented at 3.2.5 | ✅ |
+| The full check command passes from a **clean checkout**, output captured | Cloned to a fresh location at `b90c5e2`; `ALL CHECKS PASSED (6 steps)`, exit 0 | ✅ |
+| Every route walked on a device; no stub breaks in dark mode or at 200% font scale | Screenshots at default, dark, and **`font_scale 2.0` in dark mode** — no clipping, overlap or truncation | ✅ |
+| A search confirms no business logic, persistence or network code | Searched on the clean checkout: zero database connections outside the probe, zero network calls, `lib/domain/allocation/` empty | ✅ |
+| The stage report contains the guard failure demonstrations from 3.4 | Report §6 | ✅ |
+
+### The clean-checkout run validated a decision, not just the code
+
+The 3.3.4 decision to gitignore generated code is only safe if a fresh clone can regenerate. The
+clone contained **zero `.g.dart` files**, and the check sequence regenerated them and passed all six
+steps. Had generation been broken — or had a generated file been silently required — this is exactly
+where it would have surfaced.
+
+### One clarification the tables produced
+
+`sqlite3_flutter_libs` appears in `pubspec.lock` as `dependency: transitive`, via `drift_flutter`.
+It was removed as a **direct** dependency at 3.3 and that stands; the transitive copy is the
+`0.6.0+eol` no-op. Recorded in report §3.3 so the lockfile does not look like it contradicts
+`DEPENDENCIES.md`.
+
+### Stage 3 totals
+
+- Substages: **9 of 9**.
+- Acceptance criteria: **41**, all met.
+- Tests: **78** passing. Coverage **74%**.
+- Guards: **6**, each demonstrated failing and reverted.
+- Routes: **28** designed paths, all reachable, plus the developer menu.
+- Commits: 8, one per substage.
+- Defects found in this stage's own work: **2** — two inert guards (3.4), and a `_` wildcard misuse
+  plus a missing SDK dependency (3.8).
 
 
