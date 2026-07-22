@@ -11,7 +11,7 @@ Evidence log, one entry per substage.
 | 3.5 | Continuous integration pipeline | ✅ Complete |
 | 3.6 | Theme, design tokens and the money formatter | ✅ Complete |
 | 3.7 | Router and stub screens | ✅ Complete |
-| 3.8 | Test harness, fakes and fixtures | Not started |
+| 3.8 | Test harness, fakes and fixtures | ✅ Complete |
 | 3.9 | Scaffold verification and gate preparation | Not started |
 
 ---
@@ -471,5 +471,83 @@ else. Recorded in the router's doc comment so it is a known gap rather than an o
 exists), so there is nothing to wire until Stage 4 provides the group data and 6.1.4 implements the
 switch. The design decision — a central scope filter rather than a tab or a mode switch — is settled
 in NAVIGATION §5.
+
+---
+
+## 3.8 — Test harness, fakes and fixtures (S03.08)
+
+**Outputs:** `test/support/fakes/{fake_clock,fake_id_generator}.dart`,
+`test/support/vector_loader.dart`, `test/support/builders/money_builders.dart`,
+`test/support/harness_test.dart`, two sample fixtures, `integration_test/app_launch_test.dart`.
+
+### Acceptance criteria — verification
+
+| Criterion | Verified how | Result |
+|---|---|---|
+| `flutter test` passes | **78 tests pass** | ✅ |
+| `flutter test integration_test` launches the app and passes on a device | Ran on `emulator-5554`: built, installed, `+1: All tests passed!` | ✅ |
+| The fake `Clock` and deterministic `IdGenerator` are exercised by tests | 9 dedicated tests in `harness_test.dart` — *"a fake nobody exercises is a fake nobody has tested"* | ✅ |
+| The vector loader reads a fixture with no code change needed to add another | Loader globs the directory; a test asserts both sample fixtures are found and that a missing id throws rather than silently skipping | ✅ |
+| The full suite runs from the single CI command | `tool/check.ps1` → `ALL CHECKS PASSED (6 steps)`, coverage **248/335 lines (74%)** | ✅ |
+
+### Both fixture shapes proven, not just the easy one
+
+Two sample fixtures were written deliberately: `V-01` (success, three allocations) and **`V-11a`
+(failure, `IncomeNotPositive`)**.
+
+Substage 5.8's pitfall is precise about why the second one matters:
+
+> *"A fixture format that cannot express an expected failure, so the rejection cases get omitted."*
+
+The loader **enforces** §9.1's rule rather than trusting it — a fixture declaring both
+`expected_allocations` and `expected_failure`, or neither, is a `FormatException` naming the file.
+Four of the fifteen Stage 5 vectors are rejection cases, so a format that quietly could not hold
+them would have cost more than a quarter of the suite.
+
+A further test asserts **every fixture amount is an `int`**, because INV-01 applies to test data as
+strictly as to production code (§9.1).
+
+### Fakes designed against the failure they exist to prevent
+
+**`FakeClock` refuses to advance backwards.** A clock that silently goes back hides HLC ordering
+defects rather than exposing them. Stage 7 substage 7.4.6 *does* test skew — via `setTo`, so a
+backwards jump is always deliberate and visible at the call site.
+
+It also records every read, which is how the engine's no-clock rule gets verified from outside: the
+engine should cause **zero** reads.
+
+**`FakeIdGenerator` ids sort lexicographically in issue order**, mirroring the property real UUID v7
+provides (ARCHITECTURE §8.6). A test relying on ordering therefore behaves the same with fakes and
+in production. Ids are obviously synthetic (`id-t-000001`), never plausible UUIDs, so no fixture or
+log line can be mistaken for production data.
+
+### A real dependency finding from the integration run
+
+The integration build emitted:
+
+```
+WARNING: Your app uses the following plugins that apply Kotlin Gradle Plugin (KGP):
+  workmanager_android
+Future versions of Flutter will fail to build if your app uses plugins that apply KGP.
+```
+
+**This strengthens the `workmanager` fallback ADR-004 already pre-decided.** The fallback is to drop
+the periodic background trigger and keep foreground, connectivity and manual sync — and **no
+correctness property depends on sync frequency**, since convergence comes from the merge design.
+
+Recorded now rather than discovered at Stage 7. If `workmanager` has not migrated to Built-in Kotlin
+by then, taking the fallback costs nothing already designed for.
+
+### Two analyser issues found and fixed
+
+- `_` used as both a lambda parameter and a reference — `_` is a **wildcard** in current Dart and
+  cannot be read. Replaced with a named, typed parameter.
+- `integration_test` was missing from `pubspec.yaml`. It is an SDK package that must be declared
+  explicitly; the analyser caught it immediately rather than the omission surfacing in Stage 6.
+
+### Coverage moved 61.5% → 74%
+
+Not a target — Stage 4 sets real ones. It is recorded because substage 3.5.4 wanted the trend
+visible from the first commit, and this is the first movement in it.
 
 

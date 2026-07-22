@@ -1,0 +1,75 @@
+{
+  "id": "V-01",
+  "description": "plain three-group split: 1,000,000 at 5000/3000/2000",
+  "notes": "Sample fixture proving the loader works (substage 3.8.5). Stage 5 substage 5.8 adds V-01..V-15 in full, with every expected value traced to ALLOCATION_ALGORITHM.md section 10.4.",
+  "request": {
+    "income_amount_minor": 1000000,
+    "evaluated_at_ms": 1767225600000,
+    "rule_version_id": "rv-test-001",
+    "scope": "PERSONAL",
+    "sink_category_id": "save",
+    "business_sink_category_id": null,
+    "overrides": null,
+    "period": {
+      "start_ms": 1767225600000,
+      "end_ms": 1769904000000,
+      "anchor_day": 1
+    },
+    "group_shares": [
+      { "group_id": "SPENDING", "kind": "SPENDING", "basis_points": 5000, "sort_order": 1 },
+      { "group_id": "SAVINGS", "kind": "SAVINGS", "basis_points": 3000, "sort_order": 2 },
+      { "group_id": "BUSINESS", "kind": "BUSINESS", "basis_points": 2000, "sort_order": 3 }
+    ],
+    "categories": [
+      {
+        "id": "spend",
+        "group_id": "SPENDING",
+        "type": "UNCAPPED_FLOW",
+        "basis_points": 10000,
+        "sort_order": 1,
+        "current_balance_minor": 0,
+        "ceiling_minor": null,
+        "bill_amount_minor": null,
+        "allocated_in_current_period_minor": 0,
+        "redirect_target_category_id": null,
+        "is_sink": false,
+        "carry_forward_policy": "CARRY_FORWARD"
+      },
+      {
+        "id": "save",
+        "group_id": "SAVINGS",
+        "type": "UNCAPPED_FLOW",
+        "basis_points": 10000,
+        "sort_order": 1,
+        "current_balance_minor": 0,
+        "ceiling_minor": null,
+        "bill_amount_minor": null,
+        "allocated_in_current_period_minor": 0,
+        "redirect_target_category_id": null,
+        "is_sink": true,
+        "carry_forward_policy": "CARRY_FORWARD"
+      },
+      {
+        "id": "biz",
+        "group_id": "BUSINESS",
+        "type": "UNCAPPED_FLOW",
+        "basis_points": 10000,
+        "sort_order": 1,
+        "current_balance_minor": 0,
+        "ceiling_minor": null,
+        "bill_amount_minor": null,
+        "allocated_in_current_period_minor": 0,
+        "redirect_target_category_id": null,
+        "is_sink": false,
+        "carry_forward_policy": "CARRY_FORWARD"
+      }
+    ]
+  },
+  "expected_allocations": [
+    { "category_id": "spend", "amount_minor": 500000, "reason": "BASE", "redirected_from_category_id": null, "hop_count": 0 },
+    { "category_id": "save", "amount_minor": 300000, "reason": "BASE", "redirected_from_category_id": null, "hop_count": 0 },
+    { "category_id": "biz", "amount_minor": 200000, "reason": "BASE", "redirected_from_category_id": null, "hop_count": 0 }
+  ],
+  "expected_total_minor": 1000000,
+  "expected_failure": null
+}

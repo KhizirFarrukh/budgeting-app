@@ -1,0 +1,41 @@
+{
+  "id": "V-11a",
+  "description": "zero income is rejected",
+  "notes": "Second sample fixture, deliberately a FAILURE case. Substage 5.8's pitfall: a fixture format that cannot express an expected failure causes the rejection cases to be quietly omitted. Proving the loader handles both shapes now means Stage 5 cannot discover the gap later.",
+  "request": {
+    "income_amount_minor": 0,
+    "evaluated_at_ms": 1767225600000,
+    "rule_version_id": "rv-test-001",
+    "scope": "PERSONAL",
+    "sink_category_id": "save",
+    "business_sink_category_id": null,
+    "overrides": null,
+    "period": {
+      "start_ms": 1767225600000,
+      "end_ms": 1769904000000,
+      "anchor_day": 1
+    },
+    "group_shares": [
+      { "group_id": "SAVINGS", "kind": "SAVINGS", "basis_points": 10000, "sort_order": 1 }
+    ],
+    "categories": [
+      {
+        "id": "save",
+        "group_id": "SAVINGS",
+        "type": "UNCAPPED_FLOW",
+        "basis_points": 10000,
+        "sort_order": 1,
+        "current_balance_minor": 0,
+        "ceiling_minor": null,
+        "bill_amount_minor": null,
+        "allocated_in_current_period_minor": 0,
+        "redirect_target_category_id": null,
+        "is_sink": true,
+        "carry_forward_policy": "CARRY_FORWARD"
+      }
+    ]
+  },
+  "expected_allocations": null,
+  "expected_total_minor": null,
+  "expected_failure": "IncomeNotPositive"
+}
