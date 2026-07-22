@@ -58,6 +58,13 @@ Invoke-Step 'Static analysis' { & $flutter analyze }
 # The six invariant guards. See ARCHITECTURE.md §2.3 and DEVELOPMENT.md §4.
 Invoke-Step 'Invariant guards G1-G6' { & $dart run tool/guards/guards.dart }
 
+# Substage 4.2.6. Runs on the BARE DART VM (`dart`, not `flutter`), so a domain
+# library that reaches Flutter transitively fails to compile here. G1 catches
+# direct imports by pattern; this catches the indirect ones it cannot see.
+Invoke-Step 'Domain purity (pure Dart, no Flutter)' {
+    & $dart run tool/domain_purity_check.dart
+}
+
 if ($SkipCoverage) {
     Invoke-Step 'Tests' { & $flutter test }
 } else {
