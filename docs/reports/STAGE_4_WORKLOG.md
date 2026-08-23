@@ -7,7 +7,7 @@ Evidence log, one entry per substage.
 | 4.1 | The Money type and core value types | ✅ Complete |
 | 4.2 | Domain entities and enumerations | ✅ Complete |
 | 4.3 | Database schema and code generation | ✅ Complete |
-| 4.4 | Repository interfaces and CRUD | ⬜ Not started |
+| 4.4 | Repository interfaces and CRUD | 🟡 Code complete, unverified — no toolchain |
 | 4.5 | The append-only ledger and transactional writes | ⬜ Not started |
 | 4.6 | Balance derivation and cache verification | ⬜ Not started |
 | 4.7 | Seed data, suggested categories and the sink | ⬜ Not started |
@@ -497,3 +497,135 @@ exactly the job it was written for. An unimported library would have been an unc
   first target would miss a cycle reachable through the second.
 - **Substage 4.7**'s seed should name the personal sink **"Unallocated Surplus"**, matching the
   requirement's wording.
+
+---
+
+## 4.4 — Repository interfaces and CRUD (S04.04)
+
+**Outputs:** `lib/domain/repositories/**` (6 files), `lib/data/mappers/**` (6 files),
+`lib/data/repositories/**` (5 files), `test/data/repositories/**` (4 files),
+`test/data/mappers/round_trip_test.dart`, `test/domain/repositories/interface_purity_test.dart`,
+`test/support/test_database.dart`, `test/support/builders/config_builders.dart`.
+
+> ### ⚠ This substage is written but **not verified**
+>
+> The Flutter and Dart toolchain is **absent from this machine.** `ENVIRONMENT.md` §2 records the
+> SDK at `C:\Users\Chichum\flutter`; the only profile present is `Khizi`, and a recursive search of
+> `C:\` found no `flutter.bat` and no `dart.exe`. There is no `.dart_tool/`, no pub cache, and
+> `database.g.dart` has never been generated here.
+>
+> So none of `build_runner`, `flutter analyze`, `dart format` or `flutter test` has been run against
+> any of it. The code below is written against the Drift 2.34 API and the generated names Drift
+> derives from the 4.3 table classes — both from knowledge rather than from a compiler.
+>
+> **Nothing in this entry should be read as evidence.** The acceptance-criteria table records which
+> test is *intended* to prove each criterion, not that any of them passed. Substage 4.4 is not
+> complete until `tool/check.ps1` runs green on a machine that has the SDK. See
+> *"What must be re-run"* at the end.
+
+### Acceptance criteria — and the test written for each
+
+| Criterion | Test written to prove it | Status |
+|---|---|---|
+| No repository method signature exposes a database or generated type | `interface_purity_test.dart` — strips comments from every file in `lib/domain/repositories`, then fails on 14 persistence type names and 3 banned import prefixes. Includes a self-test that the token list actually catches a violation. | not run |
+| Every configuration delete is soft, proven by a test that finds the row still present with a tombstone | `category_repository_test.dart` → `THE ROW SURVIVES, CARRYING A TOMBSTONE`, plus equivalents for accounts, rule versions and rule lines. All read through `rawRow`/`rawCount`, which bypass the repository entirely. | not run |
+| Reactive streams emit on changes made through a different code path | The `4.4.4` group — three shapes: a **second repository instance**, a **raw `customUpdate`** with no repository involved, and a soft delete. | not run |
+| Row-to-entity mapping round-trips every field, proven per entity | `round_trip_test.dart` — one test per entity, asserting `expect(readBack, original)` against entity `==`, with every field set to a deliberately non-default value. | not run |
+| Repository tests run against an in-memory database with no file system dependency | `openTestDatabase()` returns `NativeDatabase.memory()`. No test touches a path. | not run |
+
+### Design decisions worth recording
+
+**The repository does not invent `SyncFields`.** Callers hand over a complete entity, stamp
+included. The hybrid logical clock that orders concurrent edits is S07.4's to implement, and a
+placeholder minted here would be a *second, wrong* source of ordering that Stage 7 would then have
+to detect and undo. The one exception is **soft delete** — the only write a repository originates
+rather than relays — which needs a deletion timestamp and therefore takes an injected `Clock`
+(INV-09, guard G4). `updated_by_device` is left untouched even there, because device identity lives
+in `sync_metadata` and does not exist yet.
+
+**Writes through the mappers are total; the two originated writes are partial.** Every companion in
+`lib/data/mappers/**` sets every column, including nullable ones set to an explicit null — so
+switching a savings goal to an open envelope actually *clears* the ceiling instead of leaving a
+stale one behind the entity's back. The tombstone and archive updates deliberately break that rule
+and write only the columns they change, because they are the writes where the repository knows
+exactly which fields it is changing and has no opinion about the rest.
+
+**Rejections throw rather than return, so the transaction rolls back.** `RejectedWrite` is an
+exception caught by `writeTransaction`, not a returned value. A rejection signalled by returning
+early only unwinds cleanly while nothing has been written yet — a property every future edit to a
+write path would have to preserve unprompted. `replaceLines` is the case that proves it: it
+tombstones the dropped lines *before* inserting the new ones, so a mid-transaction failure without
+rollback would persist a percentage set totalling 0%. There is a test for exactly that.
+
+**One gate, not seven call sites, for INV-11.** Every mutating path in `DriftRuleRepository` passes
+through `_rejectIfSealed`. `EVERY MUTATING PATH IS REFUSED ONCE SEALED` exercises all six of them —
+`updateVersion`, `createLine`, `updateLine`, `deleteLine`, `replaceLines`, `deleteVersion` — because
+the failure mode is not "the check is wrong", it is "the eighth path forgot to call it".
+
+**Tombstone filtering is structural, not remembered.** `CategoryQuery`, `AccountQuery` and
+`RuleVersionQuery` carry `includeDeleted`, defaulting to false, and every list read funnels through
+a single private `_…Select` that applies `tombstoneTerm` unconditionally. `matchAll` exists so that
+an unfiltered read takes the *same* code path as a filtered one — a branch that skips `.where`
+entirely is a branch where a missing tombstone term is invisible. This is the substage's named
+pitfall: *"deleted categories reappear in pickers."*
+
+**Archived and deleted are filtered independently, and a test says so.** Asking for
+`ArchivedFilter.any` must not also opt in to tombstones. They are different states everywhere in the
+schema — U-01 and U-02 are partial on `is_archived = 0`, so archiving deliberately frees a name for
+reuse while a tombstone removes the row from every user-facing read.
+
+**Mapping failures throw; storage failures return.** `MappingError extends Error`, so it passes
+straight through `writeTransaction`'s `on Exception` and reaches the developer. The alternative — a
+`Result` — invites the recovery "skip this row and carry on", which for a category means a dashboard
+silently missing a bucket that holds money.
+
+### Judgement calls, flagged rather than buried
+
+- **`RedirectTarget` CRUD went into `CategoryRepository`**, not a seventh repository. ARCHITECTURE
+  §2.2 lists six interfaces and predates ADR-006. Redirect edges are per-category configuration
+  edited in the same user action, and splitting them would put the two halves of one edit behind two
+  objects. ARCHITECTURE's table is now one row out of date; noted for 4.11.
+- **Deleting a category does not check rule lines.** A sealed version's lines must survive the
+  deletion (INV-11), while a draft's must be redistributed to keep V-02's total at 10000 — a
+  judgement over the whole set, not a referential check over one row. Left to **4.8**, with a comment
+  at the call site saying so.
+- **Deleting an account with linked categories is refused**, not silently resolved. Unlinking is a
+  decision: the categories keep their money either way, but the user loses the record of where it is
+  held. Stage 6 asks; Stage 7 takes the documented `ACCOUNT_UNLINKED` repair.
+- **Constraint classification is by message, not by exception type.** The data layer does not name
+  `SqliteException`, so it stays independent of the SQLite binding — tests run on `NativeDatabase`,
+  the app runs through `drift_flutter`. Pre-checks inside the transaction produce the *specific*
+  failures (`DuplicateName`, `RuleVersionSealed`); `ConstraintViolation` is only the backstop.
+- **`LedgerRepository` and `IncomeEventRepository` are not here.** They are 4.5's, along with the
+  append-only guarantee that shapes them. Building them now would mean building them before the
+  invariant that constrains their API.
+
+### What must be re-run before this substage can be ticked
+
+On a machine with the SDK, in order:
+
+```
+flutter pub get
+flutter pub run build_runner build   # database.g.dart does not exist yet
+dart format .                        # NOT run here; CI uses --set-exit-if-changed
+flutter analyze
+dart run tool/guards/guards.dart
+dart run tool/domain_purity_check.dart
+flutter test
+```
+
+`dart format` is called out because `tool/check.ps1` fails the build on any formatting difference,
+and hand-formatted code will almost certainly differ somewhere. Expect the first failures to be
+formatting and generated-name mismatches rather than logic.
+
+**`tool/domain_purity_check.dart` was extended, not left to fail.** Its
+`_assertAllDomainLibrariesImported` refuses to run when a `.dart` file exists under `lib/domain`
+that the program does not import — the same completeness assertion that fired at 4.3 on
+`redirect_target.dart`. All six new interface files are now imported and exercised there.
+
+That turns out to be the **strongest** available evidence for this substage's first acceptance
+criterion. The check compiles the four repository interfaces on the bare Dart VM with no Flutter
+engine and no database package present, so a signature naming a Drift type could not compile in it
+at all — the criterion proved by construction rather than by the token scan in
+`interface_purity_test.dart`. Both are kept: the scan gives a precise file and token, this gives
+transitive truth. (Neither has been run.)

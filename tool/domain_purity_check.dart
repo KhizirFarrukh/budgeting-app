@@ -44,6 +44,12 @@ import 'package:pookiebudget/domain/money/id_generator.dart';
 import 'package:pookiebudget/domain/money/money.dart';
 import 'package:pookiebudget/domain/money/money_failure.dart';
 import 'package:pookiebudget/domain/money/money_format.dart';
+import 'package:pookiebudget/domain/repositories/account_repository.dart';
+import 'package:pookiebudget/domain/repositories/category_repository.dart';
+import 'package:pookiebudget/domain/repositories/repository_failure.dart';
+import 'package:pookiebudget/domain/repositories/repository_queries.dart';
+import 'package:pookiebudget/domain/repositories/rule_repository.dart';
+import 'package:pookiebudget/domain/repositories/settings_repository.dart';
 import 'package:pookiebudget/domain/result.dart';
 
 /// Every domain library this file imports. Kept in sync with the imports above
@@ -71,6 +77,12 @@ const List<String> _importedLibraries = <String>[
   'lib/domain/money/money.dart',
   'lib/domain/money/money_failure.dart',
   'lib/domain/money/money_format.dart',
+  'lib/domain/repositories/account_repository.dart',
+  'lib/domain/repositories/category_repository.dart',
+  'lib/domain/repositories/repository_failure.dart',
+  'lib/domain/repositories/repository_queries.dart',
+  'lib/domain/repositories/rule_repository.dart',
+  'lib/domain/repositories/settings_repository.dart',
   'lib/domain/result.dart',
 ];
 
@@ -247,6 +259,60 @@ void main() {
     'money failure',
   );
   _require(const BlankName('x').describe.isNotEmpty, 'entity failure');
+
+  // --- substage 4.4: the repository contracts -------------------------------
+  //
+  // The strongest statement this program makes about substage 4.4. The four
+  // repository interfaces are compiled here **on the bare Dart VM with no
+  // Flutter engine and no database package present**, which is the acceptance
+  // criterion *"no repository method signature exposes a database or generated
+  // type"* proved by construction rather than by inspection: a signature naming
+  // a Drift type could not compile in this program at all.
+  //
+  // Their implementations live in `lib/data` and are deliberately not imported,
+  // exactly as with `Clock` below.
+  _require(
+    <Type>[
+      CategoryRepository,
+      AccountRepository,
+      RuleRepository,
+      SettingsRepository,
+    ].length == 4,
+    'the four repository interfaces are declared in the domain',
+  );
+
+  // The query value objects are concrete, so they are exercised rather than
+  // merely named. Both defaults asserted here are load-bearing: a read that
+  // included tombstones by default would put deleted categories back into every
+  // picker, and a date range that was inclusive at both ends would double-count
+  // the entry landing on a period boundary.
+  const CategoryQuery defaultCategoryQuery = CategoryQuery();
+  const DateRange january = DateRange(fromMs: 0, toMs: 10);
+  _require(
+    !defaultCategoryQuery.includeDeleted &&
+        defaultCategoryQuery.archived == ArchivedFilter.liveOnly &&
+        !const AccountQuery().includeDeleted &&
+        !const RuleVersionQuery().includeDeleted &&
+        january.contains(0) &&
+        !january.contains(10),
+    'repository queries default to live rows, over half-open ranges',
+  );
+
+  _require(
+    const RecordNotFound(entity: 'category', id: 'x').describe.isNotEmpty &&
+        const DuplicateName(entity: 'account', name: 'Meezan').rule ==
+            'U-01/U-02' &&
+        const CurrencyLocked(ledgerEntryCount: 1).rule == 'V-24' &&
+        const SinkProtected(
+              categoryId: 'purity-1',
+              action: 'deleted',
+            ).describe.isNotEmpty &&
+        const RuleVersionSealed(
+              versionId: 'rv-1',
+              sealedAtMs: 1,
+            ).describe.isNotEmpty,
+    'repository failure taxonomy',
+  );
 
   // `Clock` and `IdGenerator` are interfaces; their implementations live in
   // `lib/data` and are deliberately **not** imported here. That absence is the
