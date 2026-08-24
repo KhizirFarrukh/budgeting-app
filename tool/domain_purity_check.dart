@@ -46,10 +46,13 @@ import 'package:pookiebudget/domain/money/money_failure.dart';
 import 'package:pookiebudget/domain/money/money_format.dart';
 import 'package:pookiebudget/domain/repositories/account_repository.dart';
 import 'package:pookiebudget/domain/repositories/category_repository.dart';
+import 'package:pookiebudget/domain/repositories/income_event_repository.dart';
+import 'package:pookiebudget/domain/repositories/ledger_repository.dart';
 import 'package:pookiebudget/domain/repositories/repository_failure.dart';
 import 'package:pookiebudget/domain/repositories/repository_queries.dart';
 import 'package:pookiebudget/domain/repositories/rule_repository.dart';
 import 'package:pookiebudget/domain/repositories/settings_repository.dart';
+import 'package:pookiebudget/domain/repositories/spending_repository.dart';
 import 'package:pookiebudget/domain/result.dart';
 
 /// Every domain library this file imports. Kept in sync with the imports above
@@ -79,10 +82,13 @@ const List<String> _importedLibraries = <String>[
   'lib/domain/money/money_format.dart',
   'lib/domain/repositories/account_repository.dart',
   'lib/domain/repositories/category_repository.dart',
+  'lib/domain/repositories/income_event_repository.dart',
+  'lib/domain/repositories/ledger_repository.dart',
   'lib/domain/repositories/repository_failure.dart',
   'lib/domain/repositories/repository_queries.dart',
   'lib/domain/repositories/rule_repository.dart',
   'lib/domain/repositories/settings_repository.dart',
+  'lib/domain/repositories/spending_repository.dart',
   'lib/domain/result.dart',
 ];
 
@@ -277,8 +283,33 @@ void main() {
       AccountRepository,
       RuleRepository,
       SettingsRepository,
-    ].length == 4,
-    'the four repository interfaces are declared in the domain',
+      LedgerRepository,
+      IncomeEventRepository,
+      SpendingRepository,
+    ].length == 7,
+    'the seven repository interfaces are declared in the domain',
+  );
+
+  // Substage 4.5's central claim, in the form a compiler can hold: the ledger
+  // contract compiles here, and there is no method on it to call that would
+  // change a stored entry. INV-03 by absence.
+  _require(
+    const ConservationViolated(
+          expectedMinor: 100,
+          actualMinor: 99,
+          entryCount: 2,
+        ).rule ==
+        'INV-02',
+    'conservation failure',
+  );
+  _require(
+    const AlreadyReversed(eventId: 'e', reversedByEventId: 'r').rule == 'R-1' &&
+        const CannotReverseAReversal('r').rule == 'R-2' &&
+        const AlreadyCorrected(
+          transactionId: 't',
+          correctedByTransactionId: 't2',
+        ).describe.isNotEmpty,
+    'reversal and correction guards',
   );
 
   // The query value objects are concrete, so they are exercised rather than

@@ -198,6 +198,107 @@ final class InvalidEntity extends RepositoryFailure {
   String get describe => failure.toString();
 }
 
+/// The ledger entries offered with a movement do not sum to its amount.
+///
+/// INV-02, checked **inside the write transaction** rather than trusted. The
+/// engine already guarantees conservation, so this should never fire from
+/// engine output — but it is the repository that turns a computed split into
+/// stored rows, and the named pitfall for that step is *"non-atomic writes that
+/// leave an income event with only some of its allocations, which breaks
+/// conservation permanently."*
+///
+/// The word is chosen deliberately: **permanently**. The ledger is append-only,
+/// so a short write cannot be corrected by editing it — only by a compensating
+/// entry someone has to notice is needed. Refusing the write is the only
+/// cheap moment.
+final class ConservationViolated extends RepositoryFailure {
+  const ConservationViolated({
+    required this.expectedMinor,
+    required this.actualMinor,
+    required this.entryCount,
+  });
+
+  /// What the movement says it was worth.
+  final int expectedMinor;
+
+  /// What its entries actually total, in absolute minor units.
+  final int actualMinor;
+
+  final int entryCount;
+
+  @override
+  String get rule => 'INV-02';
+
+  @override
+  String get describe =>
+      'This entry could not be saved because the amounts did not add up. '
+      'Nothing was changed.';
+}
+
+/// An attempt to reverse an income event that has already been reversed.
+///
+/// ALLOCATION_ALGORITHM guard R-1. Reversing twice silently doubles the
+/// correction, and because both reversals are legitimate append-only entries,
+/// nothing downstream can tell the pair apart from two genuine corrections.
+final class AlreadyReversed extends RepositoryFailure {
+  const AlreadyReversed({
+    required this.eventId,
+    required this.reversedByEventId,
+  });
+
+  final String eventId;
+  final String reversedByEventId;
+
+  @override
+  String get rule => 'R-1';
+
+  @override
+  String get describe => 'That income has already been undone.';
+}
+
+/// An attempt to correct a spending transaction that has already been
+/// corrected.
+///
+/// The spending analogue of [AlreadyReversed], and the same hazard: each
+/// correction writes a compensating entry, so correcting twice cancels the
+/// original twice and invents money that was never spent.
+final class AlreadyCorrected extends RepositoryFailure {
+  const AlreadyCorrected({
+    required this.transactionId,
+    required this.correctedByTransactionId,
+  });
+
+  final String transactionId;
+  final String correctedByTransactionId;
+
+  @override
+  String? get rule => null;
+
+  @override
+  String get describe =>
+      'That transaction has already been corrected. Edit the corrected version '
+      'instead.';
+}
+
+/// An attempt to reverse a reversal.
+///
+/// ALLOCATION_ALGORITHM guard R-2. Re-entering the money as a new income event
+/// says the same thing and reads correctly in history; a reversal of a reversal
+/// is indistinguishable from it and reads as a puzzle.
+final class CannotReverseAReversal extends RepositoryFailure {
+  const CannotReverseAReversal(this.eventId);
+
+  final String eventId;
+
+  @override
+  String get rule => 'R-2';
+
+  @override
+  String get describe =>
+      'This entry is itself an undo, so it cannot be undone. Record the money '
+      'again as new income instead.';
+}
+
 /// A database constraint fired that the repository did not anticipate.
 ///
 /// The backstop, and it is meant to be rare: every rule the repository knows

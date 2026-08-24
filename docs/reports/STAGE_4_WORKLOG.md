@@ -8,7 +8,7 @@ Evidence log, one entry per substage.
 | 4.2 | Domain entities and enumerations | ✅ Complete |
 | 4.3 | Database schema and code generation | ✅ Complete |
 | 4.4 | Repository interfaces and CRUD | 🟡 Code complete, unverified — no toolchain |
-| 4.5 | The append-only ledger and transactional writes | ⬜ Not started |
+| 4.5 | The append-only ledger and transactional writes | 🟡 Code complete, unverified — no toolchain |
 | 4.6 | Balance derivation and cache verification | ⬜ Not started |
 | 4.7 | Seed data, suggested categories and the sink | ⬜ Not started |
 | 4.8 | Validators and cycle detection | ⬜ Not started |
@@ -629,3 +629,111 @@ engine and no database package present, so a signature naming a Drift type could
 at all — the criterion proved by construction rather than by the token scan in
 `interface_purity_test.dart`. Both are kept: the scan gives a precise file and token, this gives
 transitive truth. (Neither has been run.)
+
+---
+
+## 4.5 — Append-only ledger and transactional writes (S04.05)
+
+**Outputs:** `lib/domain/repositories/{ledger,income_event,spending}_repository.dart`,
+`lib/data/mappers/movement_mappers.dart`, `lib/data/repositories/ledger_writer.dart`,
+`lib/data/repositories/drift_{ledger,income_event,spending}_repository.dart`,
+`test/data/repositories/{ledger,income_event,spending}_repository_test.dart`,
+`test/data/repositories/append_only_design_test.dart`,
+`test/support/{movement_fixture.dart,builders/movement_builders.dart}`.
+
+> **⚠ Still unverified — same toolchain gap as 4.4.** No Dart or Flutter SDK on this machine, so
+> nothing here has been compiled or run. Criteria below say which test is *intended* to prove each
+> one. See 4.4's *"What must be re-run"*; it applies unchanged.
+
+### Acceptance criteria — and the test written for each
+
+| Criterion | Test | Status |
+|---|---|---|
+| The ledger repository exposes no update or delete method | `append_only_design_test.dart` → `NO METHOD ON LedgerRepository NAMES A MUTATION`, scanning the interface for nine mutating verbs, plus a self-test that the scan catches one | not run |
+| A failure injected midway through an income event write leaves zero rows | `income_event_repository_test.dart` → `A FAILURE MIDWAY LEAVES ZERO ROWS` | not run |
+| Inserting the same ledger entry UUID twice is a no-op rather than a duplicate | `4.5.4` group, both halves — count unchanged, **and** the stored amount unchanged | not run |
+| Reversal linkage works without altering the original row | `THE ORIGINAL LEDGER ROWS ARE BYTE-FOR-BYTE UNCHANGED` | not run |
+| The design test documenting immutability exists and passes | `append_only_design_test.dart`, six routes | not run |
+
+### INV-03 is enforced four ways, because one way is a promise
+
+The interface has no `update` and no `delete`. That stops the application and presentation layers
+and nothing else — three repositories in the **data** layer hold a live `PookieDatabase`, on which
+`db.update(db.ledgerEntries)` is an ordinary expression. So:
+
+| Route | Closed by |
+|---|---|
+| Calling an update method | There is none |
+| Building an amended entry to write back | `LedgerEntry` has no `copyWith` (4.2's decision, tested here) |
+| A partial companion | `movement_mappers.dart` defines exactly one, insert-shaped |
+| `db.update(db.ledgerEntries)` from inside the data layer | Every ledger write funnels through `ledger_writer.dart`; the design test asserts no other file in `lib/data/repositories/` names the table in a mutating position |
+| Tombstoning, including by a sync merge | Constraint C-15 |
+| Re-inserting a changed row under the same id | `insertOrIgnore` skips, never overwrites |
+
+The substage's named pitfall is *"a generic repository base class that supplies update and delete to
+every table including the ledger."* `ledger_writer.dart` is the deliberate opposite: not a base
+class granting capabilities broadly, but one narrow function granting exactly one.
+
+### `insertOrIgnore`, never `insertOnConflictUpdate`
+
+The whole of INV-12's guarantee sits in that choice. Ignoring a duplicate id makes a retry a no-op,
+which is what lets a sync push that timed out *after* committing simply be repeated. Upserting would
+make the same retry an update — and a retry carrying a different amount under the same id would
+silently rewrite history. **An upsert is an update path wearing an insert's name.** Both halves are
+tested: that a replay adds no rows, and that it does not change the stored amount.
+
+### Conservation is checked at the write, not trusted from upstream
+
+`requireConservation` refuses any movement whose entries do not total its amount (INV-02). The engine
+already guarantees this and Stage 5 proves it over fifteen vectors — but this is the boundary where
+a computed split becomes rows that **can never be edited**. A short write is not a partial record, it
+is a permanently wrong one: the balances are wrong until someone notices and writes a compensating
+entry, and nothing in the app can tell that they are. Refusing is the only cheap moment.
+
+### Sealing happens inside the income transaction
+
+`record` seals the rule version it used, in the same transaction, with
+`WHERE ... AND sealed_at_ms IS NULL`. That is idempotent *and* keeps the first instant — the moment
+history became fixed is the first income event, not the latest. Any window in which a committed
+event references an unsealed version is a window in which the percentages behind real history can
+still be edited, which is exactly what INV-11 promises cannot happen. A test asserts a **rejected**
+write does not seal either.
+
+### Reversal: mirrored, guarded against stored state, linked by lookup
+
+Guards R-1 and R-2 are checked against the **stored** original inside the transaction, not against
+what the caller believed — two devices can independently decide to undo the same event, and the one
+committing second must be refused. The link is then written with
+`WHERE id = ? AND reversed_by_event_id IS NULL`, so R-1 is atomic rather than merely checked: a
+concurrent winner leaves this matching zero rows, and the mismatch rolls everything back.
+
+"Reversed" on a ledger entry is a **lookup** (`reverses_entry_id`, index IX-04), never a flag —
+marking the original would mean writing to it. On the *event* row, `reversed_by_event_id` is the one
+permitted mutation, exactly as ALLOCATION_ALGORITHM §4.8 specifies.
+
+### Judgement calls, flagged rather than buried
+
+- **A seventh interface, `SpendingRepository`.** `ARCHITECTURE.md` §2.2 does not name it. Both
+  candidate homes are worse: `LedgerRepository` exists to expose *no* mutation, and putting a
+  correctable record behind it blurs the line this substage is drawing; `IncomeEventRepository` is
+  money arriving, and money leaving is not a variant of that. Flagged for 4.11 — that table is now
+  two rows stale, this and `RedirectTarget` from ADR-006.
+- **`record()` throws when handed a reversal.** Routing one through it would skip R-1 and R-2
+  entirely, letting the same income be undone twice. A returned failure invites a caller to handle
+  it and move on; an exception says the code is wrong. Same reasoning for a spending entry that does
+  not belong to its transaction. The rule this settles: **caller-construction bugs throw; data-state
+  conflicts return.**
+- **`DriftLedgerRepository` applies no tombstone filter anywhere.** Everywhere else in this layer
+  that is a defect. Here C-15 pins `is_deleted` to 0 for every row, so the term could never change a
+  result — and a filter that never matters teaches the next reader the wrong thing about this table.
+  A test asserts the column really is always 0, so the omission stays justified rather than assumed.
+- **`allocatedInPeriodMinor` counts `REVERSAL` alongside `ALLOCATION`, signed.** Otherwise a
+  reversed bill payment permanently occupies its period's capacity and the category refuses money
+  for the rest of the month because of an allocation that no longer exists. Spending is deliberately
+  *not* counted: the cap is on what may be allocated per period, not what may be spent.
+- **A SQLite trigger was considered and not added.** `CREATE TRIGGER ... BEFORE UPDATE ON
+  ledger_entries RAISE(ABORT)` would be stronger than all six routes above. It is not here because
+  4.3 transcribes `SCHEMA.md` exactly and the document specifies no triggers, so adding one is a
+  schema amendment needing an ADR. 4.5's goal is scoped to *"through the repository API"*, which the
+  above satisfies. Recorded so the option is a decision rather than an oversight — worth raising at
+  4.11 if the gate wants belt and braces.
