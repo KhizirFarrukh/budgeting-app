@@ -9,7 +9,7 @@ Evidence log, one entry per substage.
 | 4.3 | Database schema and code generation | ✅ Complete |
 | 4.4 | Repository interfaces and CRUD | 🟡 Code complete, unverified — no toolchain |
 | 4.5 | The append-only ledger and transactional writes | 🟡 Code complete, unverified — no toolchain |
-| 4.6 | Balance derivation and cache verification | ⬜ Not started |
+| 4.6 | Balance derivation and cache verification | 🟡 Code complete, unverified; benchmark unmeasured |
 | 4.7 | Seed data, suggested categories and the sink | ⬜ Not started |
 | 4.8 | Validators and cycle detection | ⬜ Not started |
 | 4.9 | Migrations, export and backup | ⬜ Not started |
@@ -737,3 +737,112 @@ permitted mutation, exactly as ALLOCATION_ALGORITHM §4.8 specifies.
   schema amendment needing an ADR. 4.5's goal is scoped to *"through the repository API"*, which the
   above satisfies. Recorded so the option is a decision rather than an oversight — worth raising at
   4.11 if the gate wants belt and braces.
+
+---
+
+## 4.6 — Balance derivation and cache verification (S04.06)
+
+**Outputs:** `lib/domain/allocation/period.dart`,
+`lib/domain/repositories/balance_repository.dart`,
+`lib/data/balances/{balance_sql,balance_queries,balance_verifier,period_boundaries}.dart`,
+`test/domain/allocation/period_test.dart`,
+`test/data/balances/{balance_test,balance_benchmark_test}.dart`,
+`docs/decisions/ADR-007-balance-cache-entry-count.md`.
+
+> **⚠ Still unverified — same toolchain gap as 4.4 and 4.5.** No Dart or Flutter SDK on this
+> machine. One acceptance criterion here is **not merely unverified but unmeetable** without it; it
+> is called out below rather than left to be discovered at the gate.
+
+### A real defect in `SCHEMA.md`, found by reading two sections together
+
+`SCHEMA.md` describes `balance_cache` twice and the two disagree.
+
+- **§7.1** (the balance policy, substage 2.4) specifies the incremental update as
+  `balance_minor += …` plus **`entry_count += 1`**, and defines the cheap verifier tier as
+  *"one grouped `COUNT(*)` per category compared against the cached `entry_count`."*
+- **§3.12** (the table declaration, substage 2.3) lists five columns. **There is no `entry_count`.**
+
+Substage 4.3 transcribed §3.12 faithfully, and `STAGE_4_SCHEMA_COMPARISON.md` correctly reported no
+divergence — it compares the transcription against the declaration, which is what it exists to do.
+Neither document is wrong about itself. They are wrong about each other, and only 4.6 has cause to
+read both.
+
+The consequence is concrete: **the cheap tier as specified could not be implemented.** Raised and
+amended rather than patched forward, per the manifest's `sdlc_discipline`, as
+[ADR-007](../decisions/ADR-007-balance-cache-entry-count.md). `SCHEMA.md` §3.12 now declares the
+column and points at the ADR.
+
+The alternative that needed no schema change — compare `MAX(id)` against the existing
+`last_entry_id`, since ledger ids are UUID v7 — was considered and rejected. It is **weakest exactly
+where the risk is highest**: it detects an entry appended *after* the cached one, but not an entry
+inserted with an *earlier* id, which is precisely what a sync merge produces. §7.1 says merges
+dominate this failure mode. A cheap tier blind to merges would pass on every cold start and give
+false assurance between full recomputes.
+
+### Acceptance criteria — and the test written for each
+
+| Criterion | Test | Status |
+|---|---|---|
+| Every balance is derivable from the ledger alone | `balance_test.dart` → `4.6.1` group. Signed sums, negatives permitted, empty categories present at zero | not run |
+| The verifier detects a deliberately corrupted cached balance | `THE VERIFIER FINDS A DELIBERATELY CORRUPTED BALANCE` — corrupted by raw SQL, because no API can do it | not run |
+| Period-scoped derivation handles anchor 31 through a 28-day February without skipping or duplicating | `period_test.dart` → `TWELVE PERIODS A YEAR, NO GAP AND NO OVERLAP`, plus a day-by-day sweep of a full year | not run |
+| Per-account totals reconcile with the sum of linked category balances | `4.6.5` group | not run |
+| **Derivation timing at five-year volume is recorded and within NFR-06** | `balance_benchmark_test.dart` exists and asserts P-13 ≤ 2 s | **CANNOT BE MET HERE** |
+
+**The timing criterion is the one I cannot satisfy.** It requires a measured number, and measuring
+requires running. The benchmark is written — 67,000 entries across 100 categories, the PRD Heavy
+profile — and prints its figure for pasting here, but **the cell is empty and must stay empty until
+someone runs it.** Recording an estimate would be inventing evidence; §7.1's own 40–80 ms figure is
+explicitly an estimate that 4.6.6 exists to replace.
+
+### Design decisions worth recording
+
+**The cache is folded in by `appendLedgerEntries`, not beside it.** §7.1 requires that *"there is no
+code path that writes a ledger entry without adjusting `balance_cache` atomically."* The only way to
+make that true is to make it the same code path — a cache updated by a separate call is a cache that
+drifts the first time somebody adds a fourth write path and forgets the second call. 4.5's single
+chokepoint turned out to be exactly the right place to put it.
+
+**A replayed entry must not fold twice.** `insertOrIgnore` silently skips a duplicate, so
+incrementing the balance regardless would make a retried sync push inflate every category it
+touched — a corruption caused by the very mechanism that exists to make retries safe. The writer
+therefore asks whether the entry is already stored *before* inserting, and folds only what it
+actually stored. There is a test.
+
+**`is_stale` is never cleared by an incremental update.** A row marked stale by a merge needs a full
+recompute, and an increment does not provide one. Clearing the flag would declare the row
+trustworthy on the strength of a write that knows nothing about why it was doubted. The verifier
+reports `staleFlagSet` on its own and skips the mismatch checks for that row, so a known-bad row
+does not bury the real signal under noise.
+
+**Derived and cached are separate methods, deliberately.** A single `balanceOf` returning "the cache
+if fresh, otherwise a recompute" would make the verifier unwritable — there would be no way to ask
+for the derived value specifically, and the comparison would compare the cache against itself.
+
+**`recomputeAll` is not a setter in disguise.** 4.6's `must_not` forbids a balance setter. A setter
+takes a number from its caller; this takes nothing and reads the ledger, so running it twice gives
+the same answer. That reproducibility *is* INV-04's requirement.
+
+**Account totals join through `categories.linked_account_id`, not `ledger_entries.account_id`.** The
+two differ on purpose: the entry column is denormalised at write time so history survives a re-link,
+while an account's total is what it holds *now*. Summing the entry column would report money against
+an account the category no longer belongs to. A test moves a category between accounts and asserts
+both behaviours at once.
+
+**Period arithmetic lives once, in `domain/allocation/period.dart`.** ARCHITECTURE §8.4 is explicit,
+and `data/balances/period_boundaries.dart` is deliberately trivial — it renames a `PeriodDefinition`
+into a `DateRange` and nothing else. Both types are half-open, so there is no boundary adjustment to
+get wrong. `nextPeriod` is derived from the instant after this period ends rather than by adding a
+month, because adding a month to a *clamped* start compounds the clamp: 28 Feb would give 28 Mar and
+an anchor of 31 would be lost permanently after one short month.
+
+### Left for later
+
+- **The benchmark figure**, above.
+- **Query-plan verification** is written as a test asserting `EXPLAIN QUERY PLAN` names
+  `ix_01_ledger_category_time`, per 4.6.1. Also unrun.
+- **`STAGE_4_SCHEMA_COMPARISON.md` must be regenerated at 4.11** so it compares against the amended
+  §3.12 rather than the original five-column table.
+- **`ARCHITECTURE.md` §2.2's repository table is now three rows stale** — `SpendingRepository`,
+  `BalanceRepository`, and `RedirectTarget` folded into `CategoryRepository`. Folding those back is
+  a 4.11 documentation task, not a design change.

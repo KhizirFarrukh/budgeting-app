@@ -22,6 +22,7 @@
 
 import 'dart:io';
 
+import 'package:pookiebudget/domain/allocation/period.dart';
 import 'package:pookiebudget/domain/entities/account.dart';
 import 'package:pookiebudget/domain/entities/allocation.dart';
 import 'package:pookiebudget/domain/entities/app_settings.dart';
@@ -45,6 +46,7 @@ import 'package:pookiebudget/domain/money/money.dart';
 import 'package:pookiebudget/domain/money/money_failure.dart';
 import 'package:pookiebudget/domain/money/money_format.dart';
 import 'package:pookiebudget/domain/repositories/account_repository.dart';
+import 'package:pookiebudget/domain/repositories/balance_repository.dart';
 import 'package:pookiebudget/domain/repositories/category_repository.dart';
 import 'package:pookiebudget/domain/repositories/income_event_repository.dart';
 import 'package:pookiebudget/domain/repositories/ledger_repository.dart';
@@ -58,6 +60,7 @@ import 'package:pookiebudget/domain/result.dart';
 /// Every domain library this file imports. Kept in sync with the imports above
 /// by [_assertAllDomainLibrariesImported].
 const List<String> _importedLibraries = <String>[
+  'lib/domain/allocation/period.dart',
   'lib/domain/entities/account.dart',
   'lib/domain/entities/allocation.dart',
   'lib/domain/entities/app_settings.dart',
@@ -81,6 +84,7 @@ const List<String> _importedLibraries = <String>[
   'lib/domain/money/money_failure.dart',
   'lib/domain/money/money_format.dart',
   'lib/domain/repositories/account_repository.dart',
+  'lib/domain/repositories/balance_repository.dart',
   'lib/domain/repositories/category_repository.dart',
   'lib/domain/repositories/income_event_repository.dart',
   'lib/domain/repositories/ledger_repository.dart',
@@ -286,8 +290,53 @@ void main() {
       LedgerRepository,
       IncomeEventRepository,
       SpendingRepository,
-    ].length == 7,
-    'the seven repository interfaces are declared in the domain',
+      BalanceRepository,
+    ].length == 8,
+    'the eight repository interfaces are declared in the domain',
+  );
+
+  // --- substage 4.6: period arithmetic and balance verification -------------
+  //
+  // `period.dart` lives under `lib/domain/allocation/`, where guard G2 forbids
+  // `async`, `await`, `Future`, `Stream`, `DateTime.now` and `Random`. Running
+  // it here — synchronously, in a program with no engine and no clock — is that
+  // constraint demonstrated rather than asserted.
+  //
+  // SCHEMA V-20's table, checked at the boundary that matters: an anchor of 31
+  // through a common February, a leap February, and a 30-day month.
+  _require(
+    clampedAnchorDay(2026, 2, 31) == 28 &&
+        clampedAnchorDay(2024, 2, 31) == 29 &&
+        clampedAnchorDay(2026, 4, 31) == 30 &&
+        clampedAnchorDay(2026, 1, 31) == 31,
+    'anchor day clamps to the last day of a short month',
+  );
+  final PeriodDefinition february = periodContaining(
+    atMs: DateTime.utc(2026, 3, 1).millisecondsSinceEpoch,
+    anchorDay: 31,
+  );
+  _require(
+    february.startMs == DateTime.utc(2026, 2, 28).millisecondsSinceEpoch &&
+        february.endMs == DateTime.utc(2026, 3, 31).millisecondsSinceEpoch &&
+        february.isValid &&
+        // Contiguous: one period ends exactly where the next begins. A gap here
+        // is a month whose allocations belong to no period at all.
+        nextPeriod(february).startMs == february.endMs &&
+        previousPeriod(february).endMs == february.startMs,
+    'periods are contiguous through a 28-day February',
+  );
+
+  _require(
+    const BalanceDiscrepancy(
+          categoryId: 'purity-1',
+          kind: DiscrepancyKind.balanceMismatch,
+          derivedMinor: 100,
+          cachedMinor: 140,
+          derivedEntryCount: 2,
+          cachedEntryCount: 2,
+        ).driftMinor ==
+        -40,
+    'balance discrepancy reports its drift',
   );
 
   // Substage 4.5's central claim, in the form a compiler can hold: the ledger

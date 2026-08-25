@@ -192,6 +192,19 @@ class BalanceCache extends Table {
   /// table.
   IntColumn get balanceMinor => integer().named('balance_minor')();
 
+  /// How many entries are folded into [balanceMinor].
+  ///
+  /// **Added by ADR-007.** §7.1's cheap verifier tier — one grouped `COUNT(*)`
+  /// per category, run at every cold start — compares against this, and §3.12
+  /// did not declare it. Substage 4.3 transcribed the declaration faithfully,
+  /// so the gap only surfaced at 4.6 where both sections are read together.
+  ///
+  /// It also makes one more discrepancy nameable: a cache whose *total* matches
+  /// while its *composition* does not, which two cancelling errors produce and
+  /// a balance comparison alone reports as healthy.
+  IntColumn get entryCount =>
+      integer().named('entry_count').withDefault(const Constant(0))();
+
   /// The most recent entry folded in.
   TextColumn get lastEntryId => text().named('last_entry_id').nullable()();
 

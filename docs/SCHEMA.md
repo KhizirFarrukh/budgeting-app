@@ -349,6 +349,7 @@ between the two loses the change silently.
 |---|---|---|---|
 | `category_id` | TEXT | no | → `categories.id`, primary key |
 | `balance_minor` | INTEGER | no | Cached sum of the category's ledger entries |
+| `entry_count` | INTEGER | no | How many entries are folded into `balance_minor`. **Added by [ADR-007](decisions/ADR-007-balance-cache-entry-count.md)** — §7.1's cheap verifier tier compares against it, and this table did not declare it |
 | `last_entry_id` | TEXT | yes | The most recent entry folded in |
 | `computed_at_ms` | INTEGER | no | |
 | `is_stale` | INTEGER | no | Set on any write to that category's entries |
