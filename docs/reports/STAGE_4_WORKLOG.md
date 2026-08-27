@@ -10,7 +10,7 @@ Evidence log, one entry per substage.
 | 4.4 | Repository interfaces and CRUD | 🟡 Code complete, unverified — no toolchain |
 | 4.5 | The append-only ledger and transactional writes | 🟡 Code complete, unverified — no toolchain |
 | 4.6 | Balance derivation and cache verification | 🟡 Code complete, unverified; benchmark unmeasured |
-| 4.7 | Seed data, suggested categories and the sink | ⬜ Not started |
+| 4.7 | Seed data, suggested categories and the sink | 🟡 Code complete, unverified — no toolchain |
 | 4.8 | Validators and cycle detection | ⬜ Not started |
 | 4.9 | Migrations, export and backup | ⬜ Not started |
 | 4.10 | Test suite and performance smoke test | ⬜ Not started |
@@ -846,3 +846,104 @@ an anchor of 31 would be lost permanently after one short month.
 - **`ARCHITECTURE.md` §2.2's repository table is now three rows stale** — `SpendingRepository`,
   `BalanceRepository`, and `RedirectTarget` folded into `CategoryRepository`. Folding those back is
   a 4.11 documentation task, not a design change.
+
+---
+
+## 4.7 — Seed data, suggested categories and the sink (S04.07)
+
+**Outputs:** `lib/data/seed/{seed_data,seeder}.dart`, `test/data/seed/seeder_test.dart`.
+
+> **⚠ Still unverified — same toolchain gap.** Nothing compiled or run.
+
+### Acceptance criteria — and the test written for each
+
+| Criterion | Test | Status |
+|---|---|---|
+| Seeding an empty database produces a configuration that passes every validator from 4.8 | `seeding an empty database` group. **Partial by construction** — 4.8's validators do not exist yet, so this asserts V-01, V-02 and INV-07 directly. 4.8 must re-assert it through the real validator | not run |
+| Default percentages total exactly 10000 at group level and within every group | `4.7.3` group, written first and as pure arithmetic with no database in sight | not run |
+| Running the seeder twice is a no-op | `ROW COUNTS AND TIMESTAMPS ARE UNCHANGED BY A SECOND RUN` | not run |
+| A user edit to a seeded category survives a re-run | `A RENAMED AND RETYPED SUGGESTION IS LEFT ALONE`, plus a deleted suggestion staying deleted | not run |
+| The sink exists, is uncapped, and is flagged non-deletable | `INV-07 — the sink exists, is uncapped, and settings point at it` | not run |
+| Every seeded category can be renamed, retyped, re-ceilinged and removed | `the sink cannot be deleted, but everything else can` — loops over all 14 non-sink rows and deletes each | not run |
+
+### The percentages are computed, not written down
+
+No default split is prescribed anywhere in the PRD, the manifest or SCHEMA, so the numbers are mine.
+The named pitfall makes the trap explicit: *"default percentages that total 9999 because of a
+hand-computed split, which blocks onboarding."* Nine savings categories at a hand-written 1111 total
+9999, and a user who accepts the defaults cannot finish onboarding.
+
+So nothing is hand-computed. `distributeEvenly` splits 10000 across N shares with the remainder
+spread one basis point at a time — largest-remainder, the same rule the allocation engine uses, so
+the app never rounds two different ways. The totals are exact **by construction**, and adding a
+twentieth suggestion later cannot break them. The test sweeps every part-count from 1 to 40.
+
+The group-level defaults are an even 50/50 personal, 40/30/30 with business. An even split is the
+honest default: which of spending and saving should dominate is not a recommendation this app is
+qualified to make, and the user changes it in onboarding.
+
+**The sink gets a zero share, not an absent one.** It is where overflow lands, not a destination
+anyone chose a percentage for — a base share would quietly divert income away from the goals the
+user actually set. Zero is legal (C-01 permits 0–10000) and meaningfully different from absent: the
+line exists, so the sink shows in the percentage editor at 0% rather than being missing from it.
+
+### Suggested amounts are placeholders, and openly so
+
+`ACCUMULATING_RESERVE` requires a ceiling (V-08) and `FIXED_RECURRING` requires a bill and anchor
+day (V-18), so ten of the nineteen suggestions cannot be stored at all without amounts the app
+cannot know. Nobody can say what a stranger's Hajj fund should hold.
+
+The resolution is to supply obviously-provisional round figures and **flag every row
+`is_suggested_seed` with a `seed_version`**, which is exactly what 4.7.2 asks the flag for: telling
+an untouched suggestion from a user's own creation. Stage 6's onboarding walks the user through
+confirming each. Inventing a figure that looked authoritative would have been worse than one that
+plainly wants changing.
+
+**Amounts are held in major units and scaled by the seeder.** A ceiling of 50,000 is 5,000,000 minor
+units in PKR, 50,000 in JPY and 50,000,000 in KWD. Storing minor units in the seed file would bake
+in two decimal places, which the manifest's engineering conventions forbid outright. A test seeds
+the same set in JPY and asserts the Hajj ceiling is not 100× wrong.
+
+### Idempotent and non-destructive are two promises, held by one rule
+
+They sound identical and are not: a seeder could be idempotent by writing the same rows every time
+and still destroy an edit by overwriting it with the original. Both fall out of **the seeder only
+inserting, and only when the group is empty**. It has no update path at all, which is the only
+reliable answer to *"a seeder that overwrites user edits on every app launch."*
+
+"Already seeded" is decided by **the presence of the group, not a flag in settings**. A flag can
+disagree with the database — after a restore, a merge, or a user deleting everything — and when it
+does, the seeder either refuses to help an empty install or floods a populated one.
+
+The gate is **per group**, so enabling business scope later seeds that group alone rather than the
+presence of Spending making the whole call a no-op.
+
+### Three bugs found while writing it
+
+- **U-04 violation.** Seeding the business group later created a *second* unsealed rule version while
+  the first was still a draft, which the partial unique index rejects — aborting the entire seed.
+  Fixed by reusing the existing draft; a new version is minted only when there is no draft to join,
+  which is also the correct behaviour when the old one has been sealed by an income event (INV-11).
+- **An invalid settings insert.** The first draft tried to create the `app_settings` row to hold
+  `active_rule_version_id`. That row's currency is the one value in this app that must never be
+  guessed (V-24 freezes it the moment money is recorded). The seeder now **requires** the settings
+  row and refuses with `RecordNotFound` if it is absent — which also makes the onboarding ordering
+  explicit rather than accidental.
+- Both settings updates carry `AND <column> IS NULL`, so a user who has already nominated a
+  different sink or moved to a later rule version is not dragged back by a re-run.
+
+### Judgement calls, flagged rather than buried
+
+- **Deterministic seed ids were considered and rejected.** Two devices seeding independently while
+  offline produce two full sets of categories, which merge into 38. UUID v5 over a fixed namespace
+  would make the merge a no-op. It is **not** done here, because ARCHITECTURE §8.6 assigns v4 to
+  configuration records and deviating would mean amending an approved document unilaterally for a
+  problem **Stage 7.8 already owns** — new-device bootstrap must not seed before checking for a
+  remote. Recorded here so 7.8 inherits the constraint rather than rediscovering it.
+- **No reset-to-suggestions path.** 4.7.8 says *"if the design calls for one"*, and nothing in the
+  PRD, NAVIGATION or the manifest does. Building a destructive action nobody asked for would be
+  inventing scope; if Stage 6 wants one, the seeder's insert-only shape makes it easy to add safely.
+- **The first criterion cannot be fully met yet.** It asks that seeding produce a configuration
+  passing *"every validator from substage 4.8"*, and 4.8 has not been written. The tests assert the
+  rules those validators will encode — V-01, V-02, INV-07, the sink being uncapped — but 4.8 must
+  re-run this assertion through the real validator once it exists. Noted as a 4.8 obligation.
