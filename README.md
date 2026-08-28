@@ -4,9 +4,15 @@ An Android app that automatically splits every incoming payment across user-defi
 business money buckets, with per-bucket ceilings, overflow redirection, and optional sync to the
 user's own Google account.
 
-> **Status: Stage 3 of 10 — project scaffolding.**
-> No features are implemented yet. This README is a placeholder; substage 10.7.1 writes the real
-> one, including setup from a clean machine, how to run the checks, and the docs index.
+> **Status: Stage 4 of 10 — core data layer, substage 4.7 of 11 complete.**
+> No user-facing features yet. This README is a placeholder; substage 10.7.1 writes the real one,
+> including setup from a clean machine, how to run the checks, and the docs index.
+
+## Picking this up mid-build?
+
+**Read [docs/handoff/README.md](docs/handoff/README.md) first.** It states exactly where the work
+stands, what to do next, and the one blocking problem — substages 4.4–4.7 are written but have
+never been compiled or tested, because no Dart SDK is present on the machine they were written on.
 
 ## Documentation
 
@@ -19,7 +25,8 @@ The design is complete and precedes the code. Read in this order:
 | [docs/SCHEMA.md](docs/SCHEMA.md) | Thirteen tables, constraints, indexes, validation rules, the remote payload format |
 | [docs/ALLOCATION_ALGORITHM.md](docs/ALLOCATION_ALGORITHM.md) | The engine — contracts, phase A and B, overrides, error taxonomy, fifteen golden vectors |
 | [docs/NAVIGATION.md](docs/NAVIGATION.md) | 22 screens, the navigation graph, back behaviour, per-screen states |
-| [docs/decisions/](docs/decisions/) | ADR-001 state management · ADR-002 sync target · ADR-003 database · ADR-004 libraries |
+| [docs/decisions/](docs/decisions/) | ADR-001 state management · ADR-002 sync target · ADR-003 database · ADR-004 libraries · ADR-005 repair log · ADR-006 cascade redirect · ADR-007 balance cache entry count |
+| [docs/reports/](docs/reports/) | Per-stage reports and worklogs — the evidence log, one entry per substage |
 | [docs/TRACEABILITY.md](docs/TRACEABILITY.md) | Every requirement to its design artefact and verifying test |
 | [docs/OPEN_QUESTIONS.md](docs/OPEN_QUESTIONS.md) · [docs/ASSUMPTIONS.md](docs/ASSUMPTIONS.md) | What is undecided, and what is assumed with its impact if wrong |
 
