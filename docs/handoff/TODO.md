@@ -8,11 +8,11 @@ raised by a specific acceptance criterion, `must_not`, or design document.
 ## P0 — blocking, do before writing more code
 
 - [ ] **Run the verification sequence** in [`ENVIRONMENT_BLOCKER.md`](ENVIRONMENT_BLOCKER.md) on a
-      machine with the Flutter SDK. Substages 4.4–4.7 have never been compiled, analysed, formatted
+      machine with the Flutter SDK. Substages 4.4–4.8 have never been compiled, analysed, formatted
       or tested. *Owner: immediate.*
 - [ ] **Run `dart format .` and commit the result.** All formatting was done by hand; CI fails on
       any difference. *Owner: immediate.*
-- [ ] **Fix whatever the build reports**, then flip 4.4–4.7 from 🟡 to ✅ in
+- [ ] **Fix whatever the build reports**, then flip 4.4–4.8 from 🟡 to ✅ in
       `docs/reports/STAGE_4_WORKLOG.md`, replacing every *"not run"* with real evidence.
       *Owner: immediate.*
 - [ ] **Update `docs/ENVIRONMENT.md` §2** with the SDK path on the machine that actually builds.
@@ -31,29 +31,30 @@ raised by a specific acceptance criterion, `must_not`, or design document.
       *Owner: 4.6, unfinished.*
 - [ ] **Re-assert the seed through the real validators.** Substage 4.7's first acceptance criterion
       requires that seeding produce a configuration passing *"every validator from substage 4.8"*.
-      4.8 did not exist, so `test/data/seed/seeder_test.dart` asserts V-01, V-02 and INV-07
-      directly. **4.8 must add a test that runs the seeded configuration through the real validator.**
-      *Owner: 4.8.*
+      The validators now exist (4.8), but the test still does not: `test/data/seed/seeder_test.dart`
+      asserts V-01, V-02 and INV-07 directly rather than calling
+      `ConfigurationGuard.validateAll()`. **Add that test.** One line of assertion, and it is the
+      only thing standing between 4.7's first criterion and being genuinely met.
+      *Raised at 4.7, partially discharged at 4.8, still open.*
 
 ---
 
 ## P2 — owned by a specific future substage
 
-### Substage 4.8 — validators and cycle detection
+### Substage 4.8 — validators and cycle detection · **DONE**, one carry-over
 
-- [ ] **The cycle walk is over a branching graph, not a chain.** ADR-006 replaced the single
-      `redirect_target_category_id` column with a `redirect_targets` table, so a category can have
-      many targets. A check that follows only the first target would miss a cycle reachable through
-      the second. `CategoryRepository.redirectGraph()` already returns the whole graph in one read
-      for exactly this.
-- [ ] **Wire validators into the repository write path**, so a caller who forgets still cannot
-      persist invalid state (SCHEMA §6.1: *"no invariant-protecting rule is enforced only in the
-      UI"*).
-- [ ] **Category deletion must consult rule lines.** `DriftCategoryRepository.deleteCategory`
-      deliberately does *not* check them — a sealed version's lines must survive the deletion
-      (INV-11) while a draft's must be redistributed to keep V-02's total at 10000. That is a
-      judgement over the whole set, not a referential check over one row. There is a comment at the
-      call site marking the spot.
+- [x] The cycle walk is over a branching graph, not a chain — `findAnyCycle` explores every edge of
+      every node, with tests for a cycle reachable *only* through the second target and for a
+      diamond that is not a cycle.
+- [x] Validators wired into the repository write path via `ConfigurationGuard`, proven by
+      `test/data/validation/write_path_validation_test.dart`.
+- [ ] **Category deletion still does not consult rule lines.**
+      `DriftCategoryRepository.deleteCategory` deliberately does *not* check them — a sealed
+      version's lines must survive the deletion (INV-11) while a draft's must be redistributed to
+      keep V-02's total at 10000. That needs a **redistribution policy no design document states**,
+      which is why 4.8 did not invent one. There is a comment at the call site marking the spot.
+      Stage 6's category editor is the natural home, since the user has to be told what happened to
+      the freed percentage. *Raised at 4.4, still open after 4.8.*
 
 ### Substage 4.9 — migrations, export and backup
 
@@ -115,7 +116,10 @@ raised by a specific acceptance criterion, `must_not`, or design document.
       (SCHEMA §7.1: *"a merge is never trusted"*). `BalanceVerifier.markStale` exists for this.
 - [ ] Post-merge repair writes to `repair_log` (ADR-005); the `ACCOUNT_UNLINKED` repair is the
       sanctioned resolution for deleting an account with linked categories, which
-      `DriftAccountRepository.deleteAccount` currently refuses.
+      `DriftAccountRepository.deleteAccount` currently refuses with V-21.
+- [ ] **Call `ConfigurationGuard.validateAll()` after every merge** and act on the list. Substage
+      4.8.5 built it for exactly this; `ValidationFailure.subjectId` names the record each repair
+      must touch. The detection half is done — 7.6 owns the repair half (SCHEMA §6.8).
 
 ---
 
@@ -131,7 +135,7 @@ raised by a specific acceptance criterion, `must_not`, or design document.
 ## Housekeeping
 
 - [ ] Keep `tool/domain_purity_check.dart` in step. Its completeness assertion **fails the build**
-      if a file exists under `lib/domain` that it does not import. It was extended three times this
-      session; it will need extending again at 4.8 (`lib/domain/validation/`).
+      if a file exists under `lib/domain` that it does not import. It has been extended four times
+      now; extend it again whenever a new `lib/domain` file appears.
 - [ ] This handoff pack is a map, not a source of truth. When it disagrees with `docs/SCHEMA.md`,
       `docs/ARCHITECTURE.md` or the worklogs, **those win** — fix the map.

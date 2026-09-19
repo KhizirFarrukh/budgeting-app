@@ -16,6 +16,8 @@
 /// because no caller can do anything sensible with it.
 library;
 
+import 'package:pookiebudget/domain/validation/validation_failure.dart';
+
 /// The base of the repository failure taxonomy.
 sealed class RepositoryFailure {
   const RepositoryFailure();
@@ -91,8 +93,12 @@ final class SinkProtected extends RepositoryFailure {
   /// `'deleted'` or `'archived'`.
   final String action;
 
+  // V-15, not V-14. This cited V-14 when it was written at substage 4.4;
+  // V-14 is "a category that is another category's redirect target cannot be
+  // archived", which is a different rule with a different subject. Corrected
+  // at 4.8, where both rules got validators and the difference became visible.
   @override
-  String get rule => 'V-14';
+  String get rule => 'V-15';
 
   @override
   String get describe =>
@@ -297,6 +303,36 @@ final class CannotReverseAReversal extends RepositoryFailure {
   String get describe =>
       'This entry is itself an undo, so it cannot be undone. Record the money '
       'again as new income instead.';
+}
+
+/// The write would have left the configuration invalid. SCHEMA §6.
+///
+/// Carries **every** violation the validators found, not the first. Substage
+/// 4.8.4 wires validation into the repository so *"a caller that forgets to
+/// validate still cannot persist invalid state"*, and a caller that did forget
+/// is exactly the one that benefits from being told the whole story at once.
+///
+/// [describe] names only the first, because a snackbar cannot usefully render
+/// six. Stage 6 reads [failures] directly and routes each to the screen that
+/// fixes it — every `ValidationFailure` carries a `subjectId` for that.
+final class ConfigurationInvalid extends RepositoryFailure {
+  const ConfigurationInvalid(this.failures);
+
+  final List<ValidationFailure> failures;
+
+  @override
+  String? get rule => failures.isEmpty ? null : failures.first.rule;
+
+  @override
+  String get describe => failures.isEmpty
+      ? 'That change would leave your setup inconsistent.'
+      : failures.first.describe;
+
+  @override
+  String toString() =>
+      'ConfigurationInvalid('
+      '${failures.map((ValidationFailure f) => f.rule).join(", ")}): '
+      '${failures.map((ValidationFailure f) => f.describe).join(" | ")}';
 }
 
 /// A database constraint fired that the repository did not anticipate.

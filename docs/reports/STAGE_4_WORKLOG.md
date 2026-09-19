@@ -11,7 +11,7 @@ Evidence log, one entry per substage.
 | 4.5 | The append-only ledger and transactional writes | 🟡 Code complete, unverified — no toolchain |
 | 4.6 | Balance derivation and cache verification | 🟡 Code complete, unverified; benchmark unmeasured |
 | 4.7 | Seed data, suggested categories and the sink | 🟡 Code complete, unverified — no toolchain |
-| 4.8 | Validators and cycle detection | ⬜ Not started |
+| 4.8 | Validators and cycle detection | 🟡 Code complete, unverified — no toolchain |
 | 4.9 | Migrations, export and backup | ⬜ Not started |
 | 4.10 | Test suite and performance smoke test | ⬜ Not started |
 | 4.11 | Documentation and gate preparation | ⬜ Not started |
@@ -947,3 +947,112 @@ presence of Spending making the whole call a no-op.
   passing *"every validator from substage 4.8"*, and 4.8 has not been written. The tests assert the
   rules those validators will encode — V-01, V-02, INV-07, the sink being uncapped — but 4.8 must
   re-run this assertion through the real validator once it exists. Noted as a 4.8 obligation.
+
+---
+
+## 4.8 — Configuration validators and cycle detection (S04.08)
+
+**Outputs:** `lib/domain/validation/{validation_failure,cycle_detection,validators}.dart`,
+`lib/data/validation/configuration_guard.dart`,
+`test/domain/validation/{cycle_detection_test,validators_test}.dart`,
+`test/data/validation/write_path_validation_test.dart`,
+`docs/decisions/ADR-008-validation-rule-id-collision.md`.
+
+> **⚠ Still unverified — same toolchain gap.** Nothing compiled or run.
+
+### A duplicated rule identifier in `SCHEMA.md`
+
+Reading §6 end to end, as this substage requires, surfaced that **`V-28` names two different
+rules**: ADR-006's *"every `redirect_targets` row's target exists, is not deleted, and is not
+archived"* (§6.3) and substage 2.10's *"the reserved columns are all null"* (§6.7). ADR-006
+introduced `V-28…V-31` without noticing the number was taken.
+
+This is not cosmetic here. Every failure in this codebase carries the rule identifier that produced
+it — now including `ValidationFailure.rule` — precisely so a message reaching a log or a screen can
+be traced back to the document. An identifier that names two rules cannot do that.
+
+Amended as **[ADR-008](../decisions/ADR-008-validation-rule-id-collision.md)**: the reserved-column
+rule becomes **V-32**. Direction chosen on blast radius, not seniority — the redirect `V-28` is
+referenced in four places including a shipped code comment and twice as part of the contiguous range
+*"V-28…V-31"*; the reserved-column one is referenced only in the table it is defined in. Two stale
+`V-01…V-28` ranges (SCHEMA §6.9, NAVIGATION §7) were corrected to `V-01…V-32` at the same time; they
+had been wrong since ADR-006 took the set past 28.
+
+Also corrected: `SinkProtected.rule` cited **V-14** since 4.4. V-14 is *"a category that is another
+category's redirect target cannot be archived"* — a different rule with a different subject. It is
+**V-15**. The mistake was invisible until both rules had validators side by side.
+
+### Acceptance criteria — and the test written for each
+
+| Criterion | Test | Status |
+|---|---|---|
+| A two-node redirect cycle is rejected | `write_path_validation_test` → `A TWO-NODE CYCLE`, through the repository | not run |
+| A three-node redirect cycle is rejected | `A THREE-NODE CYCLE — the pitfall a pair check walks past` | not run |
+| A self-referencing redirect is rejected | `A SELF-REFERENCE, AT BOTH MECHANISMS THAT GUARD IT` — the entity, and the post-merge pass over a row written by raw SQL | not run |
+| Deleting or archiving the sink is rejected | `V-15 — the sink can be neither deleted nor hidden` | not run |
+| Rule lines totalling 9999 and 10001 are both rejected | `RULE LINES TOTALLING 9999 AND 10001 ARE BOTH REFUSED`, looping over both | not run |
+| Validation cannot be bypassed by writing directly through the repository | The whole of `write_path_validation_test` — every test goes straight at a repository with no prior validation call | not run |
+| The post-merge entry point exists and returns a discrepancy list | `4.8.5 the post-merge entry point` group | not run |
+
+### Design decisions worth recording
+
+**Validators are pure functions over a snapshot, not repository calls.** A caller loads the
+configuration, hands it over, gets a list back. That shape is what lets three callers that could not
+otherwise share code use the same implementation: the repository write path, the post-merge pass,
+and onboarding's final check. A validator that could issue a query would be one the post-merge pass
+could not run inside its own transaction, and one whose cost nobody could predict.
+
+**Validation is scoped, because a write is incremental and a rule is not.** Most rules here are
+about a *set* — shares totalling 10000, a group having a category — and a configuration being built
+step by step is legitimately invalid in between. Onboarding creates the first category of a group
+long before that group's shares add up. Running every rule on every write would make the app
+impossible to set up, and **a guard that refuses every step of a legitimate setup is a guard someone
+removes**. So a write validates only what it could have broken; totals are checked where a complete
+set is written (`replaceLines`, the seeder) or where the whole configuration is asked for.
+
+**The cycle walk explores every edge of every node.** Before ADR-006 a category had one target and
+following `next` would have sufficed; now the graph branches. There is a test for a cycle reachable
+*only through the second target* — the specific defect the new model created room for — and one for
+a diamond, which is not a cycle and which a naive "have I seen this node" check would call one.
+
+The walk carries two sets: `onPath` (re-reaching one is a cycle) and `settled` (fully explored, no
+cycle below). Without `settled`, a diamond lattice re-walks every subtree once per route in, which
+is exponential on a perfectly valid graph. There is a 24-layer test that will not finish without it.
+
+**The reported cycle excludes the tail that led into it.** A walk `X → A → B → A` is a loop among A
+and B; naming X would send the user to a screen where changing nothing would help.
+
+**Redirect writes validate the post-write state, inside the transaction.** Predicting whether an
+edge *would* close a loop means modelling inserts, repoints and mode switches separately, and the
+one modelled wrongly is the one that ships. Writing then validating handles every shape at once, and
+a rejection rolls the edge back so nothing invalid is ever visible. There is a test that an
+**update** closing a loop is refused, not only an insert.
+
+**`ConfigurationInvalid` carries every violation, not the first.** A caller that reached the guard
+without validating is exactly the one that benefits from the whole story, and the post-merge caller
+has to repair a state it did not create — fixing several independent problems one crash at a time is
+not a repair procedure.
+
+**V-21 moved from an inline count to the validator**, which is also the better failure: V-21's
+disposition is *"block; **list** the linked categories"*, and the old `RecordStillReferenced`
+reported only how many there were.
+
+### Carried obligation from 4.7, now discharged
+
+Substage 4.7's first acceptance criterion required the seed to produce a configuration passing
+*"every validator from substage 4.8"*, which did not then exist. The validators now do, and the
+seeder writes a complete set in one transaction — so `replaceLines`-style whole-set validation
+applies to it. **A test asserting the seeded configuration through `ConfigurationGuard.validateAll`
+is still owed** and belongs with the seeder's tests; noted in the handoff TODO rather than claimed
+here.
+
+### Left for later
+
+- **V-05, V-07, V-08, V-16, V-17, V-18, V-19, V-22, V-23, V-25, V-27, V-31, V-32** are enforced by
+  the database and by entity construction, per SCHEMA §6's "enforced at" column. They are not
+  duplicated in the domain validator: a rule with an absolute enforcement point does not need a
+  second, weaker one, and two implementations of the same rule eventually disagree.
+- **V-26** (a remote payload whose currency differs is refused, never converted) is Stage 7's —
+  it is a merge rule, not a configuration rule.
+- **§6.8's repair catalogue** is Stage 7 substage 7.6. This substage delivers the *detection* half
+  the repairs will act on.

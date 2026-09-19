@@ -2,12 +2,14 @@ import 'package:drift/drift.dart';
 import 'package:pookiebudget/data/database/database.dart';
 import 'package:pookiebudget/data/mappers/account_mappers.dart';
 import 'package:pookiebudget/data/repositories/repository_support.dart';
+import 'package:pookiebudget/data/validation/configuration_guard.dart';
 import 'package:pookiebudget/domain/entities/account.dart';
 import 'package:pookiebudget/domain/money/clock.dart';
 import 'package:pookiebudget/domain/repositories/account_repository.dart';
 import 'package:pookiebudget/domain/repositories/repository_failure.dart';
 import 'package:pookiebudget/domain/repositories/repository_queries.dart';
 import 'package:pookiebudget/domain/result.dart';
+import 'package:pookiebudget/domain/validation/validators.dart';
 
 /// The database-backed [AccountRepository].
 class DriftAccountRepository implements AccountRepository {
@@ -15,6 +17,9 @@ class DriftAccountRepository implements AccountRepository {
 
   final PookieDatabase _db;
   final Clock _clock;
+
+  /// Substage 4.8.4 — see `DriftCategoryRepository`.
+  late final ConfigurationGuard _guard = ConfigurationGuard(_db);
 
   @override
   Future<List<Account>> accounts({
@@ -87,28 +92,20 @@ class DriftAccountRepository implements AccountRepository {
           reject(RecordNotFound(entity: 'account', id: id));
         }
 
-        // A category that silently forgot which real-world account holds its
-        // money has lost information the user put there deliberately. So the
-        // repository reports the links and stops; unlinking is a decision, made
-        // by the user in Stage 6 or by the documented `ACCOUNT_UNLINKED` repair
-        // in a Stage 7 merge.
-        final List<CategoryRow> linked =
-            await (_db.select(_db.categories)..where(
-                  (t) =>
-                      t.linkedAccountId.equals(id) &
-                      tombstoneTerm(t.isDeleted, includeDeleted: false),
-                ))
-                .get();
-        if (linked.isNotEmpty) {
-          reject(
-            RecordStillReferenced(
-              entity: 'account',
-              id: id,
-              referenceCount: linked.length,
-              referencedBy: 'categories',
-            ),
-          );
-        }
+        // V-21 — a category that silently forgot which real-world account holds
+        // its money has lost information the user put there deliberately. So
+        // the repository reports the links and stops; unlinking is a decision,
+        // made by the user in Stage 6 or by the documented `ACCOUNT_UNLINKED`
+        // repair in a Stage 7 merge.
+        //
+        // Routed through the validator rather than counted inline, as substage
+        // 4.8 does for every numbered rule. It is also the better failure:
+        // V-21's disposition is "block; **list** the linked categories", and
+        // `AccountStillLinked` names them where the old inline check reported
+        // only how many there were.
+        await _guard.rejectIf(
+          (ConfigurationSnapshot s) => validateCanDeleteAccount(s, id),
+        );
 
         final int nowMs = _clock.nowMs();
         await _db.customUpdate(

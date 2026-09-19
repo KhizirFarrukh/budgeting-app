@@ -280,7 +280,7 @@ Where a state cannot occur, that is stated rather than left blank, because "not 
 | `Category Detail` | Category exists but has no entries → "Nothing recorded here yet" | Skeleton while entries load | Load failed → retry, with the category name still shown |
 | `Transaction History` | No entries, or filters match nothing — **distinguished by wording**, since "you have no history" and "no results for this filter" are different facts | Skeleton, then paged loading | Load failed → retry, keeping the filters |
 | `Category List` | n/a — the sink always exists | Brief | Load failed → retry |
-| `Category Edit` | n/a | While saving | Any V-01…V-28 violation → inline on the offending field, naming the value and what to change |
+| `Category Edit` | n/a | While saving | Any V-01…V-32 violation → inline on the offending field, naming the value and what to change |
 | `Account List` | "No accounts yet", explaining that accounts are labels and optional | Brief | Load failed → retry |
 | `Account Edit` | n/a | While saving | Duplicate name → inline. Delete with linked categories → blocked, **listing the categories** |
 | `Reports` | Period with no activity → zeros and "nothing recorded in this period", **never a hidden period** (US-033) | Skeleton while aggregating | Aggregation failed → retry; never a partial figure |

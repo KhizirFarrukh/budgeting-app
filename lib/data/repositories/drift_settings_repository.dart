@@ -6,6 +6,8 @@ import 'package:pookiebudget/domain/entities/app_settings.dart';
 import 'package:pookiebudget/domain/repositories/repository_failure.dart';
 import 'package:pookiebudget/domain/repositories/settings_repository.dart';
 import 'package:pookiebudget/domain/result.dart';
+import 'package:pookiebudget/domain/validation/validation_failure.dart';
+import 'package:pookiebudget/domain/validation/validators.dart';
 
 /// The database-backed [SettingsRepository].
 ///
@@ -63,7 +65,16 @@ class DriftSettingsRepository implements SettingsRepository {
         .customSelect('SELECT COUNT(*) AS c FROM ledger_entries')
         .getSingle();
     final int entryCount = row.read<int>('c');
-    if (entryCount > 0) {
+
+    // Routed through the domain validator, as substage 4.8 does for every
+    // numbered rule — so V-24 has one implementation that the write path and
+    // the post-merge pass both call, rather than two that can drift.
+    final List<ValidationFailure> failures = validateCurrencyChange(
+      stored: appSettingsFromRow(current),
+      incoming: incoming,
+      ledgerEntryCount: entryCount,
+    );
+    if (failures.isNotEmpty) {
       reject(CurrencyLocked(ledgerEntryCount: entryCount));
     }
   }

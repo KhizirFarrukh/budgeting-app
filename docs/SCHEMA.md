@@ -1026,7 +1026,7 @@ never afterwards, because every stored amount is interpreted through the exponen
 | # | Rule | Enforced at | On violation |
 |---|---|---|---|
 | V-27 | `ceiling_kind` is `'ABSOLUTE'`; `rule_set` is `'DEFAULT'` | Database (C-21, C-22) | **Block** |
-| V-28 | `target_date_ms`, `ceiling_param`, `parent_category_id`, `soft_budget_minor`, `soft_budget_period` are all null | Database (C-21) | **Block** |
+| V-32 | `target_date_ms`, `ceiling_param`, `parent_category_id`, `soft_budget_minor`, `soft_budget_period` are all null | Database (C-21) | **Block**. *Renumbered from V-28 by [ADR-008](decisions/ADR-008-validation-rule-id-collision.md) — ADR-006 gave that number to a redirect rule* |
 
 These make the six deferral accommodations **provably unused in v1.0**, so a v1.1 client can trust
 that every v1.0 row carries defaults.
@@ -1076,7 +1076,7 @@ Substage 2.10.7 requires every violation to state block, warn or auto-repair, pl
 
 | Disposition | Applies to | Recovery |
 |---|---|---|
-| **Block** | Every rule V-01…V-28, at save time | The message names the offending value and what to change; the UI routes to the screen that fixes it |
+| **Block** | Every rule V-01…V-32, at save time | The message names the offending value and what to change; the UI routes to the screen that fixes it |
 | **Warn** | Nothing at save time | — |
 | **Auto-repair** | Only the six post-merge cases in §6.8, and only after a merge | Recorded in the repair log and surfaced to the user |
 

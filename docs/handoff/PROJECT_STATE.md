@@ -1,6 +1,6 @@
 # Project state — stage by stage
 
-Accurate as of commit `8a68090`, 2026-08-28.
+Accurate as of substage 4.8, 2026-09-19. The newest row's commit is current `HEAD`.
 
 Legend: ✅ complete and verified · 🟡 code complete, **not verified** · ⬜ not started
 
@@ -13,7 +13,7 @@ Legend: ✅ complete and verified · 🟡 code complete, **not verified** · ⬜
 | 1 | Requirements Gathering & Documentation | 8 | ✅ | approved |
 | 2 | System Design & Architecture | 13 | ✅ | approved |
 | 3 | Project Scaffolding | 9 | ✅ | approved |
-| **4** | **Core Data Layer Implementation** | **11** | **🟡 in progress — 7 of 11** | not reached |
+| **4** | **Core Data Layer Implementation** | **11** | **🟡 in progress — 8 of 11** | not reached |
 | 5 | Core Business Logic — Auto-Distribution Engine | 10 | ⬜ | |
 | 6 | UI Implementation — Core Flows | 12 | ⬜ | |
 | 7 | Cloud Sync Implementation | 11 | ⬜ | |
@@ -34,8 +34,8 @@ Legend: ✅ complete and verified · 🟡 code complete, **not verified** · ⬜
 | 4.5 | Append-only ledger and transactional writes | 🟡 | `86d6f25` |
 | 4.6 | Balance derivation and cache verification | 🟡 | `9fb427e` |
 | 4.7 | Seed data, suggested categories and the sink | 🟡 | `8a68090` |
-| **4.8** | **Configuration validators and cycle detection** | **⬜ ← NEXT** | |
-| 4.9 | Migrations, export and backup | ⬜ | |
+| 4.8 | Configuration validators and cycle detection | 🟡 | `HEAD` |
+| **4.9** | **Migrations, export and backup** | **⬜ ← NEXT** | |
 | 4.10 | Data layer test suite and performance smoke test | ⬜ | |
 | 4.11 | Data layer documentation and gate preparation | ⬜ | |
 
@@ -55,6 +55,7 @@ domain/
 ├── allocation/
 │   └── period.dart Period boundary authority — anchor-day clamping (V-20)          [4.6]
 ├── repositories/   8 interfaces + failure taxonomy + query value objects       [4.4–4.6]
+├── validation/     validators, cycle detection, ValidationFailure taxonomy        [4.8]
 └── result.dart     Result<T, F> — Success | Failure
 ```
 
@@ -71,7 +72,8 @@ data/
 ├── mappers/        row ↔ entity, both directions adjacent, per entity family   [4.4, 4.5]
 ├── repositories/   Drift implementations + repository_support + ledger_writer  [4.4, 4.5]
 ├── balances/       balance_sql, balance_queries, balance_verifier, period_boundaries [4.6]
-└── seed/           seed_data (19 suggestions + 2 sinks), seeder                     [4.7]
+├── seed/           seed_data (19 suggestions + 2 sinks), seeder                     [4.7]
+└── validation/     ConfigurationGuard — loads a snapshot, refuses invalid writes    [4.8]
 ```
 
 ### `test/`
@@ -131,7 +133,8 @@ Each required an ADR, per the manifest's `sdlc_discipline`.
 |---|---|---|
 | ADR-005 | `SCHEMA.md` — adds `repair_log` | §6.8 required a durable repair log; no table held it |
 | ADR-006 | `SCHEMA.md`, `ALLOCATION_ALGORITHM.md` — cascade redirect | FR-16; replaces a single redirect column with a `redirect_targets` table |
-| **ADR-007** | `SCHEMA.md` §3.12 — adds `balance_cache.entry_count` | §7.1's cheap verifier tier compares against a column §3.12 never declared |
+| ADR-007 | `SCHEMA.md` §3.12 — adds `balance_cache.entry_count` | §7.1's cheap verifier tier compares against a column §3.12 never declared |
+| **ADR-008** | `SCHEMA.md` §6.7/§6.9, `NAVIGATION.md` §7 — renumbers a rule id | ADR-006 gave `V-28` to a redirect rule when §6.7 already used it; an identifier naming two rules cannot be traced |
 
 `ARCHITECTURE.md` §2.2's repository table is **three rows stale** and has *not* been amended — see
 [`TODO.md`](TODO.md), it is a 4.11 documentation task.

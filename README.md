@@ -4,14 +4,14 @@ An Android app that automatically splits every incoming payment across user-defi
 business money buckets, with per-bucket ceilings, overflow redirection, and optional sync to the
 user's own Google account.
 
-> **Status: Stage 4 of 10 — core data layer, substage 4.7 of 11 complete.**
+> **Status: Stage 4 of 10 — core data layer, substage 4.8 of 11 complete.**
 > No user-facing features yet. This README is a placeholder; substage 10.7.1 writes the real one,
 > including setup from a clean machine, how to run the checks, and the docs index.
 
 ## Picking this up mid-build?
 
 **Read [docs/handoff/README.md](docs/handoff/README.md) first.** It states exactly where the work
-stands, what to do next, and the one blocking problem — substages 4.4–4.7 are written but have
+stands, what to do next, and the one blocking problem — substages 4.4–4.8 are written but have
 never been compiled or tested, because no Dart SDK is present on the machine they were written on.
 
 ## Documentation

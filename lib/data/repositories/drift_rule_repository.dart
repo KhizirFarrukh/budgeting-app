@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pookiebudget/data/database/database.dart';
 import 'package:pookiebudget/data/mappers/rule_mappers.dart';
 import 'package:pookiebudget/data/repositories/repository_support.dart';
+import 'package:pookiebudget/data/validation/configuration_guard.dart';
 import 'package:pookiebudget/domain/entities/distribution_rule_version.dart';
 import 'package:pookiebudget/domain/entities/enums.dart';
 import 'package:pookiebudget/domain/entities/rule_line.dart';
@@ -10,6 +11,7 @@ import 'package:pookiebudget/domain/repositories/repository_failure.dart';
 import 'package:pookiebudget/domain/repositories/repository_queries.dart';
 import 'package:pookiebudget/domain/repositories/rule_repository.dart';
 import 'package:pookiebudget/domain/result.dart';
+import 'package:pookiebudget/domain/validation/validators.dart';
 
 /// The database-backed [RuleRepository].
 ///
@@ -23,6 +25,9 @@ class DriftRuleRepository implements RuleRepository {
 
   final PookieDatabase _db;
   final Clock _clock;
+
+  /// Substage 4.8.4 — see `DriftCategoryRepository`.
+  late final ConfigurationGuard _guard = ConfigurationGuard(_db);
 
   // ===========================================================================
   // Versions
@@ -372,5 +377,19 @@ class DriftRuleRepository implements RuleRepository {
           .into(_db.ruleLines)
           .insertOnConflictUpdate(ruleLineToCompanion(line));
     }
+
+    // V-01, V-02 and V-04, checked here and **only** here among the line
+    // writes. This is the one method that stores a complete set, so it is the
+    // one point at which "the shares total 10000" is a question that can be
+    // answered — `createLine` and `updateLine` write one line at a time, and a
+    // set is legitimately unbalanced between two of them.
+    //
+    // Validated after the write, inside the transaction: a rejection rolls the
+    // whole replacement back, so the old valid set survives intact rather than
+    // being half-replaced by an invalid one.
+    await _guard.rejectIfInvalid(
+      scopes: const <ValidationScope>{ValidationScope.percentages},
+      ruleVersionId: versionId,
+    );
   });
 }

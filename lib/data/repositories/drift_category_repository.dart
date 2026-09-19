@@ -2,6 +2,7 @@ import 'package:drift/drift.dart';
 import 'package:pookiebudget/data/database/database.dart';
 import 'package:pookiebudget/data/mappers/category_mappers.dart';
 import 'package:pookiebudget/data/repositories/repository_support.dart';
+import 'package:pookiebudget/data/validation/configuration_guard.dart';
 import 'package:pookiebudget/domain/entities/category.dart';
 import 'package:pookiebudget/domain/entities/category_group.dart';
 import 'package:pookiebudget/domain/entities/enums.dart';
@@ -11,6 +12,7 @@ import 'package:pookiebudget/domain/repositories/category_repository.dart';
 import 'package:pookiebudget/domain/repositories/repository_failure.dart';
 import 'package:pookiebudget/domain/repositories/repository_queries.dart';
 import 'package:pookiebudget/domain/result.dart';
+import 'package:pookiebudget/domain/validation/validators.dart';
 
 /// The database-backed [CategoryRepository].
 ///
@@ -36,6 +38,11 @@ class DriftCategoryRepository implements CategoryRepository {
 
   final PookieDatabase _db;
   final Clock _clock;
+
+  /// Substage 4.8.4. Constructed from the database rather than injected, so
+  /// **no call site can omit it** — a repository built without its guard would
+  /// be a repository that silently stopped validating.
+  late final ConfigurationGuard _guard = ConfigurationGuard(_db);
 
   // ===========================================================================
   // Groups
@@ -314,6 +321,20 @@ class DriftCategoryRepository implements CategoryRepository {
     if (row.isSink && archived) {
       reject(SinkProtected(categoryId: id, action: 'archived'));
     }
+
+    // V-14 — a category another category redirects into cannot be archived,
+    // and the failure **names the dependant** (substage 4.8.3). Hiding a
+    // redirect target does not fail loudly at allocation time; it makes
+    // overflow skip a destination the user still believes is there.
+    //
+    // Checked before the write, because the answer must not depend on the
+    // change having already been made.
+    if (archived) {
+      await _guard.rejectIf(
+        (ConfigurationSnapshot s) => validateCanArchive(s, id),
+      );
+    }
+
     await (_db.update(_db.categories)..where((t) => t.id.equals(id))).write(
       CategoriesCompanion(
         isArchived: Value<bool>(archived),
@@ -423,6 +444,7 @@ class DriftCategoryRepository implements CategoryRepository {
     await _db
         .into(_db.redirectTargets)
         .insert(redirectTargetToCompanion(target));
+    await _validateRedirectGraph();
   });
 
   @override
@@ -439,7 +461,22 @@ class DriftCategoryRepository implements CategoryRepository {
     if (changed == 0) {
       reject(RecordNotFound(entity: 'redirect target', id: target.id));
     }
+    await _validateRedirectGraph();
   });
+
+  /// V-12 and the multi-target rules, run **after** the edge is written and
+  /// **inside** the transaction.
+  ///
+  /// Validating the post-write state rather than predicting it is what makes
+  /// this correct for every shape of change at once — an insert, an update that
+  /// repoints an edge, a mode switch. A predictive check has to model each of
+  /// those, and the one it models wrongly is the one that ships. A rejection
+  /// rolls the edge back, so nothing invalid is ever visible.
+  ///
+  /// Substage 4.8.2 requires this on *every* save touching a redirect target.
+  Future<void> _validateRedirectGraph() => _guard.rejectIfInvalid(
+    scopes: const <ValidationScope>{ValidationScope.redirects},
+  );
 
   @override
   Future<Result<void, RepositoryFailure>> deleteRedirectTarget(String id) =>

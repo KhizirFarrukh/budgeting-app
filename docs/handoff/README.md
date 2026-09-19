@@ -17,10 +17,10 @@ strictly in order, one substage per working session.
 
 | | |
 |---|---|
-| **Current position** | Stage 4 (Core Data Layer), substage **4.7 complete** |
-| **Next action** | Substage **4.8** — Configuration validators and cycle detection |
+| **Current position** | Stage 4 (Core Data Layer), substage **4.8 complete** |
+| **Next action** | Substage **4.9** — Migrations, export and backup |
 | **Branch** | `v1.0` (this is also the main branch — the project commits substages directly to it) |
-| **Blocking problem** | **No Dart/Flutter SDK on this machine.** Substages 4.4–4.7 are written but have never been compiled or run. See [`ENVIRONMENT_BLOCKER.md`](ENVIRONMENT_BLOCKER.md) |
+| **Blocking problem** | **No Dart/Flutter SDK on this machine.** Substages 4.4–4.8 are written but have never been compiled or run. See [`ENVIRONMENT_BLOCKER.md`](ENVIRONMENT_BLOCKER.md) |
 
 ---
 
@@ -32,23 +32,23 @@ strictly in order, one substage per working session.
 | 2 | [`PROJECT_STATE.md`](PROJECT_STATE.md) | Every stage and substage, its status, and what was built |
 | 3 | [`WORKING_AGREEMENT.md`](WORKING_AGREEMENT.md) | How this project is worked: the prompt files, the substage loop, commit convention, code style, the user's stated preferences |
 | 4 | [`TODO.md`](TODO.md) | Every outstanding obligation, with the stage that owns it |
-| 5 | [`SESSION_LOG.md`](SESSION_LOG.md) | What happened in the session that produced 4.4–4.7, and why each significant decision went the way it did |
+| 5 | [`SESSION_LOG.md`](SESSION_LOG.md) | What happened in the sessions that produced 4.4–4.8, and why each significant decision went the way it did |
 
 ---
 
 ## The one thing most likely to mislead you
 
-Substages 4.4 through 4.7 are marked **🟡 amber**, not ✅ green, in
+Substages 4.4 through 4.8 are marked **🟡 amber**, not ✅ green, in
 `docs/reports/STAGE_4_WORKLOG.md`. That is deliberate and it is not pedantry.
 
 The code is complete and carefully written, but **no part of it has been compiled, analysed,
 formatted or tested** — the machine it was written on has no Dart SDK. Every acceptance criterion in
 those substages is recorded as *"not run"* rather than ticked.
 
-Do not treat those substages as done. Do not build a fifth unverified substage on top of four
+Do not treat those substages as done. Do not build a sixth unverified substage on top of five
 others without saying so. The honest next move is to run the verification sequence in
 [`ENVIRONMENT_BLOCKER.md`](ENVIRONMENT_BLOCKER.md) on a machine that has the SDK, fix what it
-reports, and only then continue to 4.8.
+reports, and only then continue to 4.9.
 
 ---
 

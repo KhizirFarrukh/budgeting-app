@@ -56,6 +56,9 @@ import 'package:pookiebudget/domain/repositories/rule_repository.dart';
 import 'package:pookiebudget/domain/repositories/settings_repository.dart';
 import 'package:pookiebudget/domain/repositories/spending_repository.dart';
 import 'package:pookiebudget/domain/result.dart';
+import 'package:pookiebudget/domain/validation/cycle_detection.dart';
+import 'package:pookiebudget/domain/validation/validation_failure.dart';
+import 'package:pookiebudget/domain/validation/validators.dart';
 
 /// Every domain library this file imports. Kept in sync with the imports above
 /// by [_assertAllDomainLibrariesImported].
@@ -94,6 +97,9 @@ const List<String> _importedLibraries = <String>[
   'lib/domain/repositories/settings_repository.dart',
   'lib/domain/repositories/spending_repository.dart',
   'lib/domain/result.dart',
+  'lib/domain/validation/cycle_detection.dart',
+  'lib/domain/validation/validation_failure.dart',
+  'lib/domain/validation/validators.dart',
 ];
 
 void main() {
@@ -326,6 +332,77 @@ void main() {
     'periods are contiguous through a 28-day February',
   );
 
+  // --- substage 4.8: the configuration validators ---------------------------
+  //
+  // The cycle walk, on the branching graph ADR-006 created. A three-node loop
+  // is the case a pair check walks straight past, so it is the one asserted
+  // here rather than the two-node one that any implementation catches.
+  final Map<String, List<RedirectTarget>> cyclic =
+      <String, List<RedirectTarget>>{
+    'a': <RedirectTarget>[_edge('a', 'b')],
+    'b': <RedirectTarget>[_edge('b', 'c')],
+    'c': <RedirectTarget>[_edge('c', 'a')],
+  };
+  _require(findAnyCycle(cyclic) != null, 'a three-node cycle is detected');
+  _require(
+    findAnyCycle(<String, List<RedirectTarget>>{
+      'a': <RedirectTarget>[_edge('a', 'b'), _edge('a', 'c')],
+      'b': <RedirectTarget>[_edge('b', 'd')],
+      'c': <RedirectTarget>[_edge('c', 'd')],
+    }) ==
+        null,
+    'a diamond is not a cycle',
+  );
+  _require(
+    wouldCreateCycle(
+      sourceCategoryId: 'x',
+      targetCategoryId: 'x',
+      graph: const <String, List<RedirectTarget>>{},
+    ),
+    'a self-edge is refused before it is written',
+  );
+
+  // V-01, over a snapshot with no database anywhere — which is what lets the
+  // write path, the post-merge pass and onboarding share one implementation.
+  final List<ValidationFailure> shareFailures = validatePercentages(
+    ConfigurationSnapshot(
+      groups: <CategoryGroup>[
+        CategoryGroup.create(
+          id: 'grp-1',
+          kind: CategoryGroupKind.savings,
+          name: 'Savings',
+          sortOrder: 0,
+          sync: sync,
+        ).valueOrNull!,
+      ],
+      categories: <Category>[category],
+      ruleLines: <RuleLine>[
+        RuleLine.create(
+          id: 'rl-1',
+          ruleVersionId: 'rv-1',
+          scope: RuleLineScope.group,
+          groupId: 'grp-1',
+          basisPoints: 9999,
+          sync: sync,
+        ).valueOrNull!,
+      ],
+      redirectGraph: const <String, List<RedirectTarget>>{},
+    ),
+  );
+  _require(
+    shareFailures.any((ValidationFailure f) => f.rule == 'V-01'),
+    'shares totalling 9999 are rejected',
+  );
+
+  _require(
+    const SinkNotRemovable(
+      categoryId: 'purity-1',
+      action: 'deleted',
+    ).rule ==
+        'V-15',
+    'the sink guard cites V-15',
+  );
+
   _require(
     const BalanceDiscrepancy(
           categoryId: 'purity-1',
@@ -410,6 +487,19 @@ void main() {
     'compiled and ran on the bare Dart VM, no Flutter engine.',
   );
 }
+
+/// A redirect edge, for the cycle-walk checks above.
+RedirectTarget _edge(String from, String to) => RedirectTarget.create(
+  id: '$from->$to',
+  sourceCategoryId: from,
+  targetCategoryId: to,
+  priority: 0,
+  sync: const SyncFields(
+    updatedAtMs: 0,
+    updatedByDevice: 'purity-check',
+    hlc: '0:0:purity-check',
+  ),
+).valueOrNull!;
 
 void _require(bool condition, String what) {
   if (!condition) {
